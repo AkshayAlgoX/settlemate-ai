@@ -1,0 +1,314 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+model Batch {
+  id              String    @id @default(cuid())
+  name            String
+  size            Int
+  status          String    @default("CREATED")
+  source          String    @default("GENERATED")
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  totalRecords      Int?
+  autoMatched       Int?
+  exceptionsFound   Int?
+  unresolvedCount   Int?
+  accuracy          Float?
+  precision         Float?
+  recall            Float?
+  throughputRps     Float?
+  processingTimeMs  Int?
+  pass1Accuracy     Float?
+  pass2Accuracy     Float?
+  pass3Accuracy     Float?
+  adversarialScore  Float?
+  amountAtRisk      Int?
+
+  orders            Order[]
+  payments          Payment[]
+  settlements       Settlement[]
+  bankTransactions  BankTransaction[]
+  refunds           Refund[]
+  chargebacks       Chargeback[]
+  reconResults      ReconciliationResult[]
+  exceptions        Exception[]
+  auditLogs         AuditLog[]
+  chatMessages      ChatMessage[]
+  groundTruths      GroundTruth[]
+  agentTraces       AgentTrace[]
+  feedbackEntries   FeedbackEntry[]
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  batchId       String
+  batch         Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orderId       String
+  amount        Int
+  currency      String   @default("INR")
+  status        String
+  customerEmail String?
+  description   String?
+  createdAt     DateTime
+
+  @@index([batchId])
+  @@index([orderId])
+}
+
+model Payment {
+  id          String    @id @default(cuid())
+  batchId     String
+  batch       Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId   String
+  orderId     String
+  amount      Int
+  currency    String    @default("INR")
+  status      String
+  method      String
+  fee         Int       @default(0)
+  tax         Int       @default(0)
+  capturedAt  DateTime?
+  createdAt   DateTime
+
+  @@index([batchId])
+  @@index([paymentId])
+  @@index([orderId])
+}
+
+model Settlement {
+  id            String    @id @default(cuid())
+  batchId       String
+  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  settlementId  String
+  paymentId     String
+  amount        Int
+  fee           Int       @default(0)
+  tax           Int       @default(0)
+  utr           String?
+  status        String
+  settledAt     DateTime?
+  createdAt     DateTime
+
+  @@index([batchId])
+  @@index([settlementId])
+  @@index([paymentId])
+  @@index([utr])
+}
+
+model BankTransaction {
+  id        String    @id @default(cuid())
+  batchId   String
+  batch     Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  txnId     String
+  utr       String?
+  amount    Int
+  type      String
+  narration String?
+  balance   Int?
+  txnDate   DateTime
+  valueDate DateTime?
+
+  @@index([batchId])
+  @@index([utr])
+  @@index([txnId])
+}
+
+model Refund {
+  id          String    @id @default(cuid())
+  batchId     String
+  batch       Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  refundId    String
+  paymentId   String
+  amount      Int
+  status      String
+  reason      String?
+  createdAt   DateTime
+  processedAt DateTime?
+
+  @@index([batchId])
+  @@index([paymentId])
+  @@index([refundId])
+}
+
+model Chargeback {
+  id            String    @id @default(cuid())
+  batchId       String
+  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  chargebackId  String
+  paymentId     String
+  amount        Int
+  reason        String?
+  status        String
+  createdAt     DateTime
+  resolvedAt    DateTime?
+
+  @@index([batchId])
+  @@index([paymentId])
+  @@index([chargebackId])
+}
+
+model ReconciliationResult {
+  id                  String   @id @default(cuid())
+  batchId             String
+  batch               Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId           String
+  orderId             String
+  settlementId        String?
+  bankTxnId           String?
+  refundIds           String?
+  chargebackIds       String?
+  orderAmount         Int
+  paymentAmount       Int
+  paymentFee          Int
+  paymentTax          Int
+  refundAmount        Int      @default(0)
+  chargebackAmount    Int      @default(0)
+  expectedNetAmount   Int
+  actualSettledAmount Int?
+  bankCreditedAmount  Int?
+  mismatchAmount      Int?
+  status              String
+  confidenceScore     Int
+  matchMethod         String?
+  matchDetails        String?
+  passNumber          Int      @default(1)
+  createdAt           DateTime @default(now())
+
+  @@index([batchId])
+  @@index([paymentId])
+  @@index([status])
+}
+
+model Exception {
+  id              String    @id @default(cuid())
+  batchId         String
+  batch           Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  reconResultId   String?
+  exceptionType   String
+  paymentId       String?
+  orderId         String?
+  settlementId    String?
+  bankTxnId       String?
+  utr             String?
+  amount          Int
+  mismatchAmount  Int?
+  confidenceScore Int
+  riskLevel       String    @default("MEDIUM")
+  status          String    @default("OPEN")
+  suggestedAction String?
+  resolution      String?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  aiExplanation   AiExplanation?
+  agentTraces     AgentTrace[]
+
+  @@index([batchId])
+  @@index([exceptionType])
+  @@index([status])
+}
+
+model AiExplanation {
+  id                String    @id @default(cuid())
+  exceptionId       String    @unique
+  exception         Exception @relation(fields: [exceptionId], references: [id], onDelete: Cascade)
+  summary           String
+  reason            String
+  evidence          String
+  recommendedAction String
+  riskLevel         String
+  needsManualReview Boolean
+  model             String
+  tokensUsed        Int?
+  latencyMs         Int?
+  createdAt         DateTime  @default(now())
+}
+
+model GroundTruth {
+  id            String @id @default(cuid())
+  batchId       String
+  batch         Batch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId     String
+  expectedLabel String
+  scenario      String
+
+  @@index([batchId])
+  @@index([paymentId])
+}
+
+model AgentTrace {
+  id            String    @id @default(cuid())
+  batchId       String
+  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  exceptionId   String?
+  exception     Exception? @relation(fields: [exceptionId], references: [id], onDelete: SetNull)
+  agentName     String
+  passNumber    Int
+  stepNumber    Int
+  stepLabel     String
+  stepDetail    String
+  input         String?
+  output        String?
+  confidenceBefore Int?
+  confidenceAfter  Int?
+  createdAt     DateTime  @default(now())
+
+  @@index([batchId])
+  @@index([exceptionId])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  batchId     String?
+  batch       Batch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  timestamp   DateTime  @default(now())
+  actor       String
+  action      String
+  entityType  String?
+  entityId    String?
+  beforeState String?
+  afterState  String?
+  reason      String?
+  metadata    String?
+
+  @@index([batchId])
+  @@index([timestamp])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  batchId    String
+  batch      Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  role       String
+  content    String
+  evidence   String?
+  model      String?
+  tokensUsed Int?
+  latencyMs  Int?
+  createdAt  DateTime @default(now())
+
+  @@index([batchId])
+}
+
+model FeedbackEntry {
+  id                String   @id @default(cuid())
+  batchId           String
+  batch             Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  exceptionId       String?
+  originalStatus    String
+  newStatus         String
+  confidenceBefore  Int
+  confidenceAfter   Int
+  adjustedFactor    String?
+  adjustedDelta     Int?
+  createdAt         DateTime @default(now())
+
+  @@index([batchId])
+}
