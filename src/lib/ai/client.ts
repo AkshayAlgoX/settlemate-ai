@@ -19,7 +19,7 @@ export function isAIAvailable(): boolean {
 
 export async function generateJSON(
   prompt: string,
-  model: string = "gemini-1.5-flash"
+  model: string = "gemini-3.6-flash"
 ): Promise<{ data: unknown; tokensUsed: number; latencyMs: number } | null> {
   const client = getAIClient();
   if (!client) return null;
@@ -56,7 +56,7 @@ export async function generateJSON(
 
 export async function generateText(
   prompt: string,
-  model: string = "gemini-1.5-flash"
+  model: string = "gemini-3.6-flash"
 ): Promise<{ text: string; tokensUsed: number; latencyMs: number } | null> {
   const client = getAIClient();
   if (!client) return null;

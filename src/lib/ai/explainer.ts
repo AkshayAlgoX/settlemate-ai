@@ -120,7 +120,7 @@ export async function explainException(exceptionId: string): Promise<{
 
   if (aiResult && aiResult.data) {
     explanation = aiResult.data as typeof explanation;
-    model = "gemini-1.5-flash";
+    model = "gemini-3.6-flash";
     tokensUsed = aiResult.tokensUsed;
     latencyMs = aiResult.latencyMs;
   } else {
