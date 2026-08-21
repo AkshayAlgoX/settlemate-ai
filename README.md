@@ -168,9 +168,13 @@ user action with actor, before/after state, and reason.
   redirected (pages) or rejected 401 (APIs).
 - **Signed, expiring sessions** (`src/lib/auth/session.ts`): HMAC-SHA256 tokens verified
   with `timingSafeEqual`; no client-trusted actor/role.
-- **Authorization boundary:** roles (`ADMIN`, `REVIEWER`); mutations gate on the verified
-  session. This makes the human-approval step real: only an authenticated user can drive
-  the workflow, and the audit trail records who did.
+- **Authorization boundary:** roles (`ADMIN`, `REVIEWER`) with separation of duties.
+  REVIEWER can investigate, escalate, reopen, and prepare a case to `PENDING_APPROVAL`;
+  only **ADMIN** can approve or reject (`PENDING_APPROVAL → RESOLVED / REJECTED`). The
+  role is read from the verified session and enforced server-side (403 for a non-ADMIN
+  approval attempt) — the client can never claim a role. This makes the human-approval
+  step real: a privileged, authenticated human must close the loop, and the audit trail
+  records exactly who did.
 - **Server-side enforcement** everywhere; role is never read from the request body.
 - **No secret leakage:** `.env` (Gemini key, `AUTH_SECRET`) is gitignored; safe, generic
   error responses.

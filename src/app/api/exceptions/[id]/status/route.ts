@@ -35,6 +35,20 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Separation of duties: resolving or rejecting an exception is an APPROVAL
+    // decision and requires ADMIN. REVIEWER may investigate, escalate, reopen,
+    // and prepare a case to PENDING_APPROVAL, but only ADMIN closes the loop.
+    // The role is read from the verified session — never from the request body.
+    const approvalTargets = ["RESOLVED", "REJECTED"];
+    if (approvalTargets.includes(status.trim()) && session.role !== "ADMIN") {
+      return NextResponse.json(
+        {
+          error: "Forbidden: only ADMIN can approve/reject an exception (separation of duties)",
+        },
+        { status: 403 }
+      );
+    }
+
     const result = await transitionException({
       exceptionId: id,
       toState: status,

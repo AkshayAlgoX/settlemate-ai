@@ -81,7 +81,8 @@ const SECURITY_LAYERS = [
     points: [
       "Unauthenticated pages redirect to /login; APIs return 401",
       "HMAC-signed, expiring session tokens verified with timing-safe compare",
-      "Roles (ADMIN / REVIEWER) enforced server-side, never read from the body",
+      "Separation of duties: only ADMIN can approve/reject; REVIEWER investigates",
+      "Approval denied server-side (403) — role is never read from the request body",
       "Audit records the real session identity for every transition",
     ],
   },

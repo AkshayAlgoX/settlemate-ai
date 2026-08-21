@@ -47,7 +47,6 @@ const VALID: Array<[WorkflowState, WorkflowState]> = [
   ["PENDING_APPROVAL", "RESOLVED"],
   ["PENDING_APPROVAL", "REJECTED"],
   ["REJECTED", "INVESTIGATING"],
-  ["ESCALATED", "RESOLVED"],
   ["ESCALATED", "INVESTIGATING"],
   ["RESOLVED", "REOPENED"],
   ["REOPENED", "INVESTIGATING"],
@@ -105,12 +104,15 @@ check("isWorkflowState rejects arbitrary strings", () => {
 });
 
 // ── Financial-safety invariants at the machine level ──
-check("NO path reaches RESOLVED without an explicit approval/review step", () => {
-  // RESOLVED is only reachable from PENDING_APPROVAL or ESCALATED.
+check("NO path reaches RESOLVED without an explicit approval step (single gateway)", () => {
+  // RESOLVED is reachable ONLY from PENDING_APPROVAL — the single, explicit
+  // human-approval gateway. ESCALATED only returns to INVESTIGATING, so an
+  // escalated case must re-investigate and pass through approval again; it can
+  // never bypass the approval step.
   const sourcesOfResolved = WORKFLOW_STATES.filter(
     (s) => (WORKFLOW_TRANSITIONS[s] as readonly string[]).includes("RESOLVED")
   );
-  assert.deepEqual([...sourcesOfResolved].sort(), ["ESCALATED", "PENDING_APPROVAL"].sort());
+  assert.deepEqual([...sourcesOfResolved].sort(), ["PENDING_APPROVAL"].sort());
 });
 check("OPEN has no terminal/shortcut exits", () => {
   const opensTo = WORKFLOW_TRANSITIONS["OPEN"] as readonly string[];

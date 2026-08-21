@@ -164,6 +164,19 @@ export default function ExceptionDetailPage({ params }: PageProps) {
   const [resolutionText, setResolution] = useState("");
   const [explaining, setExplaining] = useState(false);
   const [showProvenance, setShowProvenance] = useState(true);
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    // The server is the security boundary (a reviewer posting RESOLVED gets 403);
+    // this only surfaces the authorization rule in the UI so a reviewer isn't
+    // surprised. Approval (RESOLVED/REJECTED) is ADMIN-only.
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d: { user?: { role: string } }) => {
+        if (d.user) setCurrentRole(d.user.role);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadData = useCallback(() => {
     fetch(`/api/exceptions/detail/${exceptionId}`)
@@ -424,24 +437,37 @@ export default function ExceptionDetailPage({ params }: PageProps) {
             {allowedNextStates.length === 0 ? (
               <span className="text-xs text-gray-500 italic">No transitions available</span>
             ) : (
-              allowedNextStates.map((nextState) => (
-                <Button
-                  key={nextState}
-                  size="sm"
-                  disabled={transitioning}
-                  onClick={() => handleTransition(nextState)}
-                  className={
-                    nextState === "RESOLVED"
-                      ? "bg-green-600 hover:bg-green-700 text-white"
-                      : nextState === "REJECTED" || nextState === "ESCALATED"
-                      ? "bg-rose-600 hover:bg-rose-700 text-white"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
-                  }
-                >
-                  {transitioning ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                  {nextState}
-                </Button>
-              ))
+              allowedNextStates.map((nextState) => {
+                const isApproval = nextState === "RESOLVED" || nextState === "REJECTED";
+                const blocked = isApproval && currentRole !== "ADMIN";
+                return (
+                  <Button
+                    key={nextState}
+                    size="sm"
+                    disabled={transitioning || blocked}
+                    title={blocked ? "ADMIN only — separation of duties" : undefined}
+                    onClick={() => handleTransition(nextState)}
+                    className={
+                      nextState === "RESOLVED"
+                        ? "bg-green-600 hover:bg-green-700 text-white"
+                        : nextState === "REJECTED" || nextState === "ESCALATED"
+                        ? "bg-rose-600 hover:bg-rose-700 text-white"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
+                    }
+                  >
+                    {transitioning ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                    {nextState}
+                    {blocked && (
+                      <Shield className="w-3 h-3 ml-1.5 opacity-70" />
+                    )}
+                  </Button>
+                );
+              })
+            )}
+            {allowedNextStates.some((s) => s === "RESOLVED" || s === "REJECTED") && currentRole !== "ADMIN" && (
+              <span className="text-[11px] text-amber-400/90 italic w-full">
+                Approve / Reject requires ADMIN (separation of duties). You can investigate and prepare the case, but the final approval is ADMIN-only.
+              </span>
             )}
           </div>
 
