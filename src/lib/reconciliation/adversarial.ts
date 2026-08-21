@@ -18,9 +18,193 @@ interface AdversarialResult {
   tests: AdversarialTest[];
 }
 
+/**
+ * Public adversarial entry point.
+ *
+ * Runs every adversarial scenario against an isolated SANDBOX batch that is a
+ * clone of the production batch's SOURCE rows (payments, settlements, bank
+ * transactions, refunds, chargebacks, orders, ground truths).
+ *
+ * - The sandbox is created, all tests mutate the sandbox's source rows, and
+ *   reconciliation runs against the sandbox batch only. The sandbox's results
+ *   and exceptions are disposable and cascade-deleted afterwards.
+ * - Production reconciliation results / exceptions and the AI-enriched
+ *   Pass 2/3 work are NEVER touched.
+ * - Live production source rows are NEVER mutated; a crash can never leave
+ *   production financial data modified.
+ * - Adversarial metrics are returned as data only.
+ */
 export async function runAdversarialTest(
-  batchId: string
+  productionBatchId: string
 ): Promise<AdversarialResult> {
+  let sandboxBatchId: string | null = null;
+
+  try {
+    sandboxBatchId = await cloneBatchSource(productionBatchId);
+  } catch (error) {
+    console.error(
+      "[Adversarial] Could not create sandbox; adversarial skipped, production untouched:",
+      error
+    );
+    return {
+      totalTests: 0,
+      detected: 0,
+      missed: 0,
+      detectionRate: 0,
+      falsePositives: 0,
+      tests: [],
+    };
+  }
+
+  try {
+    return await runAdversarialAgainstSandbox(sandboxBatchId);
+  } finally {
+    await deleteSandboxBatch(sandboxBatchId);
+  }
+}
+
+/**
+ * Clone the production batch's SOURCE rows into a new disposable sandbox batch.
+ * Only source data is copied (no results/exceptions). Returns the sandbox batch id.
+ */
+async function cloneBatchSource(srcBatchId: string): Promise<string> {
+  const [orders, payments, settlements, bankTransactions, refunds, chargebacks, groundTruths] =
+    await Promise.all([
+      prisma.order.findMany({ where: { batchId: srcBatchId } }),
+      prisma.payment.findMany({ where: { batchId: srcBatchId } }),
+      prisma.settlement.findMany({ where: { batchId: srcBatchId } }),
+      prisma.bankTransaction.findMany({ where: { batchId: srcBatchId } }),
+      prisma.refund.findMany({ where: { batchId: srcBatchId } }),
+      prisma.chargeback.findMany({ where: { batchId: srcBatchId } }),
+      prisma.groundTruth.findMany({ where: { batchId: srcBatchId } }),
+    ]);
+
+  const sandbox = await prisma.batch.create({
+    data: {
+      name: `sandbox-${srcBatchId.slice(0, 8)}`,
+      size: payments.length,
+      status: "CREATED",
+      source: "SANDBOX",
+    },
+  });
+  const sb = sandbox.id;
+
+  if (orders.length > 0) {
+    await prisma.order.createMany({
+      data: orders.map((o) => ({
+        batchId: sb,
+        orderId: o.orderId,
+        amount: o.amount,
+        currency: o.currency,
+        status: o.status,
+        customerEmail: o.customerEmail,
+        description: o.description,
+        createdAt: o.createdAt,
+      })),
+    });
+  }
+  if (payments.length > 0) {
+    await prisma.payment.createMany({
+      data: payments.map((p) => ({
+        batchId: sb,
+        paymentId: p.paymentId,
+        orderId: p.orderId,
+        amount: p.amount,
+        currency: p.currency,
+        status: p.status,
+        method: p.method,
+        fee: p.fee,
+        tax: p.tax,
+        capturedAt: p.capturedAt,
+        createdAt: p.createdAt,
+      })),
+    });
+  }
+  if (settlements.length > 0) {
+    await prisma.settlement.createMany({
+      data: settlements.map((s) => ({
+        batchId: sb,
+        settlementId: s.settlementId,
+        paymentId: s.paymentId,
+        amount: s.amount,
+        fee: s.fee,
+        tax: s.tax,
+        utr: s.utr,
+        status: s.status,
+        settledAt: s.settledAt,
+        createdAt: s.createdAt,
+      })),
+    });
+  }
+  if (bankTransactions.length > 0) {
+    await prisma.bankTransaction.createMany({
+      data: bankTransactions.map((b) => ({
+        batchId: sb,
+        txnId: b.txnId,
+        utr: b.utr,
+        amount: b.amount,
+        type: b.type,
+        narration: b.narration,
+        balance: b.balance,
+        txnDate: b.txnDate,
+        valueDate: b.valueDate,
+      })),
+    });
+  }
+  if (refunds.length > 0) {
+    await prisma.refund.createMany({
+      data: refunds.map((r) => ({
+        batchId: sb,
+        refundId: r.refundId,
+        paymentId: r.paymentId,
+        amount: r.amount,
+        status: r.status,
+        reason: r.reason,
+        createdAt: r.createdAt,
+        processedAt: r.processedAt,
+      })),
+    });
+  }
+  if (chargebacks.length > 0) {
+    await prisma.chargeback.createMany({
+      data: chargebacks.map((c) => ({
+        batchId: sb,
+        chargebackId: c.chargebackId,
+        paymentId: c.paymentId,
+        amount: c.amount,
+        reason: c.reason,
+        status: c.status,
+        createdAt: c.createdAt,
+        resolvedAt: c.resolvedAt,
+      })),
+    });
+  }
+  if (groundTruths.length > 0) {
+    await prisma.groundTruth.createMany({
+      data: groundTruths.map((g) => ({
+        batchId: sb,
+        paymentId: g.paymentId,
+        expectedLabel: g.expectedLabel,
+        scenario: g.scenario,
+      })),
+    });
+  }
+
+  return sb;
+}
+
+/**
+ * Remove the disposable sandbox batch. AuditLog references it with onDelete
+ * SetNull (not Cascade), so delete its audit logs explicitly first; all other
+ * child rows (payments, settlements, bank txns, refunds, chargebacks, orders,
+ * results, exceptions, ground truths) cascade with the batch delete.
+ */
+async function deleteSandboxBatch(sandboxBatchId: string) {
+  await prisma.auditLog.deleteMany({ where: { batchId: sandboxBatchId } });
+  await prisma.batch.delete({ where: { id: sandboxBatchId } });
+}
+
+async function runAdversarialAgainstSandbox(batchId: string): Promise<AdversarialResult> {
   const tests: AdversarialTest[] = [];
 
   const payments = await prisma.payment.findMany({

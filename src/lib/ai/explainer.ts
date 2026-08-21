@@ -2,21 +2,22 @@ import { prisma } from "@/lib/db";
 import { generateJSON } from "./client";
 import { EXCEPTION_EXPLANATION_PROMPT } from "./prompts";
 import { generateFallbackExplanation } from "./fallback";
-import { formatCurrency } from "@/lib/format";
+
+interface Explanation {
+  summary: string;
+  reason: string;
+  evidence: string[];
+  recommended_action: string;
+  risk_level: string;
+  needs_manual_review: boolean;
+}
 
 function paiseToRupeesStr(paise: number): string {
   return (paise / 100).toFixed(2);
 }
 
 export async function explainException(exceptionId: string): Promise<{
-  explanation: {
-    summary: string;
-    reason: string;
-    evidence: string[];
-    recommended_action: string;
-    risk_level: string;
-    needs_manual_review: boolean;
-  };
+  explanation: Explanation;
   model: string;
   tokensUsed: number;
   latencyMs: number;
@@ -46,7 +47,7 @@ export async function explainException(exceptionId: string): Promise<{
   }
 
   // Get related records for context
-  const [payment, settlement, bankTxn] = await Promise.all([
+  await Promise.all([
     exception.paymentId
       ? prisma.payment.findFirst({
           where: { batchId: exception.batchId, paymentId: exception.paymentId },
@@ -113,13 +114,13 @@ export async function explainException(exceptionId: string): Promise<{
 
   const aiResult = await generateJSON(prompt);
 
-  let explanation;
+  let explanation: Explanation;
   let model: string;
   let tokensUsed = 0;
   let latencyMs = 0;
 
   if (aiResult && aiResult.data) {
-    explanation = aiResult.data as typeof explanation;
+    explanation = aiResult.data as Explanation;
     model = "gemini-3.6-flash";
     tokensUsed = aiResult.tokensUsed;
     latencyMs = aiResult.latencyMs;

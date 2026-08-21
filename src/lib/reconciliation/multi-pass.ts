@@ -4,6 +4,7 @@ import { runAnomalyAgent } from "./anomaly-agent";
 import { runResolverAgent } from "./resolver-agent";
 import { runAdversarialTest } from "./adversarial";
 import { computeCalibration } from "./calibration";
+import { resetAICounter, getAIStatus } from "@/lib/ai/client";
 
 export interface MultiPassResult {
   batchId: string;
@@ -16,24 +17,61 @@ export interface MultiPassResult {
     unresolved: number;
     durationMs: number;
     details: string;
+    aiUsed: boolean;
+    aiCallsMade: number;
   }>;
+  aiStatus: {
+    totalCalls: number;
+    maxCalls: number;
+    circuitTripped: boolean;
+    fallbackUsed: boolean;
+  };
   adversarial: {
     totalTests: number;
     detected: number;
     detectionRate: number;
-    tests: Array<{
-      testName: string;
-      detected: boolean;
-      detectedAs: string | null;
-    }>;
+    tests: Array<{ testName: string; detected: boolean; detectedAs: string | null }>;
   };
-  calibration: Array<{
-    range: string;
-    total: number;
-    correct: number;
-    accuracy: number;
-  }>;
+  calibration: Array<{ range: string; total: number; correct: number; accuracy: number }>;
   totalDurationMs: number;
+}
+
+async function computeAccuracy(batchId: string): Promise<{
+  accuracy: number;
+  autoMatched: number;
+  exceptions: number;
+  unresolved: number;
+  total: number;
+}> {
+  const results = await prisma.reconciliationResult.findMany({ where: { batchId } });
+  const groundTruths = await prisma.groundTruth.findMany({ where: { batchId } });
+  const gtMap = new Map(
+    groundTruths.map((g) => [
+      g.paymentId,
+      g.expectedLabel === "ORPHAN_BANK_CREDIT" ? "AUTO_MATCHED" : g.expectedLabel,
+    ])
+  );
+
+  let correct = 0;
+  let evaluated = 0;
+  for (const r of results) {
+    if (r.paymentId.startsWith("orphan_")) continue;
+    const gt = gtMap.get(r.paymentId);
+    if (!gt) continue;
+    evaluated++;
+    if (r.status === gt) correct++;
+  }
+
+  const autoMatched = results.filter((r) => r.status === "AUTO_MATCHED").length;
+  const unresolved = results.filter((r) => r.status === "NEEDS_MANUAL_REVIEW").length;
+
+  return {
+    accuracy: evaluated > 0 ? Math.round((correct / evaluated) * 10000) / 100 : 0,
+    autoMatched,
+    exceptions: results.length - autoMatched,
+    unresolved,
+    total: results.length,
+  };
 }
 
 export async function runMultiPassReconciliation(
@@ -42,92 +80,86 @@ export async function runMultiPassReconciliation(
   const totalStart = performance.now();
   const passes: MultiPassResult["passes"] = [];
 
-  // ── PASS 1: Deterministic Rules ──
+  // Reset AI counter for this batch
+  resetAICounter();
+
+  // ── PASS 1: Deterministic Rules (NO AI) ──
   const pass1Start = performance.now();
-  const pass1Metrics = await runReconciliation(batchId);
+  await runReconciliation(batchId);
   const pass1Duration = Math.round(performance.now() - pass1Start);
+  const pass1Stats = await computeAccuracy(batchId);
 
   passes.push({
     passNumber: 1,
     name: "Deterministic Rules",
-    accuracy: pass1Metrics.accuracy,
-    exceptions: pass1Metrics.exceptionsFound,
-    autoMatched: pass1Metrics.autoMatched,
-    unresolved: pass1Metrics.unresolvedCount,
+    accuracy: pass1Stats.accuracy,
+    exceptions: pass1Stats.exceptions,
+    autoMatched: pass1Stats.autoMatched,
+    unresolved: pass1Stats.unresolved,
     durationMs: pass1Duration,
-    details: `UTR matching, ID matching, fuzzy matching. ${pass1Metrics.totalRecords} records processed.`,
+    details: `UTR + ID + fuzzy matching. ${pass1Stats.total} records. No AI used.`,
+    aiUsed: false,
+    aiCallsMade: 0,
   });
 
-  // Update batch with pass 1 accuracy
   await prisma.batch.update({
     where: { id: batchId },
-    data: { pass1Accuracy: pass1Metrics.accuracy },
+    data: {
+      pass1Accuracy: pass1Stats.accuracy,
+      accuracy: pass1Stats.accuracy,
+      autoMatched: pass1Stats.autoMatched,
+      exceptionsFound: pass1Stats.exceptions,
+      unresolvedCount: pass1Stats.unresolved,
+    },
   });
 
-  // ── PASS 2: Anomaly Detection Agent ──
+  // ── PASS 2: Anomaly Detection Agent (AI, max 1 batched call) ──
   const pass2Start = performance.now();
-  const anomalyResults = await runAnomalyAgent(batchId);
+  const aiStatusBeforePass2 = getAIStatus();
+  const anomalyResults = aiStatusBeforePass2.available
+    ? await runAnomalyAgent(batchId)
+    : [];
   const pass2Duration = Math.round(performance.now() - pass2Start);
-
-  // Recount after anomaly agent
-  const pass2Stats = await prisma.reconciliationResult.groupBy({
-    by: ["status"],
-    where: { batchId },
-    _count: { status: true },
-  });
-
-  const pass2AutoMatched = pass2Stats.find((s) => s.status === "AUTO_MATCHED")?._count.status || 0;
-  const pass2Total = pass2Stats.reduce((sum, s) => sum + s._count.status, 0);
-  const pass2Exceptions = pass2Total - pass2AutoMatched;
-  const pass2Unresolved = pass2Stats.find((s) => s.status === "NEEDS_MANUAL_REVIEW")?._count.status || 0;
-
-  // Compute pass 2 accuracy
-  const pass2Results = await prisma.reconciliationResult.findMany({ where: { batchId } });
-  const pass2GroundTruths = await prisma.groundTruth.findMany({ where: { batchId } });
-  const gtMap = new Map(pass2GroundTruths.map((g) => {
-    const effective = g.expectedLabel === "ORPHAN_BANK_CREDIT" ? "AUTO_MATCHED" : g.expectedLabel;
-    return [g.paymentId, effective];
-  }));
-
-  let pass2Correct = 0;
-  let pass2Evaluated = 0;
-  for (const r of pass2Results) {
-    if (r.paymentId.startsWith("orphan_")) continue;
-    const gt = gtMap.get(r.paymentId);
-    if (!gt) continue;
-    pass2Evaluated++;
-    if (r.status === gt) pass2Correct++;
-  }
-  const pass2Accuracy = pass2Evaluated > 0 ? Math.round((pass2Correct / pass2Evaluated) * 10000) / 100 : 0;
+  const pass2Stats = await computeAccuracy(batchId);
+  const aiCallsPass2 = getAIStatus().totalCalls - aiStatusBeforePass2.totalCalls;
 
   const reclassified = anomalyResults.filter((r) => r.shouldReclassify).length;
 
   passes.push({
     passNumber: 2,
     name: "Anomaly Detection Agent",
-    accuracy: pass2Accuracy,
-    exceptions: pass2Exceptions,
-    autoMatched: pass2AutoMatched,
-    unresolved: pass2Unresolved,
+    accuracy: pass2Stats.accuracy,
+    exceptions: pass2Stats.exceptions,
+    autoMatched: pass2Stats.autoMatched,
+    unresolved: pass2Stats.unresolved,
     durationMs: pass2Duration,
-    details: `Reviewed ${anomalyResults.length} low-confidence matches. Reclassified ${reclassified}. AI model: gemini-1.5-flash.`,
+    details: aiStatusBeforePass2.available
+      ? `Reviewed ${anomalyResults.length} cases. Reclassified ${reclassified}. ${aiCallsPass2} AI calls.`
+      : `AI unavailable (${aiStatusBeforePass2.reason}). Skipped.`,
+    aiUsed: aiCallsPass2 > 0,
+    aiCallsMade: aiCallsPass2,
   });
 
   await prisma.batch.update({
     where: { id: batchId },
     data: {
-      pass2Accuracy,
-      accuracy: pass2Accuracy,
-      autoMatched: pass2AutoMatched,
-      exceptionsFound: pass2Exceptions,
-      unresolvedCount: pass2Unresolved,
+      pass2Accuracy: pass2Stats.accuracy,
+      accuracy: pass2Stats.accuracy,
+      autoMatched: pass2Stats.autoMatched,
+      exceptionsFound: pass2Stats.exceptions,
+      unresolvedCount: pass2Stats.unresolved,
     },
   });
 
-  // ── PASS 3: Resolver Agent ──
+  // ── PASS 3: Resolver Agent (AI, max 1 batched call) ──
   const pass3Start = performance.now();
-  const resolverResults = await runResolverAgent(batchId);
+  const aiStatusBeforePass3 = getAIStatus();
+  const resolverResults = aiStatusBeforePass3.available
+    ? await runResolverAgent(batchId)
+    : [];
   const pass3Duration = Math.round(performance.now() - pass3Start);
+  const pass3Stats = await computeAccuracy(batchId);
+  const aiCallsPass3 = getAIStatus().totalCalls - aiStatusBeforePass3.totalCalls;
 
   const fixable = resolverResults.filter((r) => r.canAutoFix).length;
   const ticketNeeded = resolverResults.filter((r) => r.razorpayTicketNeeded).length;
@@ -135,26 +167,39 @@ export async function runMultiPassReconciliation(
   passes.push({
     passNumber: 3,
     name: "Resolver Agent",
-    accuracy: pass2Accuracy, // Accuracy doesn't change until fixes are applied
-    exceptions: pass2Exceptions,
-    autoMatched: pass2AutoMatched,
-    unresolved: pass2Unresolved,
+    accuracy: pass3Stats.accuracy,
+    exceptions: pass3Stats.exceptions,
+    autoMatched: pass3Stats.autoMatched,
+    unresolved: pass3Stats.unresolved,
     durationMs: pass3Duration,
-    details: `Proposed fixes for ${resolverResults.length} exceptions. ${fixable} auto-fixable. ${ticketNeeded} need Razorpay support ticket.`,
+    details: aiStatusBeforePass3.available
+      ? `${resolverResults.length} proposals. ${fixable} auto-fixable. ${ticketNeeded} tickets. ${aiCallsPass3} AI calls.`
+      : `AI unavailable (${aiStatusBeforePass3.reason}). Skipped.`,
+    aiUsed: aiCallsPass3 > 0,
+    aiCallsMade: aiCallsPass3,
   });
 
   await prisma.batch.update({
     where: { id: batchId },
-    data: { pass3Accuracy: pass2Accuracy },
+    data: { pass3Accuracy: pass3Stats.accuracy },
   });
 
-  // ── ADVERSARIAL SELF-TEST ──
+  // ── ADVERSARIAL + CALIBRATION ──
   const adversarial = await runAdversarialTest(batchId);
-
-  // ── CALIBRATION ──
   const calibration = await computeCalibration(batchId);
 
   const totalDuration = Math.round(performance.now() - totalStart);
+  const finalAIStatus = getAIStatus();
+
+  await prisma.batch.update({
+    where: { id: batchId },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+      processingTimeMs: totalDuration,
+      throughputRps: Math.round((pass1Stats.total / (totalDuration / 1000)) * 100) / 100,
+    },
+  });
 
   await prisma.auditLog.create({
     data: {
@@ -163,14 +208,24 @@ export async function runMultiPassReconciliation(
       action: "MULTI_PASS_COMPLETED",
       entityType: "batch",
       entityId: batchId,
-      reason: `3-pass reconciliation complete. Pass 1: ${pass1Metrics.accuracy}%, Pass 2: ${pass2Accuracy}%. Adversarial: ${adversarial.detectionRate}%.`,
-      metadata: JSON.stringify({ totalDurationMs: totalDuration, passes: passes.length }),
+      reason: `3-pass complete in ${totalDuration}ms. AI calls: ${finalAIStatus.totalCalls}/10. Adversarial: ${adversarial.detectionRate}%.`,
+      metadata: JSON.stringify({
+        totalDurationMs: totalDuration,
+        aiCalls: finalAIStatus.totalCalls,
+        circuitTripped: finalAIStatus.circuitOpen,
+      }),
     },
   });
 
   return {
     batchId,
     passes,
+    aiStatus: {
+      totalCalls: finalAIStatus.totalCalls,
+      maxCalls: 10,
+      circuitTripped: finalAIStatus.circuitOpen,
+      fallbackUsed: !finalAIStatus.available,
+    },
     adversarial: {
       totalTests: adversarial.totalTests,
       detected: adversarial.detected,

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
-import { generateJSON } from "@/lib/ai/client";
-import { ANOMALY_REVIEW_PROMPT } from "@/lib/ai/prompts";
+import { generateJSON, isAIAvailable } from "@/lib/ai/client";
 
 interface AnomalyReviewResult {
   exceptionId: string;
@@ -19,146 +18,190 @@ interface AnomalyReviewResult {
   latencyMs: number;
 }
 
-function paiseToRupees(paise: number): string {
-  return (paise / 100).toFixed(2);
+interface AnomalyDecision {
+  case_id?: string;
+  should_reclassify?: unknown;
+  new_status?: unknown;
+  new_confidence?: unknown;
+  reasoning?: unknown;
+  anomaly_detected?: unknown;
+  risk_assessment?: unknown;
 }
 
-export async function runAnomalyAgent(
-  batchId: string
-): Promise<AnomalyReviewResult[]> {
+// src/lib/reconciliation/anomaly-agent.ts — BATCH VERSION
+
+export async function runAnomalyAgent(batchId: string): Promise<AnomalyReviewResult[]> {
   const results: AnomalyReviewResult[] = [];
 
-  // Get low-confidence exceptions (confidence < 80)
   const lowConfidenceExceptions = await prisma.exception.findMany({
     where: {
       batchId,
-      confidenceScore: { lt: 80 },
+      confidenceScore: { lt: 70 },
       status: "OPEN",
+      exceptionType: { notIn: ["AUTO_MATCHED", "PENDING_SETTLEMENT"] },
     },
     orderBy: { confidenceScore: "asc" },
-    take: 30, // Limit AI calls for cost
+    take: 5,
   });
 
+  if (lowConfidenceExceptions.length === 0 || !isAIAvailable()) {
+    return results;
+  }
+
+  // ── BATCH ALL CASES INTO ONE PROMPT ──
+  const casesData = [];
   for (const exception of lowConfidenceExceptions) {
     const reconResult = await prisma.reconciliationResult.findFirst({
-      where: {
-        batchId,
-        paymentId: exception.paymentId || "",
-      },
+      where: { batchId, paymentId: exception.paymentId || "" },
     });
-
     if (!reconResult) continue;
 
-    const startTime = Date.now();
+    casesData.push({
+      case_id: exception.id,
+      payment_id: exception.paymentId,
+      current_status: exception.exceptionType,
+      confidence: exception.confidenceScore,
+      payment_amount: reconResult.paymentAmount / 100,
+      expected_net: reconResult.expectedNetAmount / 100,
+      actual_settled: (reconResult.actualSettledAmount || 0) / 100,
+      bank_credited: (reconResult.bankCreditedAmount || 0) / 100,
+      mismatch: (reconResult.mismatchAmount || 0) / 100,
+      match_method: reconResult.matchMethod,
+      match_details: reconResult.matchDetails,
+    });
+  }
 
-    const prompt = ANOMALY_REVIEW_PROMPT
-      .replace(/{{paymentId}}/g, exception.paymentId || "N/A")
-      .replace(/{{currentStatus}}/g, exception.exceptionType)
-      .replace(/{{confidence}}/g, String(exception.confidenceScore))
-      .replace(/{{matchMethod}}/g, reconResult.matchMethod || "N/A")
-      .replace(/{{matchDetails}}/g, reconResult.matchDetails || "N/A")
-      .replace(/{{paymentAmount}}/g, paiseToRupees(reconResult.paymentAmount))
-      .replace(/{{expectedNet}}/g, paiseToRupees(reconResult.expectedNetAmount))
-      .replace(/{{actualSettled}}/g, paiseToRupees(reconResult.actualSettledAmount || 0))
-      .replace(/{{bankCredited}}/g, paiseToRupees(reconResult.bankCreditedAmount || 0))
-      .replace(/{{mismatch}}/g, paiseToRupees(reconResult.mismatchAmount || 0))
-      .replace(/{{settlementCount}}/g, reconResult.settlementId ? reconResult.settlementId.split(",").length.toString() : "0")
-      .replace(/{{bankCandidates}}/g, reconResult.bankTxnId ? reconResult.bankTxnId.split(",").length.toString() : "0")
-      .replace(/{{hasRefunds}}/g, String(reconResult.refundAmount > 0))
-      .replace(/{{hasChargebacks}}/g, String(reconResult.chargebackAmount > 0))
-      .replace(/{{daysSinceCapture}}/g, "3");
+  if (casesData.length === 0) return results;
 
-    const aiResult = await generateJSON(prompt);
+  const batchPrompt = `You are the Anomaly Detection Agent. Review ALL these reconciliation cases and return a JSON array of decisions.
 
-    if (aiResult && aiResult.data) {
-      const data = aiResult.data as {
-        should_reclassify: boolean;
-        new_status: string;
-        new_confidence: number;
-        reasoning_steps: Array<{ step: number; label: string; detail: string; impact: string }>;
-        anomaly_detected: string | null;
-        risk_assessment: string;
-      };
+CASES:
+${JSON.stringify(casesData, null, 2)}
 
-      results.push({
-        exceptionId: exception.id,
-        shouldReclassify: data.should_reclassify,
-        newStatus: data.new_status,
-        newConfidence: Math.max(0, Math.min(100, data.new_confidence)),
-        reasoningSteps: data.reasoning_steps || [],
-        anomalyDetected: data.anomaly_detected,
-        riskAssessment: data.risk_assessment,
-        model: "gemini-1.5-flash",
-        latencyMs: aiResult.latencyMs,
-      });
+Respond with a JSON array (one object per case):
+[
+  {
+    "case_id": "...",
+    "should_reclassify": true/false,
+    "new_status": "STATUS or same",
+    "new_confidence": 0-100,
+    "reasoning": "one-line reason",
+    "anomaly_detected": "description or null",
+    "risk_assessment": "LOW|MEDIUM|HIGH"
+  }
+]
 
-      // Store agent trace
-      if (data.reasoning_steps) {
-        for (const step of data.reasoning_steps) {
-          await prisma.agentTrace.create({
-            data: {
-              batchId,
-              exceptionId: exception.id,
-              agentName: "ANOMALY_DETECTOR",
-              passNumber: 2,
-              stepNumber: step.step,
-              stepLabel: step.label,
-              stepDetail: step.detail,
-              confidenceBefore: exception.confidenceScore,
-              confidenceAfter: data.new_confidence,
-            },
-          });
-        }
-      }
+Rules:
+- Only reclassify if you find a genuine pattern or error
+- Be conservative — prefer keeping current status over wrong reclassification
+- If data is insufficient, set should_reclassify to false`;
 
-      // Apply reclassification if AI recommends it
-      if (data.should_reclassify && data.new_status !== exception.exceptionType) {
-        await prisma.exception.update({
-          where: { id: exception.id },
-          data: {
-            exceptionType: data.new_status,
-            confidenceScore: data.new_confidence,
-            riskLevel: data.risk_assessment,
-          },
-        });
+  // ONE API CALL for all 5 cases
+  const aiResult = await generateJSON(batchPrompt);
 
-        await prisma.reconciliationResult.updateMany({
-          where: {
-            batchId,
-            paymentId: exception.paymentId || "",
-          },
-          data: {
-            status: data.new_status,
-            confidenceScore: data.new_confidence,
-            passNumber: 2,
-          },
-        });
+  // Defensively index decisions by case_id; ignore malformed or duplicate entries.
+  const rawDecisions =
+    aiResult && Array.isArray(aiResult.data) ? (aiResult.data as AnomalyDecision[]) : [];
+  const decisionByCaseId = new Map<string, AnomalyDecision>();
+  for (const decision of rawDecisions) {
+    if (
+      decision &&
+      typeof decision === "object" &&
+      typeof decision.case_id === "string" &&
+      !decisionByCaseId.has(decision.case_id)
+    ) {
+      decisionByCaseId.set(decision.case_id, decision);
+    }
+  }
 
-        await prisma.auditLog.create({
-          data: {
-            batchId,
-            actor: "AI",
-            action: "ANOMALY_RECLASSIFIED",
-            entityType: "exception",
-            entityId: exception.id,
-            beforeState: JSON.stringify({ status: exception.exceptionType, confidence: exception.confidenceScore }),
-            afterState: JSON.stringify({ status: data.new_status, confidence: data.new_confidence }),
-            reason: `Anomaly Agent reclassified: ${data.anomaly_detected || "pattern detected"}`,
-          },
-        });
-      }
-    } else {
-      // AI unavailable — keep original classification
+  for (const caseData of casesData) {
+    const exception = lowConfidenceExceptions.find((e) => e.id === caseData.case_id);
+    if (!exception) continue;
+
+    const decision = decisionByCaseId.get(caseData.case_id);
+
+    // Missing/malformed decision (or Gemini unavailable) → fall back safely.
+    if (!decision) {
       results.push({
         exceptionId: exception.id,
         shouldReclassify: false,
         newStatus: exception.exceptionType,
         newConfidence: exception.confidenceScore,
-        reasoningSteps: [{ step: 1, label: "AI Unavailable", detail: "Using deterministic classification", impact: "0" }],
+        reasoningSteps: [{ step: 1, label: "Batch Review", detail: "No AI decision returned; keeping original classification.", impact: "0" }],
         anomalyDetected: null,
         riskAssessment: exception.riskLevel,
-        model: "unavailable",
-        latencyMs: Date.now() - startTime,
+        model: "fallback",
+        latencyMs: aiResult ? aiResult.latencyMs : 0,
+      });
+      continue;
+    }
+
+    const shouldReclassify = Boolean(decision.should_reclassify);
+    const newStatus =
+      typeof decision.new_status === "string" ? decision.new_status : exception.exceptionType;
+    const newConfidence = Math.max(
+      0,
+      Math.min(100, Number(decision.new_confidence) || exception.confidenceScore)
+    );
+    const reasoning = typeof decision.reasoning === "string" ? decision.reasoning : "";
+    const anomalyDetected =
+      typeof decision.anomaly_detected === "string" ? decision.anomaly_detected : null;
+    const riskAssessment =
+      typeof decision.risk_assessment === "string" ? decision.risk_assessment : exception.riskLevel;
+
+    results.push({
+      exceptionId: exception.id,
+      shouldReclassify,
+      newStatus,
+      newConfidence,
+      reasoningSteps: [{ step: 1, label: "Batch Review", detail: reasoning, impact: String(newConfidence - exception.confidenceScore) }],
+      anomalyDetected,
+      riskAssessment,
+      model: "gemini-3.6-flash",
+      latencyMs: aiResult ? aiResult.latencyMs : 0,
+    });
+
+    // Keep a per-exception AgentTrace record.
+    await prisma.agentTrace.create({
+      data: {
+        batchId,
+        exceptionId: exception.id,
+        agentName: "ANOMALY_DETECTOR",
+        passNumber: 2,
+        stepNumber: 1,
+        stepLabel: "Batch Review",
+        stepDetail: reasoning,
+        confidenceBefore: exception.confidenceScore,
+        confidenceAfter: newConfidence,
+      },
+    });
+
+    if (shouldReclassify && newStatus !== exception.exceptionType) {
+      await prisma.exception.update({
+        where: { id: exception.id },
+        data: {
+          exceptionType: newStatus,
+          confidenceScore: newConfidence,
+          riskLevel: riskAssessment,
+        },
+      });
+
+      await prisma.reconciliationResult.updateMany({
+        where: { batchId, paymentId: exception.paymentId || "" },
+        data: { status: newStatus, confidenceScore: newConfidence, passNumber: 2 },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          batchId,
+          actor: "AI",
+          action: "ANOMALY_RECLASSIFIED",
+          entityType: "exception",
+          entityId: exception.id,
+          beforeState: JSON.stringify({ status: exception.exceptionType, confidence: exception.confidenceScore }),
+          afterState: JSON.stringify({ status: newStatus, confidence: newConfidence }),
+          reason: `Anomaly Agent reclassified: ${anomalyDetected || "pattern detected"}`,
+        },
       });
     }
   }
