@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { generateJSON, isAIAvailable } from "@/lib/ai/client";
+import { parseAnomalyDecisions } from "@/lib/ai/schemas";
 
 interface AnomalyReviewResult {
   exceptionId: string;
@@ -16,16 +17,6 @@ interface AnomalyReviewResult {
   riskAssessment: string;
   model: string;
   latencyMs: number;
-}
-
-interface AnomalyDecision {
-  case_id?: string;
-  should_reclassify?: unknown;
-  new_status?: unknown;
-  new_confidence?: unknown;
-  reasoning?: unknown;
-  anomaly_detected?: unknown;
-  risk_assessment?: unknown;
 }
 
 // src/lib/reconciliation/anomaly-agent.ts — BATCH VERSION
@@ -99,20 +90,13 @@ Rules:
   // ONE API CALL for all 5 cases
   const aiResult = await generateJSON(batchPrompt);
 
-  // Defensively index decisions by case_id; ignore malformed or duplicate entries.
-  const rawDecisions =
-    aiResult && Array.isArray(aiResult.data) ? (aiResult.data as AnomalyDecision[]) : [];
-  const decisionByCaseId = new Map<string, AnomalyDecision>();
-  for (const decision of rawDecisions) {
-    if (
-      decision &&
-      typeof decision === "object" &&
-      typeof decision.case_id === "string" &&
-      !decisionByCaseId.has(decision.case_id)
-    ) {
-      decisionByCaseId.set(decision.case_id, decision);
-    }
-  }
+  // Parse + validate every decision BEFORE any DB write. Invalid shapes, unknown
+  // enums, out-of-range confidence, and invented case_ids are dropped → those
+  // cases take the safe fallback path below (no DB mutation).
+  const decisionByCaseId = parseAnomalyDecisions(
+    aiResult && aiResult.data,
+    new Set(lowConfidenceExceptions.map((e) => e.id))
+  );
 
   for (const caseData of casesData) {
     const exception = lowConfidenceExceptions.find((e) => e.id === caseData.case_id);
@@ -136,18 +120,12 @@ Rules:
       continue;
     }
 
-    const shouldReclassify = Boolean(decision.should_reclassify);
-    const newStatus =
-      typeof decision.new_status === "string" ? decision.new_status : exception.exceptionType;
-    const newConfidence = Math.max(
-      0,
-      Math.min(100, Number(decision.new_confidence) || exception.confidenceScore)
-    );
-    const reasoning = typeof decision.reasoning === "string" ? decision.reasoning : "";
-    const anomalyDetected =
-      typeof decision.anomaly_detected === "string" ? decision.anomaly_detected : null;
-    const riskAssessment =
-      typeof decision.risk_assessment === "string" ? decision.risk_assessment : exception.riskLevel;
+    const shouldReclassify = decision.should_reclassify;
+    const newStatus = decision.new_status;
+    const newConfidence = decision.new_confidence;
+    const reasoning = decision.reasoning;
+    const anomalyDetected = decision.anomaly_detected;
+    const riskAssessment = decision.risk_assessment;
 
     results.push({
       exceptionId: exception.id,

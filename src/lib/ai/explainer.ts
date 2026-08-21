@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { generateJSON } from "./client";
+import { ExplanationSchema } from "./schemas";
 import { EXCEPTION_EXPLANATION_PROMPT } from "./prompts";
 import { generateFallbackExplanation } from "./fallback";
 
@@ -10,6 +11,16 @@ interface Explanation {
   recommended_action: string;
   risk_level: string;
   needs_manual_review: boolean;
+}
+
+// Cached evidence is stored as a JSON string; guard against malformed rows.
+function safeParseEvidence(json: string): string[] {
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function paiseToRupeesStr(paise: number): string {
@@ -35,7 +46,7 @@ export async function explainException(exceptionId: string): Promise<{
       explanation: {
         summary: exception.aiExplanation.summary,
         reason: exception.aiExplanation.reason,
-        evidence: JSON.parse(exception.aiExplanation.evidence),
+        evidence: safeParseEvidence(exception.aiExplanation.evidence),
         recommended_action: exception.aiExplanation.recommendedAction,
         risk_level: exception.aiExplanation.riskLevel,
         needs_manual_review: exception.aiExplanation.needsManualReview,
@@ -119,13 +130,16 @@ export async function explainException(exceptionId: string): Promise<{
   let tokensUsed = 0;
   let latencyMs = 0;
 
-  if (aiResult && aiResult.data) {
-    explanation = aiResult.data as Explanation;
+  const parsedExplanation =
+    aiResult && aiResult.data ? ExplanationSchema.safeParse(aiResult.data) : null;
+
+  if (aiResult && aiResult.data && parsedExplanation?.success) {
+    explanation = parsedExplanation.data;
     model = "gemini-3.6-flash";
     tokensUsed = aiResult.tokensUsed;
     latencyMs = aiResult.latencyMs;
   } else {
-    // Fallback to template
+    // Fallback to template (also used when the AI output fails validation)
     explanation = generateFallbackExplanation({
       ...ctx,
       paymentAmount: reconResult?.paymentAmount || 0,

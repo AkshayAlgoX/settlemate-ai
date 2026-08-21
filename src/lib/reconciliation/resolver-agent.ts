@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { generateJSON, isAIAvailable } from "@/lib/ai/client";
+import { parseResolverDecisions } from "@/lib/ai/schemas";
 
 interface ResolverResult {
   exceptionId: string;
@@ -15,20 +16,6 @@ interface ResolverResult {
   riskIfApplied: string;
   model: string;
   latencyMs: number;
-}
-
-interface ResolverDecision {
-  case_id?: string;
-  can_auto_fix?: unknown;
-  proposed_fix?: unknown;
-  fix_type?: unknown;
-  expected_accuracy_after_fix?: unknown;
-  evidence?: unknown;
-  razorpay_ticket_needed?: unknown;
-  ticket_subject?: unknown;
-  ticket_body?: unknown;
-  reasoning_steps?: unknown;
-  risk_if_applied?: unknown;
 }
 
 // src/lib/reconciliation/resolver-agent.ts — BATCH VERSION
@@ -116,20 +103,13 @@ Rules:
   // ONE API CALL for all 5 cases (with a longer timeout for the larger batch response)
   const aiResult = await generateJSON(batchPrompt, undefined, RESOLVER_TIMEOUT_MS);
 
-  // Defensively index decisions by case_id; ignore malformed or duplicate entries.
-  const rawDecisions =
-    aiResult && Array.isArray(aiResult.data) ? (aiResult.data as ResolverDecision[]) : [];
-  const decisionByCaseId = new Map<string, ResolverDecision>();
-  for (const decision of rawDecisions) {
-    if (
-      decision &&
-      typeof decision === "object" &&
-      typeof decision.case_id === "string" &&
-      !decisionByCaseId.has(decision.case_id)
-    ) {
-      decisionByCaseId.set(decision.case_id, decision);
-    }
-  }
+  // Parse + validate every decision BEFORE any DB write. Invalid shapes, unknown
+  // enums, out-of-range accuracy, and invented case_ids are dropped → those
+  // cases take the safe fallback path below (no DB mutation).
+  const decisionByCaseId = parseResolverDecisions(
+    aiResult && aiResult.data,
+    new Set(remainingExceptions.map((e) => e.id))
+  );
 
   for (const caseData of casesData) {
     const exception = remainingExceptions.find((e) => e.id === caseData.case_id);
@@ -157,25 +137,23 @@ Rules:
       continue;
     }
 
-    const canAutoFix = Boolean(decision.can_auto_fix);
-    const proposedFix =
-      typeof decision.proposed_fix === "string"
-        ? decision.proposed_fix
-        : "AI unavailable. Manual review required.";
-    const fixType = typeof decision.fix_type === "string" ? decision.fix_type : "CANNOT_FIX";
-    const expectedAccuracyAfterFix = Math.max(
-      0,
-      Math.min(100, Number(decision.expected_accuracy_after_fix) || 0)
-    );
-    const evidence = Array.isArray(decision.evidence) ? (decision.evidence as string[]) : [];
-    const razorpayTicketNeeded = Boolean(decision.razorpay_ticket_needed);
-    const ticketSubject = typeof decision.ticket_subject === "string" ? decision.ticket_subject : "";
-    const ticketBody = typeof decision.ticket_body === "string" ? decision.ticket_body : "";
-    const reasoningSteps = Array.isArray(decision.reasoning_steps)
-      ? (decision.reasoning_steps as Array<{ step: number; label: string; detail: string }>)
-      : [];
-    const riskIfApplied =
-      typeof decision.risk_if_applied === "string" ? decision.risk_if_applied : "N/A";
+    let canAutoFix = decision.can_auto_fix;
+    const proposedFix = decision.proposed_fix;
+    const fixType = decision.fix_type;
+    const expectedAccuracyAfterFix = decision.expected_accuracy_after_fix;
+    const evidence = decision.evidence;
+    let razorpayTicketNeeded = decision.razorpay_ticket_needed;
+    const ticketSubject = decision.ticket_subject;
+    const ticketBody = decision.ticket_body;
+    const reasoningSteps = decision.reasoning_steps;
+    const riskIfApplied = decision.risk_if_applied;
+
+    // SAFETY GATE: a HIGH-risk fix must never be applied automatically.
+    // Downgrade to manual review and recommend a Razorpay ticket instead.
+    if (canAutoFix && riskIfApplied === "HIGH") {
+      canAutoFix = false;
+      razorpayTicketNeeded = true;
+    }
 
     results.push({
       exceptionId: caseData.case_id,
