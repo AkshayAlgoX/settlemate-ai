@@ -4,7 +4,7 @@ import { runAnomalyAgent } from "./anomaly-agent";
 import { runResolverAgent } from "./resolver-agent";
 import { runAdversarialTest } from "./adversarial";
 import { computeCalibration } from "./calibration";
-import { resetAICounter, getAIStatus } from "@/lib/ai/client";
+import { createAIContext } from "@/lib/ai/context";
 
 export interface MultiPassResult {
   batchId: string;
@@ -80,8 +80,10 @@ export async function runMultiPassReconciliation(
   const totalStart = performance.now();
   const passes: MultiPassResult["passes"] = [];
 
-  // Reset AI counter for this batch
-  resetAICounter();
+  // Create exactly one isolated AI execution context for this reconciliation.
+  // Concurrent batches each get their own context (own counter, own circuit),
+  // while the shared account quota protection stays global in client.ts.
+  const ai = createAIContext();
 
   // ── PASS 1: Deterministic Rules (NO AI) ──
   const pass1Start = performance.now();
@@ -115,13 +117,13 @@ export async function runMultiPassReconciliation(
 
   // ── PASS 2: Anomaly Detection Agent (AI, max 1 batched call) ──
   const pass2Start = performance.now();
-  const aiStatusBeforePass2 = getAIStatus();
+  const aiStatusBeforePass2 = ai.getStatus();
   const anomalyResults = aiStatusBeforePass2.available
-    ? await runAnomalyAgent(batchId)
+    ? await runAnomalyAgent(batchId, ai)
     : [];
   const pass2Duration = Math.round(performance.now() - pass2Start);
   const pass2Stats = await computeAccuracy(batchId);
-  const aiCallsPass2 = getAIStatus().totalCalls - aiStatusBeforePass2.totalCalls;
+  const aiCallsPass2 = ai.getStatus().totalCalls - aiStatusBeforePass2.totalCalls;
 
   const reclassified = anomalyResults.filter((r) => r.shouldReclassify).length;
 
@@ -153,13 +155,13 @@ export async function runMultiPassReconciliation(
 
   // ── PASS 3: Resolver Agent (AI, max 1 batched call) ──
   const pass3Start = performance.now();
-  const aiStatusBeforePass3 = getAIStatus();
+  const aiStatusBeforePass3 = ai.getStatus();
   const resolverResults = aiStatusBeforePass3.available
-    ? await runResolverAgent(batchId)
+    ? await runResolverAgent(batchId, ai)
     : [];
   const pass3Duration = Math.round(performance.now() - pass3Start);
   const pass3Stats = await computeAccuracy(batchId);
-  const aiCallsPass3 = getAIStatus().totalCalls - aiStatusBeforePass3.totalCalls;
+  const aiCallsPass3 = ai.getStatus().totalCalls - aiStatusBeforePass3.totalCalls;
 
   const fixable = resolverResults.filter((r) => r.canAutoFix).length;
   const ticketNeeded = resolverResults.filter((r) => r.razorpayTicketNeeded).length;
@@ -189,7 +191,7 @@ export async function runMultiPassReconciliation(
   const calibration = await computeCalibration(batchId);
 
   const totalDuration = Math.round(performance.now() - totalStart);
-  const finalAIStatus = getAIStatus();
+  const finalAIStatus = ai.getStatus();
 
   await prisma.batch.update({
     where: { id: batchId },

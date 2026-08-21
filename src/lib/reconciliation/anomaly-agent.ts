@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { generateJSON, isAIAvailable } from "@/lib/ai/client";
+import type { AIContext } from "@/lib/ai/context";
 import { parseAnomalyDecisions } from "@/lib/ai/schemas";
 
 interface AnomalyReviewResult {
@@ -21,7 +21,7 @@ interface AnomalyReviewResult {
 
 // src/lib/reconciliation/anomaly-agent.ts — BATCH VERSION
 
-export async function runAnomalyAgent(batchId: string): Promise<AnomalyReviewResult[]> {
+export async function runAnomalyAgent(batchId: string, ai: AIContext): Promise<AnomalyReviewResult[]> {
   const results: AnomalyReviewResult[] = [];
 
   const lowConfidenceExceptions = await prisma.exception.findMany({
@@ -35,7 +35,7 @@ export async function runAnomalyAgent(batchId: string): Promise<AnomalyReviewRes
     take: 5,
   });
 
-  if (lowConfidenceExceptions.length === 0 || !isAIAvailable()) {
+  if (lowConfidenceExceptions.length === 0 || !ai.isAvailable()) {
     return results;
   }
 
@@ -88,7 +88,7 @@ Rules:
 - If data is insufficient, set should_reclassify to false`;
 
   // ONE API CALL for all 5 cases
-  const aiResult = await generateJSON(batchPrompt);
+  const aiResult = await ai.generateJSON(batchPrompt);
 
   // Parse + validate every decision BEFORE any DB write. Invalid shapes, unknown
   // enums, out-of-range confidence, and invented case_ids are dropped → those

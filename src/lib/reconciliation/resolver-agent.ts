@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { generateJSON, isAIAvailable } from "@/lib/ai/client";
+import type { AIContext } from "@/lib/ai/context";
 import { parseResolverDecisions } from "@/lib/ai/schemas";
 
 interface ResolverResult {
@@ -24,7 +24,7 @@ interface ResolverResult {
 // more time than the default 15s per-call timeout so it does not fall back.
 const RESOLVER_TIMEOUT_MS = 45_000;
 
-export async function runResolverAgent(batchId: string): Promise<ResolverResult[]> {
+export async function runResolverAgent(batchId: string, ai: AIContext): Promise<ResolverResult[]> {
   const results: ResolverResult[] = [];
 
   // Only resolve the 5 highest-amount unresolved exceptions (max 5 cases per batch).
@@ -40,7 +40,7 @@ export async function runResolverAgent(batchId: string): Promise<ResolverResult[
     take: 5, // HARD CAP: 5 cases max
   });
 
-  if (remainingExceptions.length === 0 || !isAIAvailable()) {
+  if (remainingExceptions.length === 0 || !ai.isAvailable()) {
     return results;
   }
 
@@ -101,7 +101,7 @@ Rules:
 - Be CONCISE to keep the response fast: proposed_fix <= 40 words; evidence <= 2 items; reasoning_steps <= 2 steps; ticket_subject <= 8 words; ticket_body <= 2 sentences.`;
 
   // ONE API CALL for all 5 cases (with a longer timeout for the larger batch response)
-  const aiResult = await generateJSON(batchPrompt, undefined, RESOLVER_TIMEOUT_MS);
+  const aiResult = await ai.generateJSON(batchPrompt, undefined, RESOLVER_TIMEOUT_MS);
 
   // Parse + validate every decision BEFORE any DB write. Invalid shapes, unknown
   // enums, out-of-range accuracy, and invented case_ids are dropped → those

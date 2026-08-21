@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { generateJSON } from "./client";
+import { createAIContext } from "./context";
 import { ExplanationSchema } from "./schemas";
 import { EXCEPTION_EXPLANATION_PROMPT } from "./prompts";
 import { generateFallbackExplanation } from "./fallback";
@@ -123,7 +123,10 @@ export async function explainException(exceptionId: string): Promise<{
     .replace(/{{matchMethod}}/g, ctx.matchMethod)
     .replace(/{{matchDetails}}/g, ctx.matchDetails);
 
-  const aiResult = await generateJSON(prompt);
+  // Fresh isolated AI context per explanation request — never shares its
+  // call counter or circuit with any concurrent reconciliation context.
+  const ai = createAIContext();
+  const aiResult = await ai.generateJSON(prompt);
 
   let explanation: Explanation;
   let model: string;

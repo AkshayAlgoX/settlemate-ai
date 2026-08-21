@@ -1,70 +1,44 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// ── Account-global state (shared across ALL AI execution contexts) ──
+// The Google Gemini free-tier quota (~5 req/min) is keyed to the API key, so
+// 429 rate-limit protection MUST be coordinated account-wide, not per-batch.
+// The per-batch logical state (call counter, per-context circuit) lives in
+// context.ts; only the shared account quota/cooldown belongs here.
 let genAI: GoogleGenerativeAI | null = null;
+let accountCircuitOpen = false;
+let accountCircuitOpenedAt = 0;
 
-// ── Circuit Breaker State ──
-let circuitOpen = false;
-let circuitOpenedAt = 0;
-let totalCallsThisBatch = 0;
-const MAX_CALLS_PER_BATCH = 10; // Hard cap
-const CIRCUIT_COOLDOWN_MS = 65_000; // 65s (Gemini says 58s, add buffer)
-const AI_TIMEOUT_MS = 15_000; // 15s per call max
+export const AI_TIMEOUT_MS = 15_000; // 15s per call max
+export const CIRCUIT_COOLDOWN_MS = 65_000; // 65s (Gemini says 58s, add buffer)
 
-export function resetAICounter() {
-  totalCallsThisBatch = 0;
-  circuitOpen = false;
-  circuitOpenedAt = 0;
+export interface AccountStatus {
+  blocked: boolean;
+  isRateLimited: boolean;
+  reason: string;
 }
 
-export function getAIStatus(): {
-  available: boolean;
-  callsRemaining: number;
-  totalCalls: number;
-  circuitOpen: boolean;
-  reason: string;
-} {
-  if (circuitOpen && Date.now() - circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
+// Report whether the account-wide quota/cooldown currently blocks any new call.
+// This is shared across every context because the upstream quota is shared.
+export function getAccountStatus(): AccountStatus {
+  if (accountCircuitOpen && Date.now() - accountCircuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
     return {
-      available: false,
-      callsRemaining: 0,
-      totalCalls: totalCallsThisBatch,
-      circuitOpen: true,
-      reason: `Rate limited. Retry in ${Math.ceil((CIRCUIT_COOLDOWN_MS - (Date.now() - circuitOpenedAt)) / 1000)}s`,
+      blocked: true,
+      isRateLimited: true,
+      reason: `Rate limited. Retry in ${Math.ceil((CIRCUIT_COOLDOWN_MS - (Date.now() - accountCircuitOpenedAt)) / 1000)}s`,
     };
   }
 
-  // Reset circuit if cooldown passed
-  if (circuitOpen && Date.now() - circuitOpenedAt >= CIRCUIT_COOLDOWN_MS) {
-    circuitOpen = false;
-  }
-
-  if (totalCallsThisBatch >= MAX_CALLS_PER_BATCH) {
-    return {
-      available: false,
-      callsRemaining: 0,
-      totalCalls: totalCallsThisBatch,
-      circuitOpen: false,
-      reason: `Call cap reached (${MAX_CALLS_PER_BATCH}/${MAX_CALLS_PER_BATCH})`,
-    };
+  // Cooldown expired — reopen.
+  if (accountCircuitOpen && Date.now() - accountCircuitOpenedAt >= CIRCUIT_COOLDOWN_MS) {
+    accountCircuitOpen = false;
   }
 
   if (!getAIClient()) {
-    return {
-      available: false,
-      callsRemaining: 0,
-      totalCalls: 0,
-      circuitOpen: false,
-      reason: "No API key configured",
-    };
+    return { blocked: true, isRateLimited: false, reason: "No API key configured" };
   }
 
-  return {
-    available: true,
-    callsRemaining: MAX_CALLS_PER_BATCH - totalCallsThisBatch,
-    totalCalls: totalCallsThisBatch,
-    circuitOpen: false,
-    reason: "Available",
-  };
+  return { blocked: false, isRateLimited: false, reason: "Available" };
 }
 
 function getAIClient(): GoogleGenerativeAI | null {
@@ -78,14 +52,12 @@ function getAIClient(): GoogleGenerativeAI | null {
   return genAI;
 }
 
-export function isAIAvailable(): boolean {
-  return getAIStatus().available;
-}
-
-function openCircuit() {
-  circuitOpen = true;
-  circuitOpenedAt = Date.now();
-  console.warn(`[AI Circuit Breaker] OPENED at ${new Date().toISOString()}. Cooldown: ${CIRCUIT_COOLDOWN_MS / 1000}s`);
+function openAccountCircuit() {
+  accountCircuitOpen = true;
+  accountCircuitOpenedAt = Date.now();
+  console.warn(
+    `[AI Circuit Breaker] OPENED (account-wide) at ${new Date().toISOString()}. Cooldown: ${CIRCUIT_COOLDOWN_MS / 1000}s`
+  );
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -97,21 +69,23 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-export async function generateJSON(
+// Discriminated outcome of a single network call to the provider. The context
+// maps these to its public `{ data, ... } | null` contract and opens its own
+// per-context circuit on `rate-limited`.
+export type AIJSONResult =
+  | { status: "success"; data: unknown; tokensUsed: number; latencyMs: number }
+  | { status: "rate-limited"; latencyMs: number }
+  | { status: "timeout"; latencyMs: number }
+  | { status: "error"; latencyMs: number };
+
+export async function callGenerativeJSON(
   prompt: string,
-  model: string = "gemini-3.6-flash",
+  model: string,
   timeoutMs: number = AI_TIMEOUT_MS
-): Promise<{ data: unknown; tokensUsed: number; latencyMs: number } | null> {
-  const status = getAIStatus();
-  if (!status.available) {
-    console.log(`[AI] Skipped: ${status.reason}`);
-    return null;
-  }
-
+): Promise<AIJSONResult> {
   const client = getAIClient();
-  if (!client) return null;
+  if (!client) return { status: "error", latencyMs: 0 };
 
-  totalCallsThisBatch++;
   const startTime = Date.now();
 
   try {
@@ -134,42 +108,42 @@ export async function generateJSON(
       .trim();
 
     const data = JSON.parse(cleaned);
-    return { data, tokensUsed, latencyMs };
+    return { status: "success", data, tokensUsed, latencyMs };
   } catch (error: unknown) {
     const errStr = String(error);
+    const latencyMs = Date.now() - startTime;
 
-    // Detect 429 rate limit
+    // Detect 429 rate limit — open the shared account circuit (quota is per key).
     if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("quota")) {
-      openCircuit();
-      console.warn(`[AI] Rate limited on call #${totalCallsThisBatch}. Circuit opened.`);
-      return null;
+      openAccountCircuit();
+      console.warn(`[AI] Rate limited. Account circuit opened.`);
+      return { status: "rate-limited", latencyMs };
     }
 
     // Detect timeout
     if (errStr.includes("timed out")) {
-      console.warn(`[AI] Timeout on call #${totalCallsThisBatch}`);
-      return null;
+      console.warn(`[AI] Timeout`);
+      return { status: "timeout", latencyMs };
     }
 
-    console.error(`[AI] Error on call #${totalCallsThisBatch}:`, errStr.slice(0, 200));
-    return null;
+    console.error(`[AI] Error:`, errStr.slice(0, 200));
+    return { status: "error", latencyMs };
   }
 }
 
-export async function generateText(
+export type AITextResult =
+  | { status: "success"; text: string; tokensUsed: number; latencyMs: number }
+  | { status: "rate-limited"; latencyMs: number }
+  | { status: "timeout"; latencyMs: number }
+  | { status: "error"; latencyMs: number };
+
+export async function callGenerativeText(
   prompt: string,
-  model: string = "gemini-3.6-flash"
-): Promise<{ text: string; tokensUsed: number; latencyMs: number } | null> {
-  const status = getAIStatus();
-  if (!status.available) {
-    console.log(`[AI] Skipped: ${status.reason}`);
-    return null;
-  }
-
+  model: string
+): Promise<AITextResult> {
   const client = getAIClient();
-  if (!client) return null;
+  if (!client) return { status: "error", latencyMs: 0 };
 
-  totalCallsThisBatch++;
   const startTime = Date.now();
 
   try {
@@ -183,20 +157,21 @@ export async function generateText(
     const tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
     const latencyMs = Date.now() - startTime;
 
-    return { text, tokensUsed, latencyMs };
+    return { status: "success", text, tokensUsed, latencyMs };
   } catch (error: unknown) {
     const errStr = String(error);
+    const latencyMs = Date.now() - startTime;
 
     if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("quota")) {
-      openCircuit();
-      return null;
+      openAccountCircuit();
+      return { status: "rate-limited", latencyMs };
     }
 
     if (errStr.includes("timed out")) {
-      return null;
+      return { status: "timeout", latencyMs };
     }
 
     console.error(`[AI] Text error:`, errStr.slice(0, 200));
-    return null;
+    return { status: "error", latencyMs };
   }
 }
