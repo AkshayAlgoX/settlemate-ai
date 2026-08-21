@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runReconciliation } from "@/lib/reconciliation/engine";
+import { prisma } from "@/lib/db";
 
 export async function POST(
   req: NextRequest,
@@ -10,6 +11,16 @@ export async function POST(
 
     if (!batchId) {
       return NextResponse.json({ error: "batchId required" }, { status: 400 });
+    }
+
+    // Verify batch exists before attempting reconciliation
+    const batch = await prisma.batch.findUnique({
+      where: { id: batchId },
+      select: { id: true },
+    });
+
+    if (!batch) {
+      return NextResponse.json({ error: "Batch not found" }, { status: 404 });
     }
 
     const metrics = await runReconciliation(batchId);
@@ -35,7 +46,7 @@ export async function POST(
   } catch (error) {
     console.error("Reconciliation error:", error);
     return NextResponse.json(
-      { error: "Reconciliation failed", details: String(error) },
+      { error: "Reconciliation failed" },
       { status: 500 }
     );
   }

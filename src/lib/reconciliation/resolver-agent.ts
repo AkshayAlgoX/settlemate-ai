@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import type { AIContext } from "@/lib/ai/context";
-import { parseResolverDecisions } from "@/lib/ai/schemas";
+import { parseResolverDecisions, CURRENT_AI_MODEL } from "@/lib/ai/schemas";
 
 interface ResolverResult {
   exceptionId: string;
@@ -167,7 +167,7 @@ Rules:
       ticketBody,
       reasoningSteps,
       riskIfApplied,
-      model: "gemini-3.6-flash",
+      model: CURRENT_AI_MODEL,
       latencyMs: aiResult ? aiResult.latencyMs : 0,
     });
 

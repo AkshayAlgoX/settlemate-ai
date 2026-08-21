@@ -204,7 +204,9 @@ async function deleteSandboxBatch(sandboxBatchId: string) {
   await prisma.batch.delete({ where: { id: sandboxBatchId } });
 }
 
-async function runAdversarialAgainstSandbox(batchId: string): Promise<AdversarialResult> {
+async function runAdversarialAgainstSandbox(
+  batchId: string
+): Promise<AdversarialResult> {
   const tests: AdversarialTest[] = [];
 
   const payments = await prisma.payment.findMany({
@@ -244,13 +246,11 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
     const target = payments[0];
     const originalAmount = target.amount;
 
-    // Inject: inflate payment amount 10x
     await prisma.payment.update({
       where: { id: target.id },
       data: { amount: originalAmount * 10 },
     });
 
-    // Re-run reconciliation with tampered data
     const result = await reRunAndGetResult(target.paymentId);
     const detected = result !== null &&
       result.status === "AMOUNT_MISMATCH" &&
@@ -265,7 +265,6 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
       detectedAs: detected ? result?.status || "AMOUNT_MISMATCH" : null,
     });
 
-    // Restore original data
     await prisma.payment.update({
       where: { id: target.id },
       data: { amount: originalAmount },
@@ -279,20 +278,18 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
   try {
     const target = payments[1];
 
-    // Inject: add fake refund
     const phantomRefund = await prisma.refund.create({
       data: {
         batchId,
         refundId: "rfnd_phantom_adversarial",
         paymentId: target.paymentId,
-        amount: Math.round(target.amount * 0.3), // 30% refund
+        amount: Math.round(target.amount * 0.3),
         status: "processed",
         reason: "Phantom adversarial test",
-        createdAt: new Date(),
+        createdAt: new Date("2026-01-01T00:00:00Z"),
       },
     });
 
-    // Re-run reconciliation with phantom refund
     const result = await reRunAndGetResult(target.paymentId);
     const detected = result !== null &&
       (result.status === "REFUND_MISMATCH" || result.status === "AMOUNT_MISMATCH") &&
@@ -306,7 +303,6 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
       detectedAs: detected ? result?.status || "REFUND_MISMATCH" : null,
     });
 
-    // Cleanup
     await prisma.refund.delete({ where: { id: phantomRefund.id } });
     await restoreAndReRun();
   } catch (e) {
@@ -354,7 +350,6 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
   try {
     const target = settlements[1];
 
-    // Inject: create duplicate settlement for same payment
     const dupSettlement = await prisma.settlement.create({
       data: {
         batchId,
@@ -366,7 +361,7 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
         utr: target.utr ? target.utr + "_DUP" : null,
         status: "processed",
         settledAt: target.settledAt,
-        createdAt: new Date(),
+        createdAt: new Date("2026-01-01T00:00:00Z"),
       },
     });
 
@@ -464,25 +459,35 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
         amount: 25000,
         reason: "Orphan adversarial test",
         status: "open",
-        createdAt: new Date(),
+        createdAt: new Date("2026-01-01T00:00:00Z"),
       },
     });
 
-    // Re-run and check if system handles the orphan gracefully
     await runReconciliation(batchId);
     const allResults = await prisma.reconciliationResult.findMany({
       where: { batchId },
     });
 
-    // The orphan chargeback targets a non-existent payment,
-    // so the system should either ignore it or flag it
-    const detected = true; // System handles gracefully by not crashing
+    const orphanDetected = allResults.some(
+      (r) => r.chargebackIds?.includes("cb_orphan_adversarial")
+    );
+    const orphanException = await prisma.exception.findFirst({
+      where: {
+        batchId,
+        paymentId: "pay_nonexistent_adversarial",
+      },
+    });
+
+    const isDetected = orphanDetected || orphanException !== null;
+
     tests.push({
       testName: "Orphan Chargeback",
       description: "Chargeback for non-existent payment",
       injectedError: "cb_orphan for pay_nonexistent",
-      detected,
-      detectedAs: "GRACEFULLY_IGNORED",
+      detected: isDetected,
+      detectedAs: isDetected
+        ? "ORPHAN_DETECTED"
+        : "NOT_DETECTED (engine processes payments, not standalone chargebacks)",
     });
 
     await prisma.chargeback.delete({ where: { id: orphanCb.id } });
@@ -534,7 +539,6 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
     if (!target.utr) {
       tests.push({ testName: "Bank Credit Mismatch", description: "Skipped (no UTR)", injectedError: "", detected: true, detectedAs: "N/A" });
     } else {
-      // Find the matching bank transaction
       const bankTxn = await prisma.bankTransaction.findFirst({
         where: { batchId, utr: target.utr, type: "CREDIT" },
       });
@@ -542,10 +546,9 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
       if (bankTxn) {
         const originalBankAmount = bankTxn.amount;
 
-        // Tamper: change bank credit amount
         await prisma.bankTransaction.update({
           where: { id: bankTxn.id },
-          data: { amount: Math.round(originalBankAmount * 0.7) }, // 30% less
+          data: { amount: Math.round(originalBankAmount * 0.7) },
         });
 
         const result = await reRunAndGetResult(target.paymentId);
@@ -579,14 +582,12 @@ async function runAdversarialAgainstSandbox(batchId: string): Promise<Adversaria
     const target = settlements[0];
     const originalAmount = target.amount;
 
-    // Inject: tiny ₹0.47 difference (below ₹1 tolerance)
     await prisma.settlement.update({
       where: { id: target.id },
       data: { amount: originalAmount + 47 },
     });
 
     const result = await reRunAndGetResult(target.paymentId);
-    // This SHOULD NOT be detected — it's below tolerance
     const detected = result !== null &&
       result.status !== "AUTO_MATCHED";
 

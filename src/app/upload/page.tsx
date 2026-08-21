@@ -1,50 +1,117 @@
 "use client";
 
-import { useState } from "react";
-import { Upload, FileText, AlertCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Upload, FileText, AlertCircle, CheckCircle2, Database, ArrowRight } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
+
+const REQUIRED_FILES = [
+  { name: "orders.csv", description: "Order details with amounts and customer info", required: true },
+  { name: "payments.csv", description: "Payment captures with fee and tax", required: true },
+  { name: "settlements.csv", description: "Razorpay settlement records with UTR", required: true },
+  { name: "bank_statement.csv", description: "Bank credits and debits for matching", required: true },
+];
+
+const OPTIONAL_FILES = [
+  { name: "refunds.csv", description: "Processed refunds", required: false },
+  { name: "chargebacks.csv", description: "Chargeback adjustments", required: false },
+  { name: "ground_truth.csv", description: "Expected labels for accuracy measurement", required: false },
+];
 
 export default function UploadPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-        <Upload className="w-6 h-6 text-blue-400" />
-        Upload CSV Files
-      </h1>
+      <div>
+        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Upload className="w-6 h-6 text-blue-400" />
+          Upload Financial Data
+        </h1>
+        <p className="text-gray-400 text-sm mt-1">
+          Import your own Razorpay and bank statement data for reconciliation
+        </p>
+      </div>
 
+      {/* Drop zone */}
       <Card className="bg-gray-900 border-gray-800">
         <CardContent className="p-12">
-          <div className="border-2 border-dashed border-gray-700 rounded-xl p-12 text-center">
-            <FileText className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-2">
-              Drag and drop CSV files here, or click to browse
+          <div className="border-2 border-dashed border-gray-700 rounded-xl p-12 text-center hover:border-blue-500/50 transition-colors">
+            <Upload className="w-14 h-14 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-300 mb-1 font-medium">
+              Drag and drop CSV files here
             </p>
-            <p className="text-sm text-gray-600">
-              Required: orders.csv, payments.csv, settlements.csv, bank_statement.csv
+            <p className="text-sm text-gray-500 mb-6">
+              or click to browse your files
             </p>
-            <p className="text-sm text-gray-600">
-              Optional: refunds.csv, chargebacks.csv, ground_truth.csv
-            </p>
-            <Button className="mt-4" variant="outline">
-              Select Files
+            <Button variant="outline" className="border-gray-700 text-gray-300 hover:bg-gray-800">
+              <FileText className="w-4 h-4 mr-2" />
+              Select CSV Files
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-gray-900 border-yellow-800/50">
-        <CardContent className="p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5" />
-          <div>
-            <p className="text-sm text-yellow-300 font-medium">
-              Demo mode recommended
-            </p>
-            <p className="text-xs text-gray-400">
-              For the best experience, use the Demo Data page to generate synthetic
-              Razorpay-like data with ground truth labels for accuracy measurement.
-            </p>
+      {/* Required files */}
+      <Card className="bg-gray-900 border-gray-800">
+        <CardContent className="p-6">
+          <h3 className="text-sm font-semibold text-gray-300 mb-4">
+            Required Files
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {REQUIRED_FILES.map((file) => (
+              <div key={file.name} className="flex items-start gap-3 bg-gray-950 p-3 rounded-lg border border-gray-800">
+                <FileText className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-mono text-gray-200">{file.name}</p>
+                  <p className="text-xs text-gray-500">{file.description}</p>
+                </div>
+                <span className="ml-auto text-xs text-blue-400 font-semibold">REQUIRED</span>
+              </div>
+            ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Optional files */}
+      <Card className="bg-gray-900 border-gray-800">
+        <CardContent className="p-6">
+          <h3 className="text-sm font-semibold text-gray-300 mb-4">
+            Optional Files
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {OPTIONAL_FILES.map((file) => (
+              <div key={file.name} className="flex items-start gap-3 bg-gray-950 p-3 rounded-lg border border-gray-800">
+                <FileText className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-mono text-gray-300">{file.name}</p>
+                  <p className="text-xs text-gray-500">{file.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Demo recommendation */}
+      <Card className="bg-gray-900 border-amber-800/50">
+        <CardContent className="p-5 flex items-start gap-4">
+          <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-amber-300 font-medium mb-1">
+              No data files yet?
+            </p>
+            <p className="text-xs text-gray-400 mb-3">
+              Use the demo generator to create synthetic Razorpay-like data with
+              ground truth labels, then run the full 3-pass pipeline with adversarial testing.
+            </p>
+            <Link href="/demo">
+              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white">
+                <Database className="w-3.5 h-3.5 mr-1.5" />
+                Generate Demo Data
+                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+            </Link>
+          </div>
+          <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
         </CardContent>
       </Card>
     </div>

@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from "uuid";
 import {
   FEE_CONFIG,
   SETTLEMENT_CONFIG,
@@ -6,8 +5,6 @@ import {
   PAYMENT_METHODS,
   type ExceptionType,
 } from "@/lib/constants";
-
-// ─── ID GENERATORS ───
 
 function generateId(prefix: string, index: number): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -25,14 +22,35 @@ function generateUTR(index: number, date: Date): string {
   return `UTR${dateStr}${String(index).padStart(6, "0")}`;
 }
 
-// ─── HELPERS ───
+type RandomSource = () => number;
 
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function createSeededRandom(seed: number): RandomSource {
+  let state = seed >>> 0;
+
+  return () => {
+    state += 0x6d2b79f5;
+
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-function randomChoice<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+function randomInt(
+  min: number,
+  max: number,
+  random: RandomSource
+): number {
+  return Math.floor(random() * (max - min + 1)) + min;
+}
+
+function randomChoice<T>(
+  arr: readonly T[],
+  random: RandomSource
+): T {
+  return arr[Math.floor(random() * arr.length)];
 }
 
 function addDays(date: Date, days: number): Date {
@@ -62,8 +80,6 @@ function computeFee(amountPaise: number, method: string): { fee: number; tax: nu
   const tax = Math.round((fee * FEE_CONFIG.GST_PERCENT) / 100);
   return { fee, tax };
 }
-
-// ─── TYPES ───
 
 interface GeneratedRecord {
   orders: Array<{
@@ -98,10 +114,18 @@ interface GeneratedRecord {
   }>;
 }
 
-// ─── MAIN GENERATOR ───
-
-export function generateSyntheticBatch(size: number): GeneratedRecord {
+export function generateSyntheticBatch(
+  size: number,
+  seed?: number
+): GeneratedRecord {
   const baseDate = new Date("2025-08-01T00:00:00Z");
+  const random: RandomSource =
+    seed === undefined ? Math.random : createSeededRandom(seed);
+
+  // Local deterministic wrappers to avoid missing `random` argument errors
+  const randInt = (min: number, max: number) => randomInt(min, max, random);
+  const pick = <T>(arr: readonly T[]) => randomChoice(arr, random);
+
   const orders: GeneratedRecord["orders"] = [];
   const payments: GeneratedRecord["payments"] = [];
   const settlements: GeneratedRecord["settlements"] = [];
@@ -110,7 +134,6 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
   const chargebacks: GeneratedRecord["chargebacks"] = [];
   const groundTruths: GeneratedRecord["groundTruths"] = [];
 
-  // Compute counts per scenario
   const distribution = DEFAULT_DISTRIBUTION;
   const counts: Record<string, number> = {};
   let allocated = 0;
@@ -123,39 +146,35 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
   }
   counts[entries[entries.length - 1][0]] = size - allocated;
 
-  // Shuffle scenario assignments
   const assignments: ExceptionType[] = [];
   for (const [type, count] of Object.entries(counts)) {
     for (let i = 0; i < count; i++) {
       assignments.push(type as ExceptionType);
     }
   }
-  // Fisher-Yates shuffle
+
   for (let i = assignments.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [assignments[i], assignments[j]] = [assignments[j], assignments[i]];
   }
 
-  let bankBalance = 500000000; // ₹50L starting balance
-  let globalIndex = 0;
+  let bankBalance = 500000000;
 
   for (let i = 0; i < size; i++) {
     const scenario = assignments[i];
     const idx = i + 1;
-    globalIndex++;
 
     const orderId = generateId("order", idx);
     const paymentId = generateId("pay", idx);
-    const method = randomChoice(PAYMENT_METHODS);
-    const amount = randomInt(5000, 500000) * 100; // ₹500 to ₹50,000 in paise
+    const method = pick(PAYMENT_METHODS);
+    const amount = randInt(5000, 500000) * 100;
     const { fee, tax } = computeFee(amount, method);
-    const orderDate = addHours(baseDate, randomInt(0, 20 * 24));
-    const paymentDate = addMinutes(orderDate, randomInt(1, 30));
-    const capturedDate = addMinutes(paymentDate, randomInt(1, 5));
+    const orderDate = addHours(baseDate, randInt(0, 20 * 24));
+    const paymentDate = addMinutes(orderDate, randInt(1, 30));
+    const capturedDate = addMinutes(paymentDate, randInt(1, 5));
     const customerEmail = `customer${idx}@example.com`;
     const description = `Payment for Order #${idx}`;
 
-    // Always create order and payment
     orders.push({
       orderId, amount, currency: "INR", status: "paid",
       customerEmail, description, createdAt: orderDate,
@@ -167,14 +186,13 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
       capturedAt: capturedDate, createdAt: paymentDate,
     });
 
-    // Now generate scenario-specific records
     switch (scenario) {
       case "AUTO_MATCHED": {
         const settlementId = generateId("setl", idx);
         const utr = generateUTR(idx, capturedDate);
         const expectedNet = amount - fee - tax;
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
-        const bankDate = addHours(settledDate, randomInt(2, 18));
+        const bankDate = addHours(settledDate, randInt(2, 18));
 
         settlements.push({
           settlementId, paymentId, amount: expectedNet,
@@ -197,12 +215,10 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
       }
 
       case "PENDING_SETTLEMENT": {
-        // Payment captured recently, settlement not yet due
-        const recentDate = addDays(baseDate, 25); // Near end of range
+        const recentDate = addDays(baseDate, 25);
         payments[payments.length - 1].capturedAt = recentDate;
         payments[payments.length - 1].createdAt = addMinutes(recentDate, -5);
         orders[orders.length - 1].createdAt = addMinutes(recentDate, -10);
-        // No settlement created — it's pending
 
         groundTruths.push({
           paymentId, expectedLabel: "PENDING_SETTLEMENT",
@@ -222,7 +238,6 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           fee, tax, utr, status: "processed",
           settledAt: settledDate, createdAt: addDays(capturedDate, 1),
         });
-        // No bank transaction — credit is missing
 
         groundTruths.push({
           paymentId, expectedLabel: "MISSING_BANK_CREDIT",
@@ -235,12 +250,11 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
         const settlementId = generateId("setl", idx);
         const utr = generateUTR(idx, capturedDate);
         const expectedNet = amount - fee - tax;
-        // Wrong fee applied in settlement (e.g., flat ₹10 extra)
-        const wrongFee = fee + randomInt(500, 5000);
+        const wrongFee = fee + randInt(500, 5000);
         const wrongTax = Math.round((wrongFee * FEE_CONFIG.GST_PERCENT) / 100);
         const wrongSettledAmount = amount - wrongFee - wrongTax;
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
-        const bankDate = addHours(settledDate, randomInt(2, 18));
+        const bankDate = addHours(settledDate, randInt(2, 18));
 
         settlements.push({
           settlementId, paymentId, amount: wrongSettledAmount,
@@ -266,7 +280,6 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
         const expectedNet = amount - fee - tax;
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
 
-        // First settlement
         const setlId1 = generateId("setl", idx);
         const utr1 = generateUTR(idx, capturedDate);
         settlements.push({
@@ -275,7 +288,6 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           settledAt: settledDate, createdAt: addDays(capturedDate, 1),
         });
 
-        // Duplicate settlement (same payment, different settlement ID)
         const setlId2 = generateId("setl", idx + 10000);
         const utr2 = generateUTR(idx + 10000, capturedDate);
         settlements.push({
@@ -284,8 +296,7 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           settledAt: addHours(settledDate, 6), createdAt: addDays(capturedDate, 1),
         });
 
-        // Bank credits for both
-        const bankDate1 = addHours(settledDate, randomInt(2, 12));
+        const bankDate1 = addHours(settledDate, randInt(2, 12));
         bankBalance += expectedNet;
         bankTransactions.push({
           txnId: generateId("btxn", idx), utr: utr1, amount: expectedNet,
@@ -293,7 +304,7 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           balance: bankBalance, txnDate: bankDate1, valueDate: bankDate1,
         });
 
-        const bankDate2 = addHours(settledDate, randomInt(12, 24));
+        const bankDate2 = addHours(settledDate, randInt(12, 24));
         bankBalance += expectedNet;
         bankTransactions.push({
           txnId: generateId("btxn", idx + 10000), utr: utr2, amount: expectedNet,
@@ -309,12 +320,11 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
       }
 
       case "ORPHAN_BANK_CREDIT": {
-        // Normal settlement for this payment
         const settlementId = generateId("setl", idx);
         const utr = generateUTR(idx, capturedDate);
         const expectedNet = amount - fee - tax;
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
-        const bankDate = addHours(settledDate, randomInt(2, 18));
+        const bankDate = addHours(settledDate, randInt(2, 18));
 
         settlements.push({
           settlementId, paymentId, amount: expectedNet,
@@ -329,8 +339,7 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           balance: bankBalance, txnDate: bankDate, valueDate: bankDate,
         });
 
-        // Orphan bank credit — no matching settlement
-        const orphanAmount = randomInt(1000, 100000) * 100;
+        const orphanAmount = randInt(1000, 100000) * 100;
         const orphanUtr = generateUTR(idx + 50000, capturedDate);
         bankBalance += orphanAmount;
         bankTransactions.push({
@@ -338,8 +347,8 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           amount: orphanAmount, type: "CREDIT",
           narration: `RAZORPAY SETTLEMENT setl_orphan_${idx} ${orphanUtr}`,
           balance: bankBalance,
-          txnDate: addDays(bankDate, randomInt(1, 3)),
-          valueDate: addDays(bankDate, randomInt(1, 3)),
+          txnDate: addDays(bankDate, randInt(1, 3)),
+          valueDate: addDays(bankDate, randInt(1, 3)),
         });
 
         groundTruths.push({
@@ -350,24 +359,22 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
       }
 
       case "REFUND_MISMATCH": {
-        const refundAmount = Math.round(amount * randomInt(10, 40) / 100);
+        const refundAmount = Math.round((amount * randInt(10, 40)) / 100);
         const refundId = generateId("rfnd", idx);
         const expectedNet = amount - fee - tax - refundAmount;
         const settlementId = generateId("setl", idx);
         const utr = generateUTR(idx, capturedDate);
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
-        const bankDate = addHours(settledDate, randomInt(2, 18));
+        const bankDate = addHours(settledDate, randInt(2, 18));
 
-        // Refund exists
         refunds.push({
           refundId, paymentId, amount: refundAmount,
           status: "processed", reason: "Customer request",
-          createdAt: addHours(capturedDate, randomInt(1, 24)),
-          processedAt: addHours(capturedDate, randomInt(24, 48)),
+          createdAt: addHours(capturedDate, randInt(1, 24)),
+          processedAt: addHours(capturedDate, randInt(24, 48)),
         });
 
-        // Settlement does NOT account for refund (wrong amount)
-        const wrongSettled = amount - fee - tax; // Forgot to subtract refund
+        const wrongSettled = amount - fee - tax;
         settlements.push({
           settlementId, paymentId, amount: wrongSettled,
           fee, tax, utr, status: "processed",
@@ -389,15 +396,14 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
       }
 
       case "CHARGEBACK_ADJUSTMENT": {
-        const cbAmount = Math.round(amount * randomInt(20, 60) / 100);
+        const cbAmount = Math.round((amount * randInt(20, 60)) / 100);
         const cbId = generateId("cb", idx);
         const expectedNet = amount - fee - tax;
         const settlementId = generateId("setl", idx);
         const utr = generateUTR(idx, capturedDate);
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
-        const bankDate = addHours(settledDate, randomInt(2, 18));
+        const bankDate = addHours(settledDate, randInt(2, 18));
 
-        // Original settlement was correct
         settlements.push({
           settlementId, paymentId, amount: expectedNet,
           fee, tax, utr, status: "processed",
@@ -411,22 +417,20 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           balance: bankBalance, txnDate: bankDate, valueDate: bankDate,
         });
 
-        // Chargeback comes later
         chargebacks.push({
           chargebackId: cbId, paymentId, amount: cbAmount,
           reason: "Unauthorized transaction", status: "open",
-          createdAt: addDays(capturedDate, randomInt(7, 21)),
+          createdAt: addDays(capturedDate, randInt(7, 21)),
           resolvedAt: null,
         });
 
-        // Chargeback debit in bank
         bankBalance -= cbAmount;
         bankTransactions.push({
           txnId: generateId("btxn", idx + 20000), utr: null,
           amount: cbAmount, type: "DEBIT",
           narration: `RAZORPAY CHARGEBACK ${cbId} ${paymentId}`,
           balance: bankBalance,
-          txnDate: addDays(capturedDate, randomInt(10, 25)),
+          txnDate: addDays(capturedDate, randInt(10, 25)),
           valueDate: null,
         });
 
@@ -442,8 +446,7 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
         const utr = generateUTR(idx, capturedDate);
         const expectedNet = amount - fee - tax;
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
-        // Bank credit arrives LATE (beyond expected window)
-        const bankDate = addHours(settledDate, randomInt(48, 96)); // 2-4 days late
+        const bankDate = addHours(settledDate, randInt(48, 96));
 
         settlements.push({
           settlementId, paymentId, amount: expectedNet,
@@ -470,15 +473,13 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
         const expectedNet = amount - fee - tax;
         const settledDate = addDays(capturedDate, SETTLEMENT_CONFIG.DELAY_DAYS);
 
-        // Settlement with NO UTR (hard to match)
         settlements.push({
           settlementId, paymentId, amount: expectedNet,
           fee, tax, utr: null, status: "processed",
           settledAt: settledDate, createdAt: addDays(capturedDate, 1),
         });
 
-        // Multiple bank credits with similar amounts (ambiguous)
-        const bankDate = addHours(settledDate, randomInt(2, 18));
+        const bankDate = addHours(settledDate, randInt(2, 18));
         bankBalance += expectedNet;
         bankTransactions.push({
           txnId: generateId("btxn", idx), utr: null, amount: expectedNet,
@@ -486,13 +487,12 @@ export function generateSyntheticBatch(size: number): GeneratedRecord {
           balance: bankBalance, txnDate: bankDate, valueDate: bankDate,
         });
 
-        // Add a confusing similar-amount transaction
         bankTransactions.push({
           txnId: generateId("btxn", idx + 30000), utr: null,
-          amount: expectedNet + randomInt(-50, 50),
+          amount: expectedNet + randInt(-50, 50),
           type: "CREDIT", narration: `RAZORPAY BULK SETTLEMENT BATCH`,
           balance: bankBalance,
-          txnDate: addMinutes(bankDate, randomInt(-30, 30)),
+          txnDate: addMinutes(bankDate, randInt(-30, 30)),
           valueDate: bankDate,
         });
 

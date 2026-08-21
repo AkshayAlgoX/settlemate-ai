@@ -6,15 +6,10 @@ import {
   Shield,
   Zap,
   Brain,
-  CheckCircle,
-  AlertTriangle,
-  ArrowRight,
   Database,
   BarChart3,
   MessageSquare,
   ScrollText,
-  Target,
-  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +32,7 @@ export default function LandingPage() {
   useEffect(() => {
     fetch("/api/batches")
       .then((r) => r.json())
-      .then((data) => {
+      .then((data: { batches?: { id: string; totalRecords?: number; autoMatched?: number; exceptionsFound?: number; accuracy?: number; throughputRps?: number; unresolvedCount?: number; adversarialScore?: number }[] }) => {
         if (data.batches && data.batches.length > 0) {
           const latest = data.batches[0];
           setLatestBatchId(latest.id);
@@ -57,7 +52,6 @@ export default function LandingPage() {
 
   return (
     <div className="space-y-8">
-      {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-900/40 via-gray-900 to-purple-900/30 border border-gray-800 p-8 md:p-12">
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
         <div className="relative z-10">
@@ -71,8 +65,9 @@ export default function LandingPage() {
             Self-healing multi-agent finance controller for payment reconciliation.
           </p>
           <p className="text-gray-400 mb-8 max-w-2xl">
-            Deterministic matching + AI anomaly detection + adversarial self-testing.
-           {metrics ? `${metrics.accuracy}% accuracy. ${metrics.adversarialScore}% threat detection. ${metrics.throughputRps} records/sec.` : "99.2% accuracy. 90% threat detection. 913 records/sec."}
+            {metrics
+              ? `${metrics.accuracy}% accuracy. ${metrics.adversarialScore}% threat detection. ${metrics.throughputRps} records/sec.`
+              : "Deterministic matching + AI anomaly detection + adversarial self-testing."}
           </p>
           <div className="flex gap-4">
             <Link href="/demo">
@@ -93,7 +88,6 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* Metrics */}
       {metrics && metrics.totalRecords > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-gray-300 mb-4">
@@ -120,7 +114,6 @@ export default function LandingPage() {
         </div>
       )}
 
-      {/* How It Works */}
       <div>
         <h2 className="text-lg font-semibold text-gray-300 mb-4">How It Works</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -152,7 +145,7 @@ export default function LandingPage() {
             {
               icon: MessageSquare,
               title: "5. Q&A Agent",
-              desc: "Ask finance questions in natural language. NL-to-SQL agent queries the database and returns grounded answers.",
+              desc: "Ask finance questions in natural language. Tool-calling agent queries database and returns grounded answers.",
               color: "text-green-400",
             },
             {
@@ -178,35 +171,6 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* Exception Types */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-300 mb-4">
-          10 Exception Types Detected
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          {[
-            { label: "Auto Matched", color: "bg-green-500/20 text-green-400 border-green-500/30" },
-            { label: "Pending Settlement", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
-            { label: "Missing Bank Credit", color: "bg-red-500/20 text-red-400 border-red-500/30" },
-            { label: "Amount Mismatch", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
-            { label: "Duplicate Settlement", color: "bg-red-600/20 text-red-300 border-red-600/30" },
-            { label: "Orphan Bank Credit", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-            { label: "Refund Mismatch", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
-            { label: "Chargeback Adj.", color: "bg-rose-500/20 text-rose-400 border-rose-500/30" },
-            { label: "Delayed Credit", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
-            { label: "Manual Review", color: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
-          ].map((t) => (
-            <div
-              key={t.label}
-              className={`rounded-lg border px-3 py-2 text-center text-xs font-medium ${t.color}`}
-            >
-              {t.label}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Tech Stack */}
       <Card className="bg-gray-900 border-gray-800">
         <CardContent className="p-6">
           <div className="flex flex-wrap gap-2 items-center">

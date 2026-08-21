@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { createAIContext } from "./context";
-import { ExplanationSchema } from "./schemas";
+import { ExplanationSchema, CURRENT_AI_MODEL } from "./schemas";
 import { EXCEPTION_EXPLANATION_PROMPT } from "./prompts";
 import { generateFallbackExplanation } from "./fallback";
 
@@ -56,25 +56,6 @@ export async function explainException(exceptionId: string): Promise<{
       latencyMs: exception.aiExplanation.latencyMs || 0,
     };
   }
-
-  // Get related records for context
-  await Promise.all([
-    exception.paymentId
-      ? prisma.payment.findFirst({
-          where: { batchId: exception.batchId, paymentId: exception.paymentId },
-        })
-      : null,
-    exception.settlementId
-      ? prisma.settlement.findFirst({
-          where: { batchId: exception.batchId, settlementId: exception.settlementId },
-        })
-      : null,
-    exception.bankTxnId
-      ? prisma.bankTransaction.findFirst({
-          where: { batchId: exception.batchId, txnId: exception.bankTxnId },
-        })
-      : null,
-  ]);
 
   const reconResult = await prisma.reconciliationResult.findFirst({
     where: {
@@ -138,7 +119,7 @@ export async function explainException(exceptionId: string): Promise<{
 
   if (aiResult && aiResult.data && parsedExplanation?.success) {
     explanation = parsedExplanation.data;
-    model = "gemini-3.6-flash";
+    model = CURRENT_AI_MODEL;
     tokensUsed = aiResult.tokensUsed;
     latencyMs = aiResult.latencyMs;
   } else {

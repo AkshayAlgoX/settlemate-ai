@@ -8,7 +8,7 @@ export async function GET() {
       take: 10,
     });
     return NextResponse.json({ batches });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ batches: [] });
   }
 }

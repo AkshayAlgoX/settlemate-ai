@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import {
+  transitionException,
+  ExceptionNotFoundError,
+  InvalidWorkflowStateError,
+  WorkflowConflictError,
+} from "@/lib/exceptions/service";
+import { InvalidTransitionError } from "@/lib/exceptions/state-machine";
 
 export async function POST(
   req: NextRequest,
@@ -7,61 +13,56 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const body = await req.json();
-    const { status, resolution } = body;
-
-    const validStatuses = ["OPEN", "INVESTIGATING", "RESOLVED", "MANUAL_REVIEW"];
-    if (!validStatuses.includes(status)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    let body: { status?: unknown; reason?: unknown; resolution?: unknown; actor?: unknown } = {};
+    try {
+      body = await req.json();
+    } catch {
+      // Malformed JSON → treated as a missing body below.
     }
 
-    const exception = await prisma.exception.findUnique({ where: { id } });
-    if (!exception) {
-      return NextResponse.json({ error: "Exception not found" }, { status: 404 });
+    const { status, reason, resolution, actor } = body;
+    if (typeof status !== "string" || !status.trim()) {
+      return NextResponse.json({ error: "Missing status" }, { status: 400 });
     }
 
-    const updated = await prisma.exception.update({
-      where: { id },
-      data: {
+    const result = await transitionException({
+      exceptionId: id,
+      toState: status,
+      actor: typeof actor === "string" && actor.trim() ? actor.trim() : "USER",
+      reason: typeof reason === "string" ? reason : undefined,
+      resolution: typeof resolution === "string" ? resolution : undefined,
+    });
+
+    if (result.idempotent) {
+      return NextResponse.json({
+        success: true,
+        idempotent: true,
+        exceptionId: id,
         status,
-        resolution: resolution || null,
-        resolvedBy: status === "RESOLVED" ? "USER" : null,
-        resolvedAt: status === "RESOLVED" ? new Date() : null,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        batchId: exception.batchId,
-        actor: "USER",
-        action: "STATUS_CHANGED",
-        entityType: "exception",
-        entityId: id,
-        beforeState: JSON.stringify({ status: exception.status }),
-        afterState: JSON.stringify({ status }),
-        reason: resolution || `Status changed to ${status}`,
-      },
-    });
-
-    // Check if this is a feedback correction (for learning loop)
-    if (status === "RESOLVED" && exception.status === "OPEN") {
-      await prisma.feedbackEntry.create({
-        data: {
-          batchId: exception.batchId,
-          exceptionId: id,
-          originalStatus: exception.status,
-          newStatus: status,
-          confidenceBefore: exception.confidenceScore,
-          confidenceAfter: 100,
-        },
       });
     }
 
-    return NextResponse.json({ success: true, exception: updated });
+    return NextResponse.json({ success: true, exception: result.exception });
   } catch (error) {
+    if (error instanceof InvalidWorkflowStateError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof ExceptionNotFoundError) {
+      return NextResponse.json({ error: "Exception not found" }, { status: 404 });
+    }
+    if (error instanceof InvalidTransitionError) {
+      return NextResponse.json(
+        { error: `Invalid transition: ${error.from} -> ${error.to}` },
+        { status: 409 }
+      );
+    }
+    if (error instanceof WorkflowConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     console.error("Status update error:", error);
     return NextResponse.json(
-      { error: "Failed to update status" },
+      { error: "Failed to update exception status" },
       { status: 500 }
     );
   }

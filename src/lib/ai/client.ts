@@ -1,95 +1,150 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { CURRENT_AI_MODEL } from "./schemas";
 
-// ── Account-global state (shared across ALL AI execution contexts) ──
-// The Google Gemini free-tier quota (~5 req/min) is keyed to the API key, so
-// 429 rate-limit protection MUST be coordinated account-wide, not per-batch.
-// The per-batch logical state (call counter, per-context circuit) lives in
-// context.ts; only the shared account quota/cooldown belongs here.
 let genAI: GoogleGenerativeAI | null = null;
+
+// Account-level circuit breaker.
+// Gemini quota is associated with the API key, so this state is shared
+// across all AI execution contexts in this Node process.
 let accountCircuitOpen = false;
 let accountCircuitOpenedAt = 0;
 
-export const AI_TIMEOUT_MS = 15_000; // 15s per call max
-export const CIRCUIT_COOLDOWN_MS = 65_000; // 65s (Gemini says 58s, add buffer)
+export const CIRCUIT_COOLDOWN_MS = 65_000;
+export const AI_TIMEOUT_MS = 15_000;
 
-export interface AccountStatus {
-  blocked: boolean;
-  isRateLimited: boolean;
+export interface AccountAIStatus {
+  available: boolean;
+  circuitOpen: boolean;
   reason: string;
-}
-
-// Report whether the account-wide quota/cooldown currently blocks any new call.
-// This is shared across every context because the upstream quota is shared.
-export function getAccountStatus(): AccountStatus {
-  if (accountCircuitOpen && Date.now() - accountCircuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
-    return {
-      blocked: true,
-      isRateLimited: true,
-      reason: `Rate limited. Retry in ${Math.ceil((CIRCUIT_COOLDOWN_MS - (Date.now() - accountCircuitOpenedAt)) / 1000)}s`,
-    };
-  }
-
-  // Cooldown expired — reopen.
-  if (accountCircuitOpen && Date.now() - accountCircuitOpenedAt >= CIRCUIT_COOLDOWN_MS) {
-    accountCircuitOpen = false;
-  }
-
-  if (!getAIClient()) {
-    return { blocked: true, isRateLimited: false, reason: "No API key configured" };
-  }
-
-  return { blocked: false, isRateLimited: false, reason: "Available" };
 }
 
 function getAIClient(): GoogleGenerativeAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
+
   if (!apiKey || apiKey === "your-gemini-api-key-here") {
     return null;
   }
+
   if (!genAI) {
     genAI = new GoogleGenerativeAI(apiKey);
   }
+
   return genAI;
 }
 
-function openAccountCircuit() {
+function openAccountCircuit(): void {
   accountCircuitOpen = true;
   accountCircuitOpenedAt = Date.now();
+
   console.warn(
-    `[AI Circuit Breaker] OPENED (account-wide) at ${new Date().toISOString()}. Cooldown: ${CIRCUIT_COOLDOWN_MS / 1000}s`
+    `[AI Circuit Breaker] OPENED at ${new Date().toISOString()}. ` +
+      `Cooldown: ${CIRCUIT_COOLDOWN_MS / 1000}s`
   );
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`AI call timed out after ${ms}ms`)), ms)
-    ),
-  ]);
+function isAccountCircuitOpen(): boolean {
+  if (!accountCircuitOpen) {
+    return false;
+  }
+
+  const elapsed = Date.now() - accountCircuitOpenedAt;
+
+  if (elapsed >= CIRCUIT_COOLDOWN_MS) {
+    accountCircuitOpen = false;
+    accountCircuitOpenedAt = 0;
+    return false;
+  }
+
+  return true;
 }
 
-// Discriminated outcome of a single network call to the provider. The context
-// maps these to its public `{ data, ... } | null` contract and opens its own
-// per-context circuit on `rate-limited`.
-export type AIJSONResult =
-  | { status: "success"; data: unknown; tokensUsed: number; latencyMs: number }
-  | { status: "rate-limited"; latencyMs: number }
-  | { status: "timeout"; latencyMs: number }
-  | { status: "error"; latencyMs: number };
+/**
+ * Returns ONLY account/provider-level availability.
+ *
+ * This intentionally contains no per-request/per-batch counters.
+ */
+export function getAccountStatus(): AccountAIStatus {
+  if (isAccountCircuitOpen()) {
+    const remainingMs =
+      CIRCUIT_COOLDOWN_MS - (Date.now() - accountCircuitOpenedAt);
 
+    return {
+      available: false,
+      circuitOpen: true,
+      reason: `Rate limited. Retry in ${Math.ceil(remainingMs / 1000)}s`,
+    };
+  }
+
+  if (!getAIClient()) {
+    return {
+      available: false,
+      circuitOpen: false,
+      reason: "No API key configured",
+    };
+  }
+
+  return {
+    available: true,
+    circuitOpen: false,
+    reason: "Available",
+  };
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number
+): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`AI call timed out after ${ms}ms`));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+/**
+ * Low-level structured Gemini call.
+ *
+ * IMPORTANT:
+ * This function does NOT maintain a per-request call counter.
+ * Per-execution budgeting belongs to AIContext.
+ */
 export async function callGenerativeJSON(
   prompt: string,
-  model: string,
+  model: string = CURRENT_AI_MODEL,
   timeoutMs: number = AI_TIMEOUT_MS
-): Promise<AIJSONResult> {
+): Promise<{
+  data: unknown;
+  tokensUsed: number;
+  latencyMs: number;
+} | null> {
+  const accountStatus = getAccountStatus();
+
+  if (!accountStatus.available) {
+    console.log(`[AI] Skipped: ${accountStatus.reason}`);
+    return null;
+  }
+
   const client = getAIClient();
-  if (!client) return { status: "error", latencyMs: 0 };
+
+  if (!client) {
+    return null;
+  }
 
   const startTime = Date.now();
 
   try {
-    const m = client.getGenerativeModel({
+    const modelClient = client.getGenerativeModel({
       model,
       generationConfig: {
         temperature: 0.1,
@@ -97,9 +152,16 @@ export async function callGenerativeJSON(
       },
     });
 
-    const result = await withTimeout(m.generateContent(prompt), timeoutMs);
+    const result = await withTimeout(
+      modelClient.generateContent(prompt),
+      timeoutMs
+    );
+
     const text = result.response.text().trim();
-    const tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
+
+    const tokensUsed =
+      result.response.usageMetadata?.totalTokenCount || 0;
+
     const latencyMs = Date.now() - startTime;
 
     const cleaned = text
@@ -108,70 +170,146 @@ export async function callGenerativeJSON(
       .trim();
 
     const data = JSON.parse(cleaned);
-    return { status: "success", data, tokensUsed, latencyMs };
+
+    return {
+      data,
+      tokensUsed,
+      latencyMs,
+    };
   } catch (error: unknown) {
     const errStr = String(error);
-    const latencyMs = Date.now() - startTime;
 
-    // Detect 429 rate limit — open the shared account circuit (quota is per key).
-    if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("quota")) {
+    if (
+      errStr.includes("429") ||
+      errStr.includes("RESOURCE_EXHAUSTED") ||
+      errStr.toLowerCase().includes("quota")
+    ) {
       openAccountCircuit();
-      console.warn(`[AI] Rate limited. Account circuit opened.`);
-      return { status: "rate-limited", latencyMs };
+
+      console.warn(
+        "[AI] Gemini rate-limited (429). Account circuit opened."
+      );
+
+      return null;
     }
 
-    // Detect timeout
     if (errStr.includes("timed out")) {
-      console.warn(`[AI] Timeout`);
-      return { status: "timeout", latencyMs };
+      console.warn("[AI] Gemini request timed out.");
+      return null;
     }
 
-    console.error(`[AI] Error:`, errStr.slice(0, 200));
-    return { status: "error", latencyMs };
+    console.error(
+      "[AI] Gemini structured generation error:",
+      errStr.slice(0, 300)
+    );
+
+    return null;
   }
 }
 
-export type AITextResult =
-  | { status: "success"; text: string; tokensUsed: number; latencyMs: number }
-  | { status: "rate-limited"; latencyMs: number }
-  | { status: "timeout"; latencyMs: number }
-  | { status: "error"; latencyMs: number };
-
+/**
+ * Low-level text Gemini call.
+ *
+ * Per-execution call budgeting belongs to AIContext.
+ */
 export async function callGenerativeText(
   prompt: string,
-  model: string
-): Promise<AITextResult> {
+  model: string = CURRENT_AI_MODEL,
+  timeoutMs: number = AI_TIMEOUT_MS
+): Promise<{
+  text: string;
+  tokensUsed: number;
+  latencyMs: number;
+} | null> {
+  const accountStatus = getAccountStatus();
+
+  if (!accountStatus.available) {
+    console.log(`[AI] Skipped: ${accountStatus.reason}`);
+    return null;
+  }
+
   const client = getAIClient();
-  if (!client) return { status: "error", latencyMs: 0 };
+
+  if (!client) {
+    return null;
+  }
 
   const startTime = Date.now();
 
   try {
-    const m = client.getGenerativeModel({
+    const modelClient = client.getGenerativeModel({
       model,
-      generationConfig: { temperature: 0.2 },
+      generationConfig: {
+        temperature: 0.2,
+      },
     });
 
-    const result = await withTimeout(m.generateContent(prompt), AI_TIMEOUT_MS);
+    const result = await withTimeout(
+      modelClient.generateContent(prompt),
+      timeoutMs
+    );
+
     const text = result.response.text().trim();
-    const tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
+
+    const tokensUsed =
+      result.response.usageMetadata?.totalTokenCount || 0;
+
     const latencyMs = Date.now() - startTime;
 
-    return { status: "success", text, tokensUsed, latencyMs };
+    return {
+      text,
+      tokensUsed,
+      latencyMs,
+    };
   } catch (error: unknown) {
     const errStr = String(error);
-    const latencyMs = Date.now() - startTime;
 
-    if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("quota")) {
+    if (
+      errStr.includes("429") ||
+      errStr.includes("RESOURCE_EXHAUSTED") ||
+      errStr.toLowerCase().includes("quota")
+    ) {
       openAccountCircuit();
-      return { status: "rate-limited", latencyMs };
+
+      console.warn(
+        "[AI] Gemini rate-limited (429). Account circuit opened."
+      );
+
+      return null;
     }
 
     if (errStr.includes("timed out")) {
-      return { status: "timeout", latencyMs };
+      console.warn("[AI] Gemini request timed out.");
+      return null;
     }
 
-    console.error(`[AI] Text error:`, errStr.slice(0, 200));
-    return { status: "error", latencyMs };
+    console.error(
+      "[AI] Gemini text generation error:",
+      errStr.slice(0, 300)
+    );
+
+    return null;
   }
+}
+
+/**
+ * Temporary compatibility exports.
+ *
+ * These perform low-level calls only and contain NO per-request state.
+ * They will be migrated away from business/API consumers to AIContext.
+ */
+export async function generateJSON(
+  prompt: string,
+  model: string = CURRENT_AI_MODEL,
+  timeoutMs: number = AI_TIMEOUT_MS
+) {
+  return callGenerativeJSON(prompt, model, timeoutMs);
+}
+
+export async function generateText(
+  prompt: string,
+  model: string = CURRENT_AI_MODEL,
+  timeoutMs: number = AI_TIMEOUT_MS
+) {
+  return callGenerativeText(prompt, model, timeoutMs);
 }

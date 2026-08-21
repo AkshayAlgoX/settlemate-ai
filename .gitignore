@@ -49,3 +49,8 @@ prisma/dev.db-journal
 
 dev.db
 dev.db-journal
+
+# Local AI tool directories
+.agents/
+.claude/
+.windsurf/

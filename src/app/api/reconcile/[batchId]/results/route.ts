@@ -8,6 +8,10 @@ export async function GET(
   try {
     const { batchId } = await params;
 
+    if (!batchId) {
+      return NextResponse.json({ error: "batchId required" }, { status: 400 });
+    }
+
     const [batch, results, exceptions] = await Promise.all([
       prisma.batch.findUnique({ where: { id: batchId } }),
       prisma.reconciliationResult.findMany({
@@ -42,7 +46,7 @@ export async function GET(
         amountAtRisk: batch.amountAtRisk,
         grossOrderAmount: batch.totalRecords,
       },
-      results: results.slice(0, 500), // Limit for performance
+      results: results.slice(0, 500),
       exceptions,
     });
   } catch (error) {

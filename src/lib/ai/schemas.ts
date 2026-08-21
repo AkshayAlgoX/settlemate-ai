@@ -121,3 +121,44 @@ export function parseResolverDecisions(
   }
   return out;
 }
+
+// ── Chat response (grounded Q&A) ──
+export const ChatResponseSchema = z.object({
+  answer: z.string().min(1).max(2000),
+  evidence_cited: z
+    .array(z.string().min(1).max(300))
+    .max(5)
+    .default([]),
+});
+
+export type ChatResponseOutput = z.infer<typeof ChatResponseSchema>;
+
+// Validates that each evidence string references an actual path in the
+// provided context. This prevents invented evidence.
+export function parseChatResponse(
+  raw: unknown,
+  allowedEvidencePaths: Set<string>
+): ChatResponseOutput | null {
+  const parsed = ChatResponseSchema.safeParse(raw);
+
+  if (!parsed.success) {
+    return null;
+  }
+
+  // Every cited evidence must correspond to a real context path.
+  for (const evidence of parsed.data.evidence_cited) {
+    const path = evidence.split(" = ")[0]?.trim();
+
+    if (!path || !allowedEvidencePaths.has(path)) {
+      // A cited path does not exist in the context → reject the whole response.
+      return null;
+    }
+  }
+
+  return parsed.data;
+}
+
+// ── Single source of truth for the active Gemini model ──
+// gemini-2.0-flash was deprecated and shut down June 1, 2026.
+// gemini-3.5-flash is the current recommended replacement.
+export const CURRENT_AI_MODEL = "gemini-3.5-flash";

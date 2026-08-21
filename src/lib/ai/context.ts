@@ -3,29 +3,11 @@ import {
   callGenerativeJSON,
   callGenerativeText,
   AI_TIMEOUT_MS,
-  CIRCUIT_COOLDOWN_MS,
 } from "./client";
 
-// ── Per-reconciliation AI execution context ──
-//
-// One AIContext is created for every logical AI execution: each multi-pass
-// reconciliation and each explain request. It owns the per-execution logical
-// state — call counter, logical call cap, and its own 429 circuit — so that
-// concurrent executions (Batch A, Batch B, Explain X) never share or corrupt
-// each other's budgets or backoff.
-//
-// The ACTUAL Gemini API-key quota (~5 req/min) is a genuinely account-wide
-// resource shared across all contexts. That protection intentionally remains
-// global in client.ts (getAccountStatus / account circuit). This module only
-// isolates the LOGICAL execution state.
+export const MAX_CALLS_PER_EXECUTION = 10;
 
-export interface AIContextOptions {
-  maxCallsPerBatch?: number; // logical per-execution cap (default 10, preserves current ceiling)
-  circuitCooldownMs?: number; // per-context 429 cooldown (default 65s)
-  aiTimeoutMs?: number; // default per-call timeout (default 15s)
-}
-
-export interface AIStatus {
+export interface AIContextStatus {
   available: boolean;
   callsRemaining: number;
   totalCalls: number;
@@ -34,128 +16,125 @@ export interface AIStatus {
 }
 
 export interface AIContext {
-  reset(): void;
-  getStatus(): AIStatus;
+  readonly totalCalls: number;
+  readonly maxCalls: number;
+  readonly circuitOpen: boolean;
+
   isAvailable(): boolean;
+
   generateJSON(
     prompt: string,
     model?: string,
     timeoutMs?: number
-  ): Promise<{ data: unknown; tokensUsed: number; latencyMs: number } | null>;
+  ): Promise<{
+    data: unknown;
+    tokensUsed: number;
+    latencyMs: number;
+  } | null>;
+
   generateText(
     prompt: string,
-    model?: string
-  ): Promise<{ text: string; tokensUsed: number; latencyMs: number } | null>;
+    model?: string,
+    timeoutMs?: number
+  ): Promise<{
+    text: string;
+    tokensUsed: number;
+    latencyMs: number;
+  } | null>;
+
+  getStatus(): AIContextStatus;
 }
 
-export function createAIContext(opts: AIContextOptions = {}): AIContext {
-  const maxCallsPerBatch = opts.maxCallsPerBatch ?? 10;
-  const circuitCooldownMs = opts.circuitCooldownMs ?? CIRCUIT_COOLDOWN_MS;
-  const aiTimeoutMs = opts.aiTimeoutMs ?? AI_TIMEOUT_MS;
+export function createAIContext(
+  maxCalls: number = MAX_CALLS_PER_EXECUTION
+): AIContext {
+  if (!Number.isInteger(maxCalls) || maxCalls <= 0) {
+    throw new Error(`Invalid AI context call limit: ${maxCalls}`);
+  }
 
-  // Per-context logical execution state. Fully isolated per reconciliation/explain.
   let totalCalls = 0;
-  let circuitOpen = false;
-  let circuitOpenedAt = 0;
 
-  function getStatus(): AIStatus {
-    // Account-wide quota/cooldown is shared across all contexts by design.
+  const getStatus = (): AIContextStatus => {
     const account = getAccountStatus();
-    if (account.blocked) {
+
+    if (!account.available) {
       return {
         available: false,
-        callsRemaining: 0,
+        callsRemaining: Math.max(0, maxCalls - totalCalls),
         totalCalls,
-        circuitOpen: account.isRateLimited,
+        circuitOpen: account.circuitOpen,
         reason: account.reason,
       };
     }
 
-    // Per-context 429 circuit — MUST never affect other contexts.
-    if (circuitOpen && Date.now() - circuitOpenedAt < circuitCooldownMs) {
-      return {
-        available: false,
-        callsRemaining: 0,
-        totalCalls,
-        circuitOpen: true,
-        reason: `Rate limited. Retry in ${Math.ceil((circuitCooldownMs - (Date.now() - circuitOpenedAt)) / 1000)}s`,
-      };
-    }
-    if (circuitOpen && Date.now() - circuitOpenedAt >= circuitCooldownMs) {
-      circuitOpen = false; // cooldown expired — reopen
-    }
-
-    if (totalCalls >= maxCallsPerBatch) {
+    if (totalCalls >= maxCalls) {
       return {
         available: false,
         callsRemaining: 0,
         totalCalls,
         circuitOpen: false,
-        reason: `Call cap reached (${maxCallsPerBatch}/${maxCallsPerBatch})`,
+        reason: `Context call cap reached (${maxCalls}/${maxCalls})`,
       };
     }
 
     return {
       available: true,
-      callsRemaining: maxCallsPerBatch - totalCalls,
+      callsRemaining: maxCalls - totalCalls,
       totalCalls,
       circuitOpen: false,
       reason: "Available",
     };
-  }
-
-  function openCircuit() {
-    circuitOpen = true;
-    circuitOpenedAt = Date.now();
-  }
-
-  async function generateJSON(
-    prompt: string,
-    model: string = "gemini-3.6-flash",
-    timeoutMs: number = aiTimeoutMs
-  ): Promise<{ data: unknown; tokensUsed: number; latencyMs: number } | null> {
-    const status = getStatus();
-    if (!status.available) {
-      console.log(`[AI] Skipped: ${status.reason}`);
-      return null;
-    }
-
-    totalCalls++;
-    const result = await callGenerativeJSON(prompt, model, timeoutMs);
-
-    if (result.status === "success") {
-      return { data: result.data, tokensUsed: result.tokensUsed, latencyMs: result.latencyMs };
-    }
-    if (result.status === "rate-limited") openCircuit();
-    return null;
-  }
-
-  async function generateText(
-    prompt: string,
-    model: string = "gemini-3.6-flash"
-  ): Promise<{ text: string; tokensUsed: number; latencyMs: number } | null> {
-    const status = getStatus();
-    if (!status.available) return null;
-
-    totalCalls++;
-    const result = await callGenerativeText(prompt, model);
-
-    if (result.status === "success") {
-      return { text: result.text, tokensUsed: result.tokensUsed, latencyMs: result.latencyMs };
-    }
-    if (result.status === "rate-limited") openCircuit();
-    return null;
-  }
+  };
 
   return {
-    reset() {
-      totalCalls = 0;
-      circuitOpen = false;
-      circuitOpenedAt = 0;
+    get totalCalls() {
+      return totalCalls;
     },
+
+    maxCalls,
+
+    // The actual rate-limit circuit is account-wide and owned by client.ts.
+    get circuitOpen() {
+      return getAccountStatus().circuitOpen;
+    },
+
     getStatus,
-    isAvailable: () => getStatus().available,
-    generateJSON,
-    generateText,
+
+    isAvailable() {
+      return getStatus().available;
+    },
+
+    async generateJSON(prompt, model, timeoutMs = AI_TIMEOUT_MS) {
+      const status = getStatus();
+
+      if (!status.available) {
+        console.log(`[AIContext] Skipped JSON: ${status.reason}`);
+        return null;
+      }
+
+      // Per-execution counter lives ONLY inside this context.
+      totalCalls += 1;
+
+      return callGenerativeJSON(prompt, model, timeoutMs);
+    },
+
+    async generateText(prompt, model, timeoutMs = AI_TIMEOUT_MS) {
+      const status = getStatus();
+
+      if (!status.available) {
+        console.log(`[AIContext] Skipped text: ${status.reason}`);
+        return null;
+      }
+
+      // Per-execution counter lives ONLY inside this context.
+      totalCalls += 1;
+
+      return callGenerativeText(prompt, model, timeoutMs);
+    },
   };
 }
+
+export const AI_CONTEXT_DEFAULTS = {
+  AI_TIMEOUT_MS,
+  MAX_CALLS_PER_EXECUTION,
+};

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import type { AIContext } from "@/lib/ai/context";
-import { parseAnomalyDecisions } from "@/lib/ai/schemas";
+import { parseAnomalyDecisions, CURRENT_AI_MODEL } from "@/lib/ai/schemas";
 
 interface AnomalyReviewResult {
   exceptionId: string;
@@ -135,7 +135,7 @@ Rules:
       reasoningSteps: [{ step: 1, label: "Batch Review", detail: reasoning, impact: String(newConfidence - exception.confidenceScore) }],
       anomalyDetected,
       riskAssessment,
-      model: "gemini-3.6-flash",
+      model: CURRENT_AI_MODEL,
       latencyMs: aiResult ? aiResult.latencyMs : 0,
     });
 
