@@ -72,16 +72,30 @@ const SECURITY_LAYERS = [
     ],
   },
   {
+    title: "Authentication & Authorization Boundary",
+    description:
+      "A signed-cookie session boundary (Next.js Proxy) protects every page and API route. The actor and role used for every action are derived server-side from the verified session — a client can never supply its own identity.",
+    icon: ShieldCheck,
+    color: "text-emerald-400",
+    status: "ACTIVE",
+    points: [
+      "Unauthenticated pages redirect to /login; APIs return 401",
+      "HMAC-signed, expiring session tokens verified with timing-safe compare",
+      "Roles (ADMIN / REVIEWER) enforced server-side, never read from the body",
+      "Audit records the real session identity for every transition",
+    ],
+  },
+  {
     title: "Human-in-the-Loop Workflow",
     description:
-      "AI recommends. Humans approve. The exception state machine enforces atomic transitions with compare-and-swap. AI cannot directly resolve any exception.",
+      "AI recommends. Humans approve. The exception state machine enforces atomic transitions with compare-and-swap. AI cannot directly resolve any exception, and only an authenticated human can drive the workflow.",
     icon: GitCommit,
     color: "text-amber-400",
     status: "ACTIVE",
     points: [
       "OPEN → INVESTIGATING → PENDING_APPROVAL → RESOLVED",
       "Compare-and-swap prevents concurrent double-transition",
-      "Full audit trail for every transition",
+      "Full audit trail for every transition, attributed to the session user",
       "AI proposals are advisory only",
     ],
   },
@@ -97,7 +111,7 @@ const SECURITY_LAYERS = [
       "Phantom refunds detected",
       "Duplicate settlements detected",
       "Fee manipulation detected",
-      "Subtle ₹0.47 rounding error intentionally missed",
+      "₹0.47 rounding error is below the ₹1 tolerance — deliberately NOT flagged, because flagging it would raise every legitimate sub-₹1 variance as a false positive",
     ],
   },
 ];

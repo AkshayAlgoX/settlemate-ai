@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Database,
@@ -11,8 +12,15 @@ import {
   ScrollText,
   Shield,
   Zap,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface SessionUser {
+  sub: string;
+  name: string;
+  role: string;
+}
 
 const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -27,6 +35,22 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.authenticated) setUser(d.user);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
 
   return (
     <aside className="w-64 border-r border-gray-800 bg-gray-950 flex flex-col">
@@ -68,6 +92,21 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-800">
+        {user && (
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-300 truncate">{user.name}</p>
+              <p className="text-[10px] text-blue-500 uppercase tracking-wide">{user.role}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="ml-2 p-1.5 rounded-md text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="text-xs text-gray-600 space-y-1">
           <p>Razorpay AI Buildathon</p>
           <p>Track 4: AI Finance Controller</p>

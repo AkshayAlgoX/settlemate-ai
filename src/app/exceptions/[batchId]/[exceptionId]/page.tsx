@@ -189,7 +189,6 @@ export default function ExceptionDetailPage({ params }: PageProps) {
           status: targetState,
           reason: actionReason || `Transitioned to ${targetState}`,
           resolution: resolutionText || undefined,
-          actor: "USER",
         }),
       });
 
