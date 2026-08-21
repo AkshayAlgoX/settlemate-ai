@@ -3,10 +3,10 @@ import { prisma } from "@/lib/db";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ batchId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { batchId } = await params;
+    const { id: batchId } = await params;
     const { searchParams } = new URL(req.url);
 
     const type = searchParams.get("type");
