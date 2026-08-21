@@ -245,9 +245,15 @@ npm run evaluate
 1. Sign in (demonstrates the security boundary).
 2. Generate a deterministic synthetic batch (250 records, 10 scenarios).
 3. Run the 3-pass pipeline: deterministic rules → AI anomaly agent → AI resolver.
-4. See accuracy/throughput and the adversarial 9/10 self-test result.
-5. Open an exception: golden-record provenance chain, calculation breakdown, AI analysis
-   with evidence, agent reasoning trace, and the state-machine action control.
-6. Drive OPEN → INVESTIGATING → PENDING_APPROVAL → RESOLVED; observe the audit trail
-   records your authenticated identity.
-7. Ask the grounded Q&A, which answers only from the batch context with validated evidence.
+4. Dashboard: read the ops story (auto-match rate, accuracy, amount at risk, adversarial
+   9/10) and the **risk-prioritized "Investigate Now" queue**, which links straight into
+   each exception's investigation room. The dashboard reads persisted results — it never
+   re-runs reconciliation.
+5. Open an exception: a **discrepancy summary** (expected vs. actual settlement and the
+   Δ shortfall), a **workflow-position stepper** (where the case sits on the approval
+   path), golden-record provenance chain, calculation breakdown, AI analysis with cited
+   evidence, agent reasoning trace, and the state-machine action control.
+6. Drive OPEN → INVESTIGATING → PENDING_APPROVAL → RESOLVED (approval is ADMIN-only,
+   separation of duties); observe the audit trail records your authenticated identity.
+7. Ask the **Finance Controller Copilot**, which answers only from the batch context and
+   cites the specific evidence paths it relied on.

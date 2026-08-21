@@ -31,21 +31,23 @@ export default function UploadPage() {
         </p>
       </div>
 
-      {/* Drop zone */}
+      {/* Import status — honest scoping */}
       <Card className="bg-gray-900 border-gray-800">
-        <CardContent className="p-12">
-          <div className="border-2 border-dashed border-gray-700 rounded-xl p-12 text-center hover:border-blue-500/50 transition-colors">
-            <Upload className="w-14 h-14 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-300 mb-1 font-medium">
-              Drag and drop CSV files here
-            </p>
-            <p className="text-sm text-gray-500 mb-6">
-              or click to browse your files
-            </p>
-            <Button variant="outline" className="border-gray-700 text-gray-300 hover:bg-gray-800">
-              <FileText className="w-4 h-4 mr-2" />
-              Select CSV Files
-            </Button>
+        <CardContent className="p-8">
+          <div className="flex items-start gap-4">
+            <Upload className="w-8 h-8 text-blue-400 shrink-0" />
+            <div>
+              <p className="text-gray-200 font-medium mb-1">
+                Bring-your-own-CSV ingestion is a roadmap item
+              </p>
+              <p className="text-sm text-gray-400">
+                The reconciliation engine is fully CSV-ready — the six source
+                tables below map directly to the parser. For the demo, use the
+                deterministic data generator: it produces the same six files with
+                ground-truth labels, so you exercise the identical ingestion and
+                reconciliation path.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

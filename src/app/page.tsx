@@ -59,15 +59,19 @@ export default function LandingPage() {
             Razorpay AI Buildathon — Track 4: AI Finance Controller
           </Badge>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            SettleMate AI Agent
+            SettleMate — Finance Controller
           </h1>
           <p className="text-xl text-gray-300 mb-2 max-w-2xl">
-            Self-healing multi-agent finance controller for payment reconciliation.
+            AI-powered reconciliation and investigation control layer for
+            payment settlement.
           </p>
           <p className="text-gray-400 mb-8 max-w-2xl">
+            A deterministic matching engine is the source of truth; AI explains
+            and recommends behind validation gates and an explicit
+            human-approval workflow — it never controls financial truth.
             {metrics
-              ? `${metrics.accuracy}% accuracy. ${metrics.adversarialScore}% threat detection. ${metrics.throughputRps} records/sec.`
-              : "Deterministic matching + AI anomaly detection + adversarial self-testing."}
+              ? ` ${metrics.accuracy}% accuracy. ${metrics.adversarialScore}% threat detection. ${metrics.throughputRps} records/sec.`
+              : ""}
           </p>
           <div className="flex gap-4">
             <Link href="/demo">

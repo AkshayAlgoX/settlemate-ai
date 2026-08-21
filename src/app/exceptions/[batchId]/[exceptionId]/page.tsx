@@ -18,6 +18,7 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Link2,
   Database,
 } from "lucide-react";
@@ -269,6 +270,17 @@ export default function ExceptionDetailPage({ params }: PageProps) {
 
   const allowedNextStates = transitionMap[ex.status] || [];
 
+  // Mainline workflow path shown as a stepper. Off-path states (ESCALATED,
+  // REJECTED, REOPENED) render as a distinct annotation instead.
+  const WORKFLOW_PATH = ["OPEN", "INVESTIGATING", "PENDING_APPROVAL", "RESOLVED"];
+  const workflowIndex = WORKFLOW_PATH.indexOf(ex.status);
+  const offPath = workflowIndex === -1;
+  const offPathLabel: Record<string, string> = {
+    ESCALATED: "Escalated — returned to investigation before approval",
+    REJECTED: "Rejected at approval — returned to investigation",
+    REOPENED: "Reopened — returned to investigation",
+  };
+
   // ── Golden Record Provenance Chain ──
   const provenanceSteps = [
     {
@@ -369,6 +381,99 @@ export default function ExceptionDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
+
+      {/* ── WHAT IS WRONG: DISCREPANCY SUMMARY ── */}
+      {calc && (
+        <Card className="bg-gray-900 border-red-800/50">
+          <CardContent className="p-4">
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle
+                  className={`w-5 h-5 ${ex.riskLevel === "HIGH" ? "text-red-400" : ex.riskLevel === "MEDIUM" ? "text-yellow-400" : "text-blue-400"}`}
+                />
+                <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">
+                  What&apos;s wrong
+                </span>
+              </div>
+              <div className="flex-1 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                <div>
+                  <span className="text-gray-500 text-xs mr-1.5">Expected net settlement</span>
+                  <span className="font-mono text-gray-200 font-semibold">
+                    {formatCurrency(calc.expectedNetAmount)}
+                  </span>
+                </div>
+                <div className="text-gray-600">→</div>
+                <div>
+                  <span className="text-gray-500 text-xs mr-1.5">Actual settled</span>
+                  <span className="font-mono text-gray-300">
+                    {calc.actualSettledAmount ? formatCurrency(calc.actualSettledAmount) : "—"}
+                  </span>
+                </div>
+                {calc.mismatchAmount ? (
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Shortfall / discrepancy</span>
+                    <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-sm font-mono px-2.5 py-1">
+                      Δ {formatCurrency(calc.mismatchAmount)}
+                    </Badge>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── WORKFLOW POSITION ── */}
+      <Card className="bg-gray-900 border-blue-800/40">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-blue-400 flex items-center gap-2">
+            <GitCommit className="w-4 h-4" /> Investigation Workflow — Where this case is now
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            {WORKFLOW_PATH.map((state, idx) => {
+              const reached = workflowIndex >= idx && !offPath;
+              const isCurrent = workflowIndex === idx && !offPath;
+              return (
+                <div key={state} className="flex flex-1 items-center gap-3">
+                  <div
+                    className={`flex-1 rounded-lg border px-3 py-2 text-center ${
+                      isCurrent
+                        ? "bg-blue-600/25 border-blue-500 text-white"
+                        : reached
+                        ? "bg-gray-800 border-gray-700 text-gray-300"
+                        : "bg-gray-950 border-gray-800 text-gray-500"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold">
+                      {state === "PENDING_APPROVAL" ? "PENDING APPROVAL" : state}
+                    </p>
+                    {isCurrent && (
+                      <p className="text-[10px] text-blue-300 mt-0.5">← you are here</p>
+                    )}
+                    {reached && !isCurrent && (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-400 mx-auto mt-0.5" />
+                    )}
+                  </div>
+                  {idx < WORKFLOW_PATH.length - 1 && (
+                    <ChevronRight className="w-4 h-4 text-gray-600 shrink-0" />
+                  )}
+                </div>
+              );
+            })}
+            {offPath && (
+              <div className="md:w-64 flex items-start gap-2 bg-rose-500/10 border border-rose-800/40 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-rose-300">
+                  <span className="font-semibold">{ex.status}:</span>{" "}
+                  {offPathLabel[ex.status] || "off the mainline approval path"}
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── GOLDEN RECORD PROVENANCE CHAIN ── */}
       <Card className="bg-gray-900 border-amber-800/40">

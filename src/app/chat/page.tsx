@@ -11,6 +11,7 @@ import {
   Sparkles,
   HelpCircle,
   Database,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,15 +22,15 @@ interface ChatItem {
   id: string;
   role: "user" | "assistant";
   content: string;
-  evidence?: string | null;
-  latencyMs?: number;
+  evidenceCited?: string[];
 }
 
 const SUGGESTED_QUESTIONS = [
   "How much money is pending settlement in this batch?",
-  "What are the top exceptions by amount at risk?",
-  "How much Razorpay fee and GST was deducted?",
-  "What is the overall reconciliation accuracy and throughput?",
+  "Which exceptions carry the most amount at risk, and what should I investigate first?",
+  "How much Razorpay fee and GST was deducted in total?",
+  "Are there any orphan bank credits with no matching payment?",
+  "What is the reconciliation accuracy and how did each pass improve it?",
 ];
 
 // Pure ID generator placed outside component scope to satisfy React purity linter
@@ -88,8 +89,7 @@ function FinanceChatContent() {
       const data = (await res.json()) as {
         success?: boolean;
         reply?: string;
-        evidence?: unknown;
-        latencyMs?: number;
+        evidenceCited?: string[];
       };
 
       if (data.success && data.reply) {
@@ -97,8 +97,7 @@ function FinanceChatContent() {
           id: createUniqueMsgId("bot"),
           role: "assistant",
           content: data.reply,
-          evidence: data.evidence ? JSON.stringify(data.evidence) : null,
-          latencyMs: data.latencyMs,
+          evidenceCited: data.evidenceCited || [],
         };
         setMessages((prev) => [...prev, botMsg]);
       }
@@ -115,10 +114,11 @@ function FinanceChatContent() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <MessageSquare className="w-6 h-6 text-blue-400" />
-            Finance Q&A Assistant
+            Finance Controller Copilot
           </h1>
           <p className="text-gray-400 text-sm mt-1">
-            Ask natural language questions grounded in batch data. Always cites specific record evidence.
+            Ask natural-language questions about this batch. Answers are grounded in the
+            database and cite the specific records they rely on.
           </p>
         </div>
         {batchId && (
@@ -183,24 +183,24 @@ function FinanceChatContent() {
                   )}
                 </div>
                 <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-300 capitalize">
-                      {m.role === "assistant" ? "SettleMate Assistant" : "You"}
-                    </span>
-                    {m.latencyMs ? (
-                      <span className="text-[10px] text-gray-500">{m.latencyMs}ms</span>
-                    ) : null}
-                  </div>
+                  <span className="font-semibold text-gray-300 capitalize">
+                    {m.role === "assistant" ? "SettleMate Controller" : "You"}
+                  </span>
                   <p className="text-gray-200 leading-relaxed font-sans">{m.content}</p>
 
-                  {m.evidence && (
+                  {m.evidenceCited && m.evidenceCited.length > 0 && (
                     <details className="mt-2 pt-1 border-t border-gray-800 text-[11px] text-gray-400">
                       <summary className="cursor-pointer text-blue-400 hover:underline flex items-center gap-1">
-                        <Database className="w-3 h-3" /> View Grounded Context Data
+                        <Database className="w-3 h-3" /> Cited evidence from batch data
                       </summary>
-                      <pre className="mt-1 p-2 bg-gray-900 rounded font-mono text-[10px] text-gray-300 overflow-x-auto">
-                        {m.evidence}
-                      </pre>
+                      <ul className="mt-1.5 space-y-1 font-mono text-[10px] text-gray-300">
+                        {m.evidenceCited.map((ev, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />
+                            <span className="break-all">{ev}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </details>
                   )}
                 </div>
@@ -211,7 +211,7 @@ function FinanceChatContent() {
           {sending && (
             <div className="flex items-center gap-2 text-xs text-purple-400 bg-gray-950 p-3 rounded-lg border border-gray-800">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Querying database & generating grounded answer...</span>
+              <span>Gathering evidence from the batch and answering...</span>
             </div>
           )}
         </CardContent>

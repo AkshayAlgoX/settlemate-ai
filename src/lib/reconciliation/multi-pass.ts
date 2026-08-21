@@ -203,6 +203,27 @@ export async function runMultiPassReconciliation(
     },
   });
 
+  // The full multi-pass snapshot is persisted in the audit metadata so the
+  // dashboard can READ it (GET) instead of re-running reconciliation on every
+  // view. The audit trail is therefore the persisted record of record.
+  const snapshot = {
+    totalDurationMs: totalDuration,
+    aiCalls: finalAIStatus.totalCalls,
+    circuitTripped: finalAIStatus.circuitOpen,
+    passes,
+    adversarial: {
+      totalTests: adversarial.totalTests,
+      detected: adversarial.detected,
+      detectionRate: adversarial.detectionRate,
+      tests: adversarial.tests.map((t) => ({
+        testName: t.testName,
+        detected: t.detected,
+        detectedAs: t.detectedAs,
+      })),
+    },
+    calibration,
+  };
+
   await prisma.auditLog.create({
     data: {
       batchId,
@@ -211,11 +232,7 @@ export async function runMultiPassReconciliation(
       entityType: "batch",
       entityId: batchId,
       reason: `3-pass complete in ${totalDuration}ms. AI calls: ${finalAIStatus.totalCalls}/10. Adversarial: ${adversarial.detectionRate}%.`,
-      metadata: JSON.stringify({
-        totalDurationMs: totalDuration,
-        aiCalls: finalAIStatus.totalCalls,
-        circuitTripped: finalAIStatus.circuitOpen,
-      }),
+      metadata: JSON.stringify(snapshot),
     },
   });
 

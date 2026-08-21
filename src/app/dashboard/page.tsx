@@ -52,8 +52,14 @@ interface DashboardBatch {
 }
 
 interface DashboardException {
+  id: string;
   exceptionType: string;
   amount: number;
+  paymentId?: string | null;
+  mismatchAmount?: number | null;
+  riskLevel?: string;
+  status?: string;
+  confidenceScore?: number;
 }
 
 interface DashboardPass {
@@ -105,12 +111,27 @@ function DashboardContent() {
     try {
       const [resultsRes, multiPassRes] = await Promise.all([
         fetch(`/api/reconcile/${id}/results`),
-        fetch(`/api/reconcile/${id}/multi-pass`, { method: "POST" }),
+        // Read the persisted multi-pass snapshot first. We only POST (re-run
+        // reconciliation) if the batch has no snapshot yet — viewing a
+        // dashboard must never re-compute the pipeline or write a fresh
+        // MULTI_PASS_COMPLETED audit row.
+        fetch(`/api/reconcile/${id}/multi-pass`),
       ]);
       const resultsData = await resultsRes.json();
-      const multiPassData = await multiPassRes.json();
+      const multiPassData = (await multiPassRes.json()) as DashboardMultiPass & {
+        persisted?: boolean;
+        success?: boolean;
+      };
       setData(resultsData);
-      setMultiPass(multiPassData);
+
+      if (multiPassData.persisted || multiPassData.success) {
+        setMultiPass(multiPassData);
+      } else if (resultsData.batch?.status !== "COMPLETED") {
+        // No persisted snapshot and the batch isn't finalized — run it once.
+        const runRes = await fetch(`/api/reconcile/${id}/multi-pass`, { method: "POST" });
+        const runData = await runRes.json();
+        setMultiPass(runData);
+      }
     } catch (error) {
       console.error("Dashboard load error:", error);
     } finally {
@@ -145,7 +166,7 @@ function DashboardContent() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <Zap className="w-8 h-8 text-blue-400 animate-pulse mx-auto mb-2" />
-          <p className="text-gray-400">Running multi-pass reconciliation...</p>
+          <p className="text-gray-400">Loading reconciliation results...</p>
         </div>
       </div>
     );
@@ -210,6 +231,17 @@ function DashboardContent() {
     return `₹${r.toFixed(0)}`;
   };
 
+  // Risk-prioritized "act now" queue — the operational call to action. Open or
+  // in-progress exceptions sorted by amount at risk, each linking straight into
+  // its investigation room.
+  const riskPriority = (e: DashboardException) =>
+    e.riskLevel === "HIGH" ? 0 : e.riskLevel === "MEDIUM" ? 1 : 2;
+  const ACTIVE_STATUSES = new Set(["OPEN", "INVESTIGATING", "ESCALATED", "REOPENED"]);
+  const topRisks = exceptions
+    .filter((e) => ACTIVE_STATUSES.has(e.status || ""))
+    .sort((a, b) => riskPriority(a) - riskPriority(b) || (b.amount || 0) - (a.amount || 0))
+    .slice(0, 6);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -253,6 +285,79 @@ function DashboardContent() {
           );
         })}
       </div>
+
+      {/* Top Risks — Operational Call to Action */}
+      <Card className="bg-gray-900 border-orange-800/40">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-white flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-orange-400" />
+            Top Risks — Investigate Now
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {topRisks.length === 0 ? (
+            <p className="text-xs text-gray-500 italic">
+              No active exceptions awaiting review. All cases are resolved or auto-matched.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {topRisks.map((e) => (
+                <a
+                  key={e.id}
+                  href={`/exceptions/${batch.id}/${e.id}`}
+                  className="flex items-center gap-3 bg-gray-950 border border-gray-800 hover:border-orange-600/50 rounded-lg px-3 py-2.5 transition-colors group"
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      e.riskLevel === "HIGH"
+                        ? "bg-red-500"
+                        : e.riskLevel === "MEDIUM"
+                        ? "bg-yellow-500"
+                        : "bg-blue-500"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-200 font-medium truncate">
+                        {(e.exceptionType || "Exception").replace(/_/g, " ")}
+                      </span>
+                      {e.status && (
+                        <span className="text-[10px] text-gray-500 uppercase">{e.status}</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 font-mono truncate">
+                      {e.paymentId || "N/A"}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-orange-400">
+                      {formatRupees(e.amount)}
+                    </p>
+                    {e.mismatchAmount ? (
+                      <p className="text-[10px] text-gray-500 font-mono">
+                        Δ {formatRupees(e.mismatchAmount)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0">
+                    <Badge
+                      className={
+                        e.riskLevel === "HIGH"
+                          ? "bg-red-500/20 text-red-400 border-red-500/30"
+                          : e.riskLevel === "MEDIUM"
+                          ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                          : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                      }
+                    >
+                      {e.riskLevel || "?"}
+                    </Badge>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Multi-Pass Comparison — UNIQUE DIFFERENTIATOR */}
       {passData.length > 0 && (
