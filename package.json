@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/lib/exceptions/state-machine.test.ts && npx tsx src/lib/exceptions/service.test.ts && npx tsx src/lib/auth/session.test.ts && npx tsx src/lib/reconciliation/multi-pass.test.ts",
+    "test": "npx tsx src/lib/exceptions/state-machine.test.ts && npx tsx src/lib/exceptions/service.test.ts && npx tsx src/lib/auth/session.test.ts && npx tsx src/lib/reconciliation/multi-pass.test.ts && npx tsx src/lib/reconciliation/cardinality.test.ts && npx tsx src/lib/reconciliation/cardinality-e2e.test.ts && npx tsx src/lib/reconciliation/invariants.test.ts && npx tsx src/lib/reconciliation/decision.test.ts && npx tsx src/lib/reconciliation/risk-gate.test.ts",
+    "test:e2e-cardinality": "npx tsx src/lib/reconciliation/cardinality-e2e.test.ts",
     "evaluate": "npx tsx scripts/evaluate.ts"
   },
   "dependencies": {

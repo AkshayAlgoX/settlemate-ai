@@ -4,6 +4,17 @@ import { buildIndexes } from "./indexer";
 import { matchAllRecords } from "./matcher";
 import { evaluateResults } from "./evaluator";
 import type { ReconciliationMetrics } from "./types";
+import { applyCardinalityMatching } from "./apply-cardinality";
+import {
+  deleteCardinalityLinks,
+  persistCardinalityLinks,
+} from "./cardinality-persistence";
+import {
+  evaluateInvariants,
+  ControlFailureError,
+} from "./invariants";
+import { evaluateBatchDecisions } from "./decision";
+import { evaluateGate } from "./risk-gate";
 
 export async function runReconciliation(
   batchId: string
@@ -41,7 +52,21 @@ export async function runReconciliation(
   // Phase 3: Match & Classify
   const phase3Start = performance.now();
   const results = matchAllRecords(data, indexes);
+
+const cardinalityApplication = applyCardinalityMatching(results, data);
   phaseTimings["match_classify"] = Math.round(performance.now() - phase3Start);
+
+  // Decision Engine: centralize per-record outcomes (AUTO_MATCHED / SUGGESTED_MATCH /
+  // EXCEPTION), confidence, reasonCode, matchStrategy, evidence, and risk. Drives the
+  // Exception risk level below and the batch Risk Gate after the invariants gate.
+  const decisionReport = evaluateBatchDecisions(
+    results,
+    data,
+    cardinalityApplication.relationships,
+  );
+  const decisionByPaymentId = new Map(
+    decisionReport.decisions.map((d) => [d.paymentId, d]),
+  );
 
   // Phase 4: Evaluate
   const phase4Start = performance.now();
@@ -53,8 +78,15 @@ export async function runReconciliation(
   const phase5Start = performance.now();
 
   // Delete previous results for this batch (if re-running)
-  await prisma.reconciliationResult.deleteMany({ where: { batchId } });
-  await prisma.exception.deleteMany({ where: { batchId } });
+  await prisma.reconciliationResult.deleteMany({
+  where: { batchId },
+});
+
+await prisma.exception.deleteMany({
+  where: { batchId },
+});
+
+await deleteCardinalityLinks(batchId);
 
   // Store reconciliation results
   const reconResults = results.map((r) => ({
@@ -77,8 +109,11 @@ export async function runReconciliation(
     mismatchAmount: r.mismatchAmount,
     status: r.status,
     confidenceScore: r.confidenceScore,
-    matchMethod: r.matchMethod,
+        matchMethod: r.matchMethod,
     matchDetails: r.matchDetails,
+    cardinalityType: r.cardinalityType,
+    cardinalityReason: r.cardinalityReason,
+    relationshipScore: r.relationshipScore,
     passNumber: 1,
   }));
 
@@ -87,6 +122,10 @@ export async function runReconciliation(
     const chunk = reconResults.slice(i, i + 100);
     await prisma.reconciliationResult.createMany({ data: chunk });
   }
+  await persistCardinalityLinks(
+  batchId,
+  cardinalityApplication.relationships,
+);
 
   // Create exception records for non-matched results
   const exceptionResults = results.filter((r) => r.status !== "AUTO_MATCHED");
@@ -102,11 +141,12 @@ export async function runReconciliation(
     mismatchAmount: r.mismatchAmount,
     confidenceScore: r.confidenceScore,
     riskLevel:
-      r.confidenceScore < 30
+      decisionByPaymentId.get(r.paymentId)?.riskLevel ??
+      (r.confidenceScore < 30
         ? "HIGH"
         : r.confidenceScore < 60
         ? "MEDIUM"
-        : "LOW",
+        : "LOW"),
     status: "OPEN",
     suggestedAction: generateSuggestedAction(r.status),
   }));
@@ -122,6 +162,97 @@ export async function runReconciliation(
   const finalTime = Math.round(performance.now() - totalStart);
   metrics.processingTimeMs = finalTime;
   metrics.throughputRps = Math.round((results.length / (finalTime / 1000)) * 100) / 100;
+
+  // ── FINANCIAL INVARIANTS GATE (fail-closed, before finalization) ──
+  // Decision Engine → Invariants → PASS → Risk Gate / finalize.
+  // On FAIL → CONTROL_FAILURE → Maker/Checker → Corrective Action → RE-CALCULATE →
+  // Invariants again. A failed (re-)verification never reaches COMPLETED.
+  const invariantReport = evaluateInvariants(
+    data,
+    results,
+    metrics,
+    cardinalityApplication.relationships,
+  );
+  if (invariantReport.failures.length > 0) {
+    await prisma.batch.update({
+      where: { id: batchId },
+      data: { status: "CONTROL_FAILURE" },
+    });
+    await prisma.auditLog.create({
+      data: {
+        batchId,
+        actor: "SYSTEM",
+        action: "CONTROL_FAILURE",
+        entityType: "batch",
+        entityId: batchId,
+        reason: `Financial invariant(s) failed: ${invariantReport.failures
+          .map((f) => f.code)
+          .join(", ")}`,
+        metadata: JSON.stringify({
+          checkedCounts: invariantReport.checkedCounts,
+          checkedAmounts: invariantReport.checkedAmounts,
+          failures: invariantReport.failures,
+        }),
+      },
+    });
+    throw new ControlFailureError(invariantReport);
+  }
+
+  // ── RISK GATE (batch routing) ──
+  // LOW   → straight-through finalization (COMPLETED below).
+  // MEDIUM→ controlled review / sampling (UNDER_REVIEW).
+  // HIGH  → mandatory Maker/Checker approval (AWAITING_APPROVAL).
+  // CRITICAL (invariant failure) always blocks finalization and is never downgraded by
+  // confidence — it was already thrown above by the invariants gate, so we only reach
+  // this point on a PASS (STRAIGHT_THROUGH / CONTROLLED_REVIEW / MAKER_CHECKER_REQUIRED).
+  const correctionAttempts = await prisma.auditLog.count({
+    where: { batchId, action: "CONTROL_FAILURE" },
+  });
+  const verdict = evaluateGate(decisionReport, invariantReport, correctionAttempts);
+
+  async function riskGateAudit(
+    routing: string,
+    riskLevel: string,
+    reason: string,
+  ): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        batchId,
+        actor: "SYSTEM",
+        action: "RISK_GATE",
+        entityType: "batch",
+        entityId: batchId,
+        reason,
+        metadata: JSON.stringify({
+          routing,
+          riskLevel,
+          correctionAttempts,
+          aggregate: decisionReport.aggregate,
+        }),
+      },
+    });
+  }
+
+  if (verdict.routing === "MAKER_CHECKER_REQUIRED") {
+    await prisma.batch.update({
+      where: { id: batchId },
+      data: { status: "AWAITING_APPROVAL" },
+    });
+    await riskGateAudit(verdict.routing, verdict.riskLevel, verdict.reason);
+    return metrics; // held for mandatory Maker/Checker — NOT finalized to COMPLETED
+  }
+
+  if (verdict.routing === "CONTROLLED_REVIEW") {
+    await prisma.batch.update({
+      where: { id: batchId },
+      data: { status: "UNDER_REVIEW" },
+    });
+    await riskGateAudit(verdict.routing, verdict.riskLevel, verdict.reason);
+    return metrics; // controlled review/sample — NOT finalized to COMPLETED
+  }
+
+  // STRAIGHT_THROUGH — record the routing for observability, then finalize below.
+  await riskGateAudit(verdict.routing, verdict.riskLevel, verdict.reason);
 
   await prisma.batch.update({
     where: { id: batchId },

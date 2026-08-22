@@ -80,6 +80,9 @@ export interface MatchResult {
   confidenceScore: number;
   matchMethod: string;
   matchDetails: string;
+  cardinalityType: "1:1" | "1:N" | "N:1" | "N:M";
+  cardinalityReason: string | null;
+  relationshipScore: number | null;
 }
 
 export interface ReconciliationMetrics {

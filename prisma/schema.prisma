@@ -36,6 +36,7 @@ model Batch {
   refunds           Refund[]
   chargebacks       Chargeback[]
   reconResults      ReconciliationResult[]
+  cardinalityLinks  CardinalityLink[]
   exceptions        Exception[]
   auditLogs         AuditLog[]
   chatMessages      ChatMessage[]
@@ -176,6 +177,9 @@ model ReconciliationResult {
   confidenceScore     Int
   matchMethod         String?
   matchDetails        String?
+    cardinalityType    String    @default("1:1")
+  cardinalityReason  String?
+  relationshipScore  Int?
   passNumber          Int      @default(1)
   createdAt           DateTime @default(now())
 
@@ -322,4 +326,30 @@ model ReconciliationLock {
   batchId   String   @unique
   token     String
   lockedAt  DateTime @default(now())
+}
+
+model CardinalityLink {
+  id                String   @id @default(cuid())
+  batchId           String
+  batch             Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  relationshipType  String
+  sourceType        String
+  sourceIds         String
+  targetType        String
+  targetIds         String
+
+  amount            Int
+  differencePaise   Int      @default(0)
+  confidenceScore   Int
+  reasonCode        String
+  matchMethod       String?
+
+  runId             String?
+  createdAt         DateTime @default(now())
+
+  @@index([batchId])
+  @@index([relationshipType])
+  @@index([sourceType])
+  @@index([targetType])
 }

@@ -33,8 +33,11 @@ export function matchAllRecords(
       mismatchAmount: null,
       status: "AUTO_MATCHED",
       confidenceScore: 0,
-      matchMethod: "NONE",
-      matchDetails: "",
+        matchMethod: "NONE",
+  matchDetails: "",
+  cardinalityType: "1:1",
+  cardinalityReason: null,
+  relationshipScore: null,
     };
 
     // Get order
@@ -295,6 +298,9 @@ export function matchAllRecords(
           confidenceScore: 25,
           matchMethod: "ORPHAN_DETECTION",
           matchDetails: `Bank credit ${bankTxn.txnId} (₹${bankTxn.amount / 100}) has no matching settlement. UTR: ${bankTxn.utr || "none"}. Narration: ${bankTxn.narration || "none"}`,
+          cardinalityType: "1:1",
+          cardinalityReason: null,
+          relationshipScore: null,
         };
 
         // Try to extract settlement ID from narration
