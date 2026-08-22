@@ -12,7 +12,7 @@ export async function POST(
   } catch (error) {
     console.error("Explain error:", error);
     return NextResponse.json(
-      { error: "Failed to generate explanation", details: String(error) },
+      { error: "Failed to generate explanation" },
       { status: 500 }
     );
   }

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/lib/exceptions/state-machine.test.ts && npx tsx src/lib/exceptions/service.test.ts",
+    "test": "npx tsx src/lib/exceptions/state-machine.test.ts && npx tsx src/lib/exceptions/service.test.ts && npx tsx src/lib/auth/session.test.ts && npx tsx src/lib/reconciliation/multi-pass.test.ts",
     "evaluate": "npx tsx scripts/evaluate.ts"
   },
   "dependencies": {

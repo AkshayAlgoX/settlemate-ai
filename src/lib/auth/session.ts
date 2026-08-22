@@ -71,10 +71,28 @@ export function authenticateUser(username: string, password: string): SessionUse
   };
 }
 
+// Dev-only secret so the demo runs out-of-the-box in a local `next dev`
+// (NODE_ENV !== "production"). NEVER used as a fallback in production.
+const DEV_FALLBACK_SECRET = "settlemate-dev-secret-change-me";
+
 function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET;
-  // Dev-only fallback. .env is gitignored and this value is never safe in prod.
-  return secret || "settlemate-dev-secret-change-me";
+  if (secret && secret.length > 0) return secret;
+
+  // Fail closed: in production a missing AUTH_SECRET is a hard configuration
+  // error, never a reason to sign sessions with a known default. A production
+  // process without AUTH_SECRET cannot mint or verify any session.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "AUTH_SECRET is not set. SettleMate refuses to run authentication in " +
+        "production without AUTH_SECRET. Set AUTH_SECRET to a strong random " +
+        "string before deploying."
+    );
+  }
+
+  // Local demo convenience only (non-production). .env is gitignored; this is
+  // never a safe secret and is never accepted in production.
+  return DEV_FALLBACK_SECRET;
 }
 
 const b64urlEncode = (s: string) => Buffer.from(s, "utf8").toString("base64url");

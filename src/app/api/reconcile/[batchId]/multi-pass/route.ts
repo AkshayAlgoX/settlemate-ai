@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runMultiPassReconciliation } from "@/lib/reconciliation/multi-pass";
+import { readMultiPassSnapshot, runMultiPassIdempotent } from "@/lib/reconciliation/multi-pass";
 import { prisma } from "@/lib/db";
 
 // GET returns the most recent persisted multi-pass snapshot for the batch. It
@@ -22,32 +22,15 @@ export async function GET(
       return NextResponse.json({ error: "Batch not found" }, { status: 404 });
     }
 
-    const lastRun = await prisma.auditLog.findFirst({
-      where: { batchId, action: "MULTI_PASS_COMPLETED" },
-      orderBy: { timestamp: "desc" },
-      select: { metadata: true },
-    });
+    const snapshot = await readMultiPassSnapshot(batchId);
 
-    const snapshot = lastRun?.metadata
-      ? (JSON.parse(lastRun.metadata) as Record<string, unknown> | null)
-      : null;
-
-    if (!snapshot) {
+    if (!snapshot.persisted) {
       return NextResponse.json({ success: false, persisted: false }, { status: 200 });
     }
 
     return NextResponse.json({
       success: true,
-      persisted: true,
-      passes: snapshot.passes ?? [],
-      aiStatus: {
-        totalCalls: snapshot.aiCalls ?? 0,
-        maxCalls: 10,
-        circuitTripped: snapshot.circuitTripped ?? false,
-      },
-      adversarial: snapshot.adversarial,
-      calibration: snapshot.calibration,
-      totalDurationMs: snapshot.totalDurationMs ?? 0,
+      ...snapshot,
     });
   } catch (error) {
     console.error("Multi-pass read error:", error);
@@ -58,6 +41,11 @@ export async function GET(
   }
 }
 
+// POST runs the 3-pass reconciliation **idempotently**: a batch that already has
+// a persisted snapshot returns that snapshot without re-running, and a per-batch
+// lock guarantees at most one in-flight run per batch (browser double-click,
+// retry, or concurrent duplicate POST all observe the existing result instead of
+// appending duplicate audit/agent-trace/result rows).
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ batchId: string }> }
@@ -74,8 +62,23 @@ export async function POST(
       return NextResponse.json({ error: "Batch not found" }, { status: 404 });
     }
 
-    const result = await runMultiPassReconciliation(batchId);
-    return NextResponse.json({ success: true, ...result });
+    const outcome = await runMultiPassIdempotent(batchId);
+
+    if (outcome.inProgress) {
+      // Another run for this batch is already underway; don't double-run.
+      return NextResponse.json(
+        { success: false, persisted: false, inProgress: true },
+        { status: 202 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      persisted: true,
+      idempotent: outcome.idempotent,
+      executed: outcome.executed,
+      ...outcome.body,
+    });
   } catch (error) {
     console.error("Multi-pass error:", error);
     return NextResponse.json(

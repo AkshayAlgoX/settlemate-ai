@@ -312,3 +312,14 @@ model FeedbackEntry {
 
   @@index([batchId])
 }
+
+// One-row-per-batch concurrency guard for the multi-pass reconciliation POST.
+// batchId is unique so at most one process can hold the lock for a batch at a
+// time; the holder is the only one allowed to run the (expensive) 3-pass
+// workflow. A stale lock older than STALE_MS is reclaimable after a crash.
+model ReconciliationLock {
+  id        String   @id @default(cuid())
+  batchId   String   @unique
+  token     String
+  lockedAt  DateTime @default(now())
+}

@@ -35,7 +35,7 @@ const SECURITY_LAYERS = [
     points: [
       "Anomaly agent: max 5 cases per batched call",
       "Resolver agent: max 5 cases per batched call",
-      "HIGH-risk fixes cannot auto-apply",
+      "No financial fix is auto-applied; resolver output is advisory and recorded for review",
       "Schema rejection falls back to a deterministic template",
     ],
   },
@@ -59,7 +59,7 @@ const SECURITY_LAYERS = [
     points: [
       "Source text explicitly quarantined as untrusted data",
       "Model instructed never to follow record-level instructions",
-      "Grounded Q&A rejects invented evidence",
+      "Grounded Q&A rejects evidence paths not present in context",
       "Evidence paths validated against actual context",
     ],
   },
@@ -143,7 +143,7 @@ const BENCHMARK_PROOF = [
   },
   {
     label: "Throughput",
-    value: "~1,000 rec/sec",
+    value: "~1,000 rec/s · 250-rec",
     icon: Zap,
   },
 ];

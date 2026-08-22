@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Batch generation error:", error);
     return NextResponse.json(
-      { error: "Failed to generate batch", details: String(error) },
+      { error: "Failed to generate batch" },
       { status: 500 }
     );
   }

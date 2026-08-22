@@ -2,8 +2,9 @@
 
 **Razorpay AI Buildathon · Track 4: AI Finance Controller**
 
-SettleMate AI is a multi-agent payment reconciliation system in which **AI assists
-financial operations but never controls financial truth.** A deterministic engine is
+SettleMate AI is a payment reconciliation system with **two advisory AI
+investigation agents plus grounded Finance Q&A**, in which **AI assists financial
+operations but never controls financial truth.** A deterministic engine is
 the source of truth for matching and financial decisions; AI agents explain, interpret,
 and recommend — behind structured validation gates and an explicit human-approval
 workflow.
@@ -31,7 +32,7 @@ financial record or resolve an exception by itself.**
 | **Deterministic Engine** | Financial source of truth — matching, classification, metrics | TypeScript, integer paise |
 | **AI Agents** (advisory) | Anomaly review, resolution proposals, exception explanation, grounded Q&A | Gemini, Zod-validated |
 | **Workflow** | Human-in-the-loop exception state machine | Compare-and-swap, Prisma tx |
-| **Audit / Provenance** | Immutable trace of every decision and transition | AuditLog, AgentTrace, Feedback |
+| **Audit / Provenance** | Append-oriented trace of every decision and transition | AuditLog, AgentTrace, Feedback |
 | **Security Boundary** | Authentication + server-derived actor/role | Signed-cookie sessions, Next.js Proxy |
 | **Benchmark** | Deterministic evaluator + adversarial self-test | Seeded synthetic data |
 
@@ -81,8 +82,10 @@ settlement, orphan credit, refund/chargeback mismatch, delayed credit, manual re
 2. **Exact IDs** (payment ↔ order ↔ settlement).
 3. **Amount** within ₹1 tolerance of expected net.
 4. **Timing** within the T+2 / 24h credit window.
-5. **Fuzzy** candidate discovery (1% amount window) — used *only* to find candidates;
-   final classification still enforces the tight ₹1 tolerance.
+5. **Fuzzy** candidate discovery (1% amount window) — used *only* to find
+   candidates; the UTR / exact-ID / amount path enforces the tight ₹1 tolerance,
+   while the fuzzy bank-credit discovery window can accept a credit within ~1% of
+   the expected net.
 6. **Orphan detection** for unmatched bank credits.
 
 ## 6. Confidence Scoring
@@ -111,14 +114,17 @@ over metric gaming.
 
 ## 8. AI Safety Architecture
 
-- **AI is advisory.** The deterministic engine is the source of truth; AI never writes
-  amounts or statuses used for financial decisions except behind schema gates.
+- **AI is advisory.** The deterministic engine is the source of truth. AI never writes
+  financial amounts or invents record IDs, and it can never resolve or reject a
+  workflow. Within those limits, validated AI output *can* reclassify controlled
+  exception fields (e.g. `exceptionType`, `confidenceScore`, `riskLevel`) and record
+  a `suggestedAction`, always behind schema gates.
 - **Zod safety gates** (`src/lib/ai/schemas.ts`) reject malformed output, unknown enums,
   out-of-range confidence, and invented case IDs before any DB write.
 - **Evidence path whitelist** in grounded Q&A — AI cannot cite a path that does not exist
   in the actual batch context.
-- **AI cannot resolve.** The workflow rejects any AI-driven transition to `RESOLVED`, and
-  agents never touch the workflow `status`.
+- **AI cannot resolve.** The workflow rejects any AI-driven transition to `RESOLVED`,
+  and agents never touch the workflow `status` on the exception record.
 - **Prompt-injection defense** (`src/lib/ai/prompt-injection.ts`) treats all source-record
   text as untrusted data; the chat user message is quarantined as data, not instructions.
 - **Deterministic fallback** (`src/lib/ai/fallback.ts`) produces a safe template explanation
@@ -131,9 +137,10 @@ over metric gaming.
 ## 9. Grounded Q&A
 
 `/api/chat`. Batch context is built from actual database data. The model must answer only
-from that context, cite evidence via paths validated against a whitelist, and any invented
-or out-of-context evidence invalidates the whole response, which then falls back to a
-deterministic, database-backed answer. Evidence is persisted to the message.
+from that context and cite evidence via **paths** validated against a whitelist of known
+context paths; a cited path that does not exist in the batch context is rejected and the
+response falls back to a deterministic, database-backed answer. The whitelist checks the
+evidence *path*, not the value at that path. Evidence is persisted to the message.
 
 ## 10. Human-in-the-Loop Workflow
 
@@ -155,11 +162,12 @@ impersonate "AI" or any other actor.
 
 ## 11. Audit / Provenance
 
-The chain is complete: **source → normalization → matching → classification → exception →
-AI explanation → human review → resolution → audit.** Exception detail surfaces the golden
-source records, the settlement calculation breakdown, reconciliation provenance, agent
-reasoning traces, and the full audit timeline. `AuditLog` records every system, AI, and
-user action with actor, before/after state, and reason.
+Every decision surfaces its **source records, settlement calculation breakdown,
+reconciliation provenance, agent reasoning traces, and the full audit timeline.**
+`AuditLog` is an **append-oriented** log that records every system, AI, and user action
+with actor, before/after state, and reason. It is not a cryptographically sealed or
+hash-chained ledger — records are added, not edited in place, but the log is not
+cryptographically immutable.
 
 ## 12. Security
 
@@ -178,6 +186,11 @@ user action with actor, before/after state, and reason.
 - **Server-side enforcement** everywhere; role is never read from the request body.
 - **No secret leakage:** `.env` (Gemini key, `AUTH_SECRET`) is gitignored; safe, generic
   error responses.
+- **`AUTH_SECRET` fails closed:** sessions are HMAC-SHA256-signed with `AUTH_SECRET`. In
+  production (`NODE_ENV=production`) a missing `AUTH_SECRET` is a hard error — the app
+  refuses to mint or verify any session rather than falling back to a known default. In
+  local `next dev` a clearly-labelled dev-only fallback keeps the demo runnable out of
+  the box. Set a strong random `AUTH_SECRET` before any non-local deployment.
 
 > **Demo scope note:** This auth layer is a small, self-contained *showcase* — not a
 > production IdP. It demonstrates the correct boundary (auth + server-derived actor + role
@@ -197,7 +210,7 @@ dataset **SHA-256 fingerprint** so any change to data or logic is provable.
 | Accuracy | >85% | **98.1%** |
 | Precision | — | **98%** |
 | Recall | — | **98%** |
-| Throughput | — | **~1000 rec/s** |
+| Throughput | — | **~1000 rec/s** (250-record benchmark) |
 | Adversarial | >80% | **90% (9/10)** |
 | Calibration 0–20 | — | 98% |
 | Calibration 21–40 | — | 100% |
@@ -209,7 +222,8 @@ dataset **SHA-256 fingerprint** so any change to data or logic is provable.
 
 - SQLite is used locally; production would use Postgres (schema is portable).
 - Demo auth is a showcase, not a full IdP.
-- Fuzzy matching uses a 1% discovery window; final classification is still strict.
+- Fuzzy matching uses a 1% discovery window; the fuzzy bank-credit path can accept a
+  credit within ~1% of expected net (the UTR / exact-ID / amount path stays at ₹1).
 - The 41–60 confidence bucket (89%) reflects genuinely ambiguous, low-evidence matches and
   is intentionally not inflated.
 - Sub-tolerance rounding variance (< ₹1) is not raised as an exception by design.
@@ -225,8 +239,9 @@ npm run dev
 
 Open http://localhost:3000. Sign in with demo credentials:
 `admin` / `admin123` (full access) or `reviewer` / `review123` (reviewer).
-Override via `DEMO_ADMIN_USER/PASS`, `DEMO_REVIEWER_USER/PASS`, and set `AUTH_SECRET`
-(a secure random string) before deploying.
+Override via `DEMO_ADMIN_USER/PASS`, `DEMO_REVIEWER_USER/PASS`. Set `AUTH_SECRET`
+(a secure random string) **before deploying** — it is required in production and the
+app fails closed if it is missing.
 
 Generate a batch → run the 3-pass reconciliation → review exceptions → ask the grounded
 Q&A → inspect the audit trail.
