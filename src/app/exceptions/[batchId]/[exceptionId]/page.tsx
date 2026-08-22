@@ -1,36 +1,41 @@
 "use client";
 
-import { use, useEffect, useState, useCallback } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
-  Shield,
-  Brain,
-  FileText,
   AlertTriangle,
-  Clock,
-  Sparkles,
+  ArrowLeft,
+  ArrowRight,
   Bot,
-  User,
-  GitCommit,
-  Loader2,
+  Check,
   CheckCircle2,
-  XCircle,
   ChevronDown,
   ChevronUp,
-  ChevronRight,
-  Link2,
+  Clock3,
   Database,
+  FileText,
+  Fingerprint,
+  GitBranch,
+  Loader2,
+  LockKeyhole,
+  MessageSquareText,
+  UserRound,
+  XCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { EXCEPTION_LABELS, type ExceptionType } from "@/lib/constants";
+import {
+  formatCurrency,
+  formatDate,
+} from "@/lib/format";
+import {
+  EXCEPTION_LABELS,
+  type ExceptionType,
+} from "@/lib/constants";
 
 interface PageProps {
-  params: Promise<{ batchId: string; exceptionId: string }>;
+  params: Promise<{
+    batchId: string;
+    exceptionId: string;
+  }>;
 }
 
 interface AiExplanationData {
@@ -129,93 +134,341 @@ interface ExceptionDetailResponse {
   auditTimeline?: AuditLogItem[];
 }
 
-function getRiskColor(risk: string): string {
-  switch (risk) {
-    case "HIGH":
-      return "bg-red-500/20 text-red-400 border-red-500/30";
-    case "MEDIUM":
-      return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-    default:
-      return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+const WORKFLOW_PATH = [
+  "OPEN",
+  "INVESTIGATING",
+  "PENDING_APPROVAL",
+  "RESOLVED",
+] as const;
+
+const transitionMap: Record<string, string[]> = {
+  OPEN: ["INVESTIGATING", "ESCALATED"],
+  INVESTIGATING: ["PENDING_APPROVAL", "ESCALATED"],
+  PENDING_APPROVAL: ["RESOLVED", "REJECTED"],
+  REJECTED: ["INVESTIGATING"],
+  ESCALATED: ["INVESTIGATING"],
+  RESOLVED: ["REOPENED"],
+  REOPENED: ["INVESTIGATING"],
+};
+
+function formatExceptionType(value: string) {
+  return (
+    EXCEPTION_LABELS[value as ExceptionType] ||
+    value
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
+
+function getRiskMeta(risk: string) {
+  if (risk === "HIGH") {
+    return {
+      text: "text-[#c9877b]",
+      border: "border-[#593a35]",
+      bg: "bg-[#180f0d]",
+      dot: "bg-[#b67167]",
+    };
+  }
+
+  if (risk === "MEDIUM") {
+    return {
+      text: "text-[#c8b173]",
+      border: "border-[#584b31]",
+      bg: "bg-[#17130b]",
+      dot: "bg-[#b49a60]",
+    };
+  }
+
+  return {
+    text: "text-[#a7b58e]",
+    border: "border-[#3c4a35]",
+    bg: "bg-[#10150f]",
+    dot: "bg-[#899d73]",
+  };
+}
+
+function getStatusMeta(status: string) {
+  const map: Record<
+    string,
+    { text: string; border: string; bg: string; dot: string }
+  > = {
+    OPEN: {
+      text: "text-[#a5aaa1]",
+      border: "border-[#3a4038]",
+      bg: "bg-[#111410]",
+      dot: "bg-[#9aa09a]",
+    },
+    INVESTIGATING: {
+      text: "text-[#a9b68f]",
+      border: "border-[#44503b]",
+      bg: "bg-[#12170f]",
+      dot: "bg-[#8f9f78]",
+    },
+    PENDING_APPROVAL: {
+      text: "text-[#c9b376]",
+      border: "border-[#584b31]",
+      bg: "bg-[#17130b]",
+      dot: "bg-[#b49a60]",
+    },
+    ESCALATED: {
+      text: "text-[#c78578]",
+      border: "border-[#563b36]",
+      bg: "bg-[#170f0d]",
+      dot: "bg-[#b67167]",
+    },
+    RESOLVED: {
+      text: "text-[#a6b58c]",
+      border: "border-[#3b4a35]",
+      bg: "bg-[#10150f]",
+      dot: "bg-[#899d73]",
+    },
+    REJECTED: {
+      text: "text-[#c17f76]",
+      border: "border-[#533936]",
+      bg: "bg-[#170f0d]",
+      dot: "bg-[#b0675e]",
+    },
+    REOPENED: {
+      text: "text-[#b9aa7b]",
+      border: "border-[#50462f]",
+      bg: "bg-[#15130d]",
+      dot: "bg-[#a9966a]",
+    },
+  };
+
+  return (
+    map[status] || {
+      text: "text-[#9a9f97]",
+      border: "border-[#343934]",
+      bg: "bg-[#111410]",
+      dot: "bg-[#858b83]",
+    }
+  );
+}
+
+function SectionHeader({
+  eyebrow,
+  title,
+  icon: Icon,
+  right,
+}: {
+  eyebrow: string;
+  title: string;
+  icon: typeof Database;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-end justify-between gap-4 border-b border-[#252a24] px-5 py-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Icon className="h-3.5 w-3.5 text-[#98a27e]" />
+
+          <span className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
+            {eyebrow}
+          </span>
+        </div>
+
+        <h2 className="mt-1 text-[13px] font-semibold tracking-[-0.01em] text-[#dddcd4]">
+          {title}
+        </h2>
+      </div>
+
+      {right}
+    </div>
+  );
+}
+
+function SourceCard({
+  label,
+  icon: Icon,
+  found,
+  id,
+  amount,
+  detail,
+  date,
+}: {
+  label: string;
+  icon: typeof Database;
+  found: boolean;
+  id?: string;
+  amount?: string;
+  detail?: string;
+  date?: string | null;
+}) {
+  return (
+    <div
+      className={`border p-4 ${
+        found
+          ? "border-[#30372d] bg-[#0b0e0b]"
+          : "border-[#523632] bg-[#130e0d]"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Icon
+            className={`h-4 w-4 ${
+              found ? "text-[#9eae84]" : "text-[#b9786d]"
+            }`}
+          />
+
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9ea199]">
+            {label}
+          </span>
+        </div>
+
+        {found ? (
+          <CheckCircle2 className="h-3.5 w-3.5 text-[#8fa278]" />
+        ) : (
+          <XCircle className="h-3.5 w-3.5 text-[#ad6c62]" />
+        )}
+      </div>
+
+      {found ? (
+        <div className="mt-4 space-y-1.5">
+          <div className="truncate font-mono text-[10px] font-medium text-[#ceccc3]">
+            {id}
+          </div>
+
+          {amount ? (
+            <div className="text-[13px] font-semibold text-[#c9b57f]">
+              {amount}
+            </div>
+          ) : null}
+
+          {detail ? (
+            <div className="truncate text-[9px] text-[#666d63]">
+              {detail}
+            </div>
+          ) : null}
+
+          {date ? (
+            <div className="text-[9px] text-[#50574e]">{date}</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-4 text-[9px] italic leading-5 text-[#a06e66]">
+          Record not found in source data.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function parseEvidence(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.filter(
+      (value): value is string => typeof value === "string",
+    );
+  } catch {
+    return raw
+      ? raw
+          .split("\n")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [];
   }
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "RESOLVED":
-      return "bg-green-500/20 text-green-400 border-green-500/30";
-    case "REJECTED":
-      return "bg-red-500/20 text-red-400 border-red-500/30";
-    case "ESCALATED":
-      return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-    case "PENDING_APPROVAL":
-      return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-    default:
-      return "bg-gray-500/20 text-gray-400 border-gray-500/30";
-  }
-}
-
-export default function ExceptionDetailPage({ params }: PageProps) {
+export default function ExceptionDetailPage({
+  params,
+}: PageProps) {
   const { batchId, exceptionId } = use(params);
 
   const [data, setData] = useState<ExceptionDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [transitioning, setTransitioning] = useState(false);
+  const [explaining, setExplaining] = useState(false);
+
   const [actionReason, setReason] = useState("");
   const [resolutionText, setResolution] = useState("");
-  const [explaining, setExplaining] = useState(false);
+
   const [showProvenance, setShowProvenance] = useState(true);
+  const [showCalculation, setShowCalculation] = useState(true);
+  const [showTrace, setShowTrace] = useState(false);
+
   const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadData = useCallback(() => {
+    setLoading(true);
+
+    fetch(`/api/exceptions/detail/${exceptionId}`)
+      .then((res) => res.json())
+      .then((result: ExceptionDetailResponse) => {
+        if (result.success) {
+          setData(result);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        setActionError("Unable to load the investigation record.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [exceptionId]);
 
   useEffect(() => {
-    // The server is the security boundary (a reviewer posting RESOLVED gets 403);
-    // this only surfaces the authorization rule in the UI so a reviewer isn't
-    // surprised. Approval (RESOLVED/REJECTED) is ADMIN-only.
     fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d: { user?: { role: string } }) => {
-        if (d.user) setCurrentRole(d.user.role);
+      .then((res) => res.json())
+      .then((result: { user?: { role: string } }) => {
+        if (result.user) {
+          setCurrentRole(result.user.role);
+        }
       })
       .catch(() => {});
   }, []);
 
-  const loadData = useCallback(() => {
-    fetch(`/api/exceptions/detail/${exceptionId}`)
-      .then((res) => res.json())
-      .then((d: ExceptionDetailResponse) => {
-        if (d.success) setData(d);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [exceptionId]);
-
   useEffect(() => {
-    loadData();
+    // loadData resets loading synchronously; defer the initial invocation out
+    // of the effect frame so setState runs after the effect body completes
+    // (react-hooks/set-state-in-effect).
+    queueMicrotask(() => loadData());
   }, [loadData]);
 
   const handleTransition = async (targetState: string) => {
     setTransitioning(true);
-    try {
-      const res = await fetch(`/api/exceptions/${exceptionId}/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: targetState,
-          reason: actionReason || `Transitioned to ${targetState}`,
-          resolution: resolutionText || undefined,
-        }),
-      });
+    setActionError(null);
 
-      const resData = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        alert(`Transition failed: ${resData.error || "Unknown error"}`);
-      } else {
-        setReason("");
-        setResolution("");
-        loadData();
+    try {
+      const response = await fetch(
+        `/api/exceptions/${exceptionId}/status`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: targetState,
+            reason:
+              actionReason.trim() ||
+              `Transitioned to ${targetState}`,
+            resolution: resolutionText.trim() || undefined,
+          }),
+        },
+      );
+
+      const responseData = (await response.json()) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        setActionError(
+          responseData.error || "The workflow transition was rejected.",
+        );
+        return;
       }
-    } catch (err) {
-      alert(`Error updating status: ${String(err)}`);
+
+      setReason("");
+      setResolution("");
+      loadData();
+    } catch (error) {
+      setActionError(`Unable to update workflow: ${String(error)}`);
     } finally {
       setTransitioning(false);
     }
@@ -223,11 +476,29 @@ export default function ExceptionDetailPage({ params }: PageProps) {
 
   const handleExplain = async () => {
     setExplaining(true);
+    setActionError(null);
+
     try {
-      await fetch(`/api/exceptions/${exceptionId}/explain`, { method: "POST" });
+      const response = await fetch(
+        `/api/exceptions/${exceptionId}/explain`,
+        {
+          method: "POST",
+        },
+      );
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+
+        setActionError(
+          result.error || "Unable to generate the explanation.",
+        );
+
+        return;
+      }
+
       loadData();
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      setActionError(`Unable to generate explanation: ${String(error)}`);
     } finally {
       setExplaining(false);
     }
@@ -235,18 +506,44 @@ export default function ExceptionDetailPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="p-12 text-center text-gray-400">
-        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-400" />
-        Loading exception investigation room...
+      <div className="flex min-h-[75vh] items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center border border-[#30352f] bg-[#0d100d]">
+            <Loader2 className="h-4 w-4 animate-spin text-[#a7b587]" />
+          </div>
+
+          <p className="mt-4 text-[9px] font-medium uppercase tracking-[0.18em] text-[#656b62]">
+            Loading investigation record
+          </p>
+        </div>
       </div>
     );
   }
 
   if (!data?.exception) {
     return (
-      <div className="p-12 text-center text-gray-400">
-        <AlertTriangle className="w-10 h-10 text-yellow-400 mx-auto mb-2" />
-        Exception record not found.
+      <div className="flex min-h-[75vh] items-center justify-center">
+        <div className="w-full max-w-md border border-[#40332f] bg-[#100d0c] p-8 text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center border border-[#593b35]">
+            <AlertTriangle className="h-5 w-5 text-[#bb786e]" />
+          </div>
+
+          <h2 className="mt-5 text-lg font-semibold text-[#e7e4db]">
+            Investigation record not found
+          </h2>
+
+          <p className="mt-2 text-[11px] leading-5 text-[#6f756c]">
+            The exception may have been removed or is no longer available.
+          </p>
+
+          <Link
+            href={`/exceptions?batchId=${batchId}`}
+            className="mt-6 inline-flex items-center gap-2 border border-[#353b32] px-4 py-2.5 text-[9px] font-medium uppercase tracking-[0.14em] text-[#b0b59f] hover:bg-[#141811]"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Return to queue
+          </Link>
+        </div>
       </div>
     );
   }
@@ -258,510 +555,1022 @@ export default function ExceptionDetailPage({ params }: PageProps) {
   const traces = ex.agentTraces || [];
   const auditTimeline = data.auditTimeline || [];
 
-  const transitionMap: Record<string, string[]> = {
-    OPEN: ["INVESTIGATING", "ESCALATED"],
-    INVESTIGATING: ["PENDING_APPROVAL", "ESCALATED"],
-    PENDING_APPROVAL: ["RESOLVED", "REJECTED"],
-    REJECTED: ["INVESTIGATING"],
-    ESCALATED: ["INVESTIGATING"],
-    RESOLVED: ["REOPENED"],
-    REOPENED: ["INVESTIGATING"],
-  };
-
   const allowedNextStates = transitionMap[ex.status] || [];
+  const workflowIndex = WORKFLOW_PATH.indexOf(
+    ex.status as (typeof WORKFLOW_PATH)[number],
+  );
 
-  // Mainline workflow path shown as a stepper. Off-path states (ESCALATED,
-  // REJECTED, REOPENED) render as a distinct annotation instead.
-  const WORKFLOW_PATH = ["OPEN", "INVESTIGATING", "PENDING_APPROVAL", "RESOLVED"];
-  const workflowIndex = WORKFLOW_PATH.indexOf(ex.status);
   const offPath = workflowIndex === -1;
+
   const offPathLabel: Record<string, string> = {
-    ESCALATED: "Escalated — returned to investigation before approval",
-    REJECTED: "Rejected at approval — returned to investigation",
-    REOPENED: "Reopened — returned to investigation",
+    ESCALATED:
+      "Escalated — returned to investigation before approval.",
+    REJECTED:
+      "Rejected at approval — returned to investigation.",
+    REOPENED:
+      "Reopened — returned to investigation.",
   };
 
-  // ── Golden Record Provenance Chain ──
+  const riskMeta = getRiskMeta(ex.riskLevel);
+  const statusMeta = getStatusMeta(ex.status);
+  const evidence = explanation
+    ? parseEvidence(explanation.evidence)
+    : [];
+
+  const isAdmin = currentRole?.toUpperCase() === "ADMIN";
+
   const provenanceSteps = [
     {
       label: "Order",
       icon: FileText,
-      status: sources.order ? "FOUND" : "MISSING",
-      data: sources.order
-        ? {
-            id: sources.order.orderId,
-            amount: formatCurrency(sources.order.amount),
-            detail: sources.order.status,
-            date: sources.order.createdAt ? formatDate(sources.order.createdAt) : null,
-          }
+      found: Boolean(sources.order),
+      id: sources.order?.orderId,
+      amount: sources.order
+        ? formatCurrency(sources.order.amount)
+        : undefined,
+      detail: sources.order?.status,
+      date: sources.order?.createdAt
+        ? formatDate(sources.order.createdAt)
         : null,
-      color: sources.order ? "text-green-400" : "text-red-400",
     },
     {
       label: "Payment",
       icon: Database,
-      status: sources.payment ? "FOUND" : "MISSING",
-      data: sources.payment
-        ? {
-            id: sources.payment.paymentId,
-            amount: formatCurrency(sources.payment.amount),
-            detail: `${sources.payment.method} · fee ${formatCurrency(sources.payment.fee)}`,
-            date: null,
-          }
-        : null,
-      color: sources.payment ? "text-green-400" : "text-red-400",
+      found: Boolean(sources.payment),
+      id: sources.payment?.paymentId,
+      amount: sources.payment
+        ? formatCurrency(sources.payment.amount)
+        : undefined,
+      detail: sources.payment
+        ? `${sources.payment.method} · fee ${formatCurrency(
+            sources.payment.fee,
+          )}`
+        : undefined,
+      date: null,
     },
     {
       label: "Settlement",
-      icon: Link2,
-      status: sources.settlement ? "FOUND" : "MISSING",
-      data: sources.settlement
-        ? {
-            id: sources.settlement.settlementId,
-            amount: formatCurrency(sources.settlement.amount),
-            detail: sources.settlement.utr ? `UTR: ${sources.settlement.utr}` : "No UTR",
-            date: sources.settlement.settledAt ? formatDate(sources.settlement.settledAt) : null,
-          }
+      icon: GitBranch,
+      found: Boolean(sources.settlement),
+      id: sources.settlement?.settlementId,
+      amount: sources.settlement
+        ? formatCurrency(sources.settlement.amount)
+        : undefined,
+      detail: sources.settlement?.utr
+        ? `UTR ${sources.settlement.utr}`
+        : "No UTR",
+      date: sources.settlement?.settledAt
+        ? formatDate(sources.settlement.settledAt)
         : null,
-      color: sources.settlement ? "text-green-400" : "text-red-400",
     },
     {
-      label: "Bank Credit",
+      label: "Bank credit",
       icon: Database,
-      status: sources.bankTxn ? "FOUND" : "MISSING",
-      data: sources.bankTxn
-        ? {
-            id: sources.bankTxn.txnId,
-            amount: formatCurrency(sources.bankTxn.amount),
-            detail: sources.bankTxn.type,
-            date: sources.bankTxn.txnDate ? formatDate(sources.bankTxn.txnDate) : null,
-          }
+      found: Boolean(sources.bankTxn),
+      id: sources.bankTxn?.txnId,
+      amount: sources.bankTxn
+        ? formatCurrency(sources.bankTxn.amount)
+        : undefined,
+      detail: sources.bankTxn?.type,
+      date: sources.bankTxn?.txnDate
+        ? formatDate(sources.bankTxn.txnDate)
         : null,
-      color: sources.bankTxn ? "text-green-400" : "text-red-400",
     },
   ];
 
+  const confidenceColor =
+    ex.confidenceScore >= 80
+      ? "text-[#a9b98e]"
+      : ex.confidenceScore >= 50
+        ? "text-[#c5ac73]"
+        : "text-[#c47d73]";
+
+  const confidenceBar =
+    ex.confidenceScore >= 80
+      ? "bg-[#93a97a]"
+      : ex.confidenceScore >= 50
+        ? "bg-[#b79b61]"
+        : "bg-[#a9655e]";
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       {/* Header */}
-      <div>
+      <header className="border-b border-[#20241f] pb-6">
         <Link
           href={`/exceptions?batchId=${batchId}`}
-          className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-white mb-3 transition-colors"
+          className="mb-5 inline-flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.16em] text-[#747b71] transition hover:text-[#c0c3ba]"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Exception Queue
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Exception queue
         </Link>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-white">
-                {EXCEPTION_LABELS[ex.exceptionType] || ex.exceptionType}
-              </h1>
-              <Badge className={getRiskColor(ex.riskLevel)}>
-                {ex.riskLevel} RISK
-              </Badge>
-              <Badge variant="outline" className={getStatusColor(ex.status)}>
-                {ex.status}
-              </Badge>
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex items-center gap-2">
+              <div
+                className={`flex h-7 w-7 items-center justify-center border ${riskMeta.border} ${riskMeta.bg}`}
+              >
+                <AlertTriangle className={`h-3.5 w-3.5 ${riskMeta.text}`} />
+              </div>
+
+              <span className="text-[8px] font-medium uppercase tracking-[0.22em] text-[#626960]">
+                Investigation / Financial exception
+              </span>
             </div>
-            <p className="text-xs text-gray-400 mt-1 font-mono">
-              Exception ID: {ex.id} · Payment ID: {ex.paymentId || "N/A"}
-            </p>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-[28px] font-semibold tracking-[-0.045em] text-[#efede5]">
+                {formatExceptionType(ex.exceptionType)}
+              </h1>
+
+              <span
+                className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-[8px] font-semibold uppercase tracking-[0.14em] ${riskMeta.border} ${riskMeta.bg} ${riskMeta.text}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${riskMeta.dot}`} />
+                {ex.riskLevel} risk
+              </span>
+
+              <span
+                className={`border px-2.5 py-1 text-[8px] font-medium uppercase tracking-[0.14em] ${statusMeta.border} ${statusMeta.bg} ${statusMeta.text}`}
+              >
+                {ex.status.replace(/_/g, " ")}
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-[#60675e]">
+              <span>
+                Exception{" "}
+                <span className="font-mono text-[#888d84]">
+                  {ex.id}
+                </span>
+              </span>
+
+              <span className="text-[#353a34]">/</span>
+
+              <span>
+                Payment{" "}
+                <span className="font-mono text-[#888d84]">
+                  {ex.paymentId || "N/A"}
+                </span>
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Engine Confidence:</span>
-            <span className={`text-lg font-bold ${
-              ex.confidenceScore < 30 ? "text-red-400" :
-              ex.confidenceScore < 60 ? "text-yellow-400" : "text-green-400"
-            }`}>
-              {ex.confidenceScore}%
-            </span>
+          <div className="min-w-[220px] border border-[#2a2f28] bg-[#0d100d] px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[8px] font-medium uppercase tracking-[0.17em] text-[#62685f]">
+                Engine confidence
+              </span>
+
+              <Fingerprint className="h-3.5 w-3.5 text-[#6c7464]" />
+            </div>
+
+            <div className="mt-3 flex items-end justify-between">
+              <span className={`text-[27px] font-semibold tracking-[-0.05em] ${confidenceColor}`}>
+                {ex.confidenceScore}%
+              </span>
+
+              <span className="mb-1 text-[8px] uppercase tracking-[0.14em] text-[#5d645b]">
+                deterministic
+              </span>
+            </div>
+
+            <div className="mt-2 h-1 bg-[#232823]">
+              <div
+                className={`h-full ${confidenceBar}`}
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.max(0, ex.confidenceScore),
+                  )}%`,
+                }}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* ── WHAT IS WRONG: DISCREPANCY SUMMARY ── */}
-      {calc && (
-        <Card className="bg-gray-900 border-red-800/50">
-          <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle
-                  className={`w-5 h-5 ${ex.riskLevel === "HIGH" ? "text-red-400" : ex.riskLevel === "MEDIUM" ? "text-yellow-400" : "text-blue-400"}`}
-                />
-                <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">
-                  What&apos;s wrong
-                </span>
+      {/* Error */}
+      {actionError ? (
+        <div className="flex items-start justify-between gap-4 border border-[#593b35] bg-[#160f0d] px-4 py-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#b9756b]" />
+
+            <div>
+              <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-[#c28278]">
+                Action rejected
               </div>
-              <div className="flex-1 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+
+              <div className="mt-1 text-[11px] text-[#a97870]">
+                {actionError}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-[#6d736a] hover:text-[#aaaFA5]"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
+
+      {/* What is wrong */}
+      {calc ? (
+        <section className="border border-[#4c3b32] bg-[#110f0c]">
+          <div className="border-b border-[#332a24] px-5 py-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-[#c29c67]" />
+              <span className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#7e7769]">
+                Financial discrepancy
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-px bg-[#332a24] md:grid-cols-3">
+            <div className="bg-[#0f0d0b] px-5 py-5">
+              <div className="text-[8px] uppercase tracking-[0.17em] text-[#69645a]">
+                Expected net
+              </div>
+
+              <div className="mt-2 font-mono text-[20px] font-semibold tracking-[-0.03em] text-[#e4dfd2]">
+                {formatCurrency(calc.expectedNetAmount)}
+              </div>
+
+              <div className="mt-1 text-[9px] text-[#59564f]">
+                calculated by deterministic engine
+              </div>
+            </div>
+
+            <div className="bg-[#0f0d0b] px-5 py-5">
+              <div className="text-[8px] uppercase tracking-[0.17em] text-[#69645a]">
+                Actual settled
+              </div>
+
+              <div className="mt-2 font-mono text-[20px] font-semibold tracking-[-0.03em] text-[#d1cec3]">
+                {calc.actualSettledAmount !== null
+                  ? formatCurrency(calc.actualSettledAmount)
+                  : "—"}
+              </div>
+
+              <div className="mt-1 text-[9px] text-[#59564f]">
+                observed settlement amount
+              </div>
+            </div>
+
+            <div className="bg-[#120e0c] px-5 py-5">
+              <div className="text-[8px] uppercase tracking-[0.17em] text-[#746056]">
+                Discrepancy
+              </div>
+
+              <div className="mt-2 font-mono text-[20px] font-semibold tracking-[-0.03em] text-[#c78678]">
+                {calc.mismatchAmount
+                  ? `Δ ${formatCurrency(calc.mismatchAmount)}`
+                  : "No variance"}
+              </div>
+
+              <div className="mt-1 text-[9px] text-[#66534d]">
+                materiality / classification output
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Workflow */}
+      <section className="border border-[#2a2e29] bg-[#0d100d]">
+        <SectionHeader
+  eyebrow="Human-in-the-loop control"
+  title="Investigation workflow"
+  icon={GitBranch}
+  right={
+    <div className="flex items-center gap-2 text-[8px] uppercase tracking-[0.14em] text-[#626960]">
+      <LockKeyhole className="h-3 w-3" />
+      Controlled transitions
+    </div>
+  }
+/>
+
+        <div className="p-5">
+          <div className="grid gap-3 md:grid-cols-4">
+  {WORKFLOW_PATH.map((state, index) => {
+    const isCurrent =
+      !offPath && workflowIndex === index;
+
+    const isReached =
+      !offPath && workflowIndex > index;
+
+    return (
+      <div
+        key={state}
+        className="flex min-w-0 items-center gap-3"
+      >
+        <div className="min-w-0 flex-1">
+          <div
+            className={`relative border px-3 py-4 text-center transition ${
+              isCurrent
+                ? "border-[#697753] bg-[#141a11] shadow-[inset_0_0_0_1px_rgba(169,184,139,0.08)]"
+                : isReached
+                  ? "border-[#30382c] bg-[#0f130f]"
+                  : "border-[#262b25] bg-[#0a0d0a]"
+            }`}
+          >
+            {isCurrent && (
+              <div className="absolute inset-x-0 top-0 h-px bg-[#a8b98b]" />
+            )}
+
+            <div
+              className={`text-[9px] font-semibold uppercase tracking-[0.14em] ${
+                isCurrent
+                  ? "text-[#c2cfaa]"
+                  : isReached
+                    ? "text-[#8f997f]"
+                    : "text-[#6d746b]"
+              }`}
+            >
+              {state.replace(/_/g, " ")}
+            </div>
+
+            {isCurrent ? (
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-[7px] font-medium uppercase tracking-[0.18em] text-[#9faf83]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#9faf83]" />
+                Current
+              </div>
+            ) : isReached ? (
+              <div className="mt-2 flex justify-center">
+                <Check className="h-3 w-3 text-[#849675]" />
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {index < WORKFLOW_PATH.length - 1 ? (
+          <div className="hidden shrink-0 items-center md:flex">
+            <div
+              className={`h-px w-3 ${
+                isReached
+                  ? "bg-[#59664b]"
+                  : "bg-[#30352e]"
+              }`}
+            />
+
+            <ArrowRight
+              className={`h-3.5 w-3.5 ${
+                isReached
+                  ? "text-[#7f8e6a]"
+                  : "text-[#4a5148]"
+              }`}
+              strokeWidth={1.5}
+            />
+          </div>
+        ) : null}
+      </div>
+    );
+  })}
+</div>
+
+          {offPath ? (
+            <div className="mt-4 flex items-start gap-3 border border-[#514037] bg-[#15100d] px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#b67c6c]" />
+
+              <div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#bd877a]">
+                  {ex.status}
+                </div>
+
+                <div className="mt-1 text-[10px] leading-5 text-[#7f6860]">
+                  {offPathLabel[ex.status] ||
+                    "This case is currently outside the main approval path."}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {/* Provenance */}
+      <section className="border border-[#2a2e29] bg-[#0d100d]">
+        <div className="flex items-center justify-between border-b border-[#252a24] px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Fingerprint className="h-3.5 w-3.5 text-[#9aa47f]" />
+
+            <div>
+              <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
+                Golden record provenance
+              </div>
+
+              <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
+                Source chain
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowProvenance((value) => !value)}
+            className="inline-flex items-center gap-1.5 border border-[#30352f] px-3 py-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-[#737a71] transition hover:border-[#4a5341] hover:text-[#b0b4aa]"
+          >
+            {showProvenance ? (
+              <>
+                <ChevronUp className="h-3 w-3" />
+                Collapse
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3" />
+                Expand
+              </>
+            )}
+          </button>
+        </div>
+
+        {showProvenance ? (
+          <div className="p-5">
+            <div className="grid gap-px bg-[#252a24] md:grid-cols-4">
+              {provenanceSteps.map((step) => (
+                <SourceCard
+                  key={step.label}
+                  label={step.label}
+                  icon={step.icon}
+                  found={step.found}
+                  id={step.id}
+                  amount={step.amount}
+                  detail={step.detail}
+                  date={step.date}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      {/* Action control */}
+      <section className="border border-[#2a2e29] bg-[#0d100d]">
+        <SectionHeader
+          eyebrow="Workflow execution"
+          title="Authorized actions"
+          icon={LockKeyhole}
+          right={
+            currentRole ? (
+              <span className="border border-[#30352f] bg-[#10130f] px-2.5 py-1 text-[8px] uppercase tracking-[0.14em] text-[#777d74]">
+                {currentRole}
+              </span>
+            ) : null
+          }
+        />
+
+        <div className="p-5">
+          <div className="flex flex-wrap gap-2">
+            {allowedNextStates.length === 0 ? (
+              <div className="text-[10px] italic text-[#626960]">
+                No further workflow transitions are available.
+              </div>
+            ) : (
+              allowedNextStates.map((nextState) => {
+                const isApproval =
+                  nextState === "RESOLVED" ||
+                  nextState === "REJECTED";
+
+                const blocked = isApproval && !isAdmin;
+
+                const actionStyle =
+                  nextState === "RESOLVED"
+                    ? "border-[#495c3b] bg-[#15200f] text-[#b5c899] hover:bg-[#1a2712]"
+                    : nextState === "REJECTED" ||
+                        nextState === "ESCALATED"
+                      ? "border-[#543935] bg-[#190f0d] text-[#c7887d] hover:bg-[#211310]"
+                      : "border-[#414c39] bg-[#13180f] text-[#aab893] hover:bg-[#19200f]";
+
+                return (
+                  <button
+                    key={nextState}
+                    type="button"
+                    disabled={transitioning || blocked}
+                    title={
+                      blocked
+                        ? "ADMIN only — separation of duties"
+                        : undefined
+                    }
+                    onClick={() => handleTransition(nextState)}
+                    className={`inline-flex h-10 items-center gap-2 border px-4 text-[9px] font-semibold uppercase tracking-[0.13em] transition disabled:cursor-not-allowed disabled:opacity-40 ${actionStyle}`}
+                  >
+                    {transitioning ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : isApproval ? (
+                      <LockKeyhole className="h-3 w-3" />
+                    ) : (
+                      <ArrowRight className="h-3 w-3" />
+                    )}
+
+                    {nextState.replace(/_/g, " ")}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {allowedNextStates.some(
+            (state) =>
+              state === "RESOLVED" || state === "REJECTED",
+          ) && !isAdmin ? (
+            <div className="mt-4 flex items-start gap-2 border border-[#4e4732] bg-[#14120d] px-3 py-2.5 text-[9px] leading-5 text-[#9d8c63]">
+              <LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Approval and rejection are ADMIN-only. Reviewers can
+                investigate and prepare the case, but cannot execute the
+                final financial decision.
+              </span>
+            </div>
+          ) : null}
+
+          {allowedNextStates.length > 0 ? (
+            <div className="mt-5 grid gap-3 border-t border-[#222720] pt-5 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-[8px] font-medium uppercase tracking-[0.17em] text-[#62685f]">
+                  Transition reason
+                </label>
+
+                <input
+                  value={actionReason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Verified against bank statement / UTR..."
+                  className="h-10 w-full border border-[#30352f] bg-[#0a0d0a] px-3 text-[11px] text-[#d1d0c8] outline-none placeholder:text-[#4f554d] focus:border-[#687557]"
+                />
+              </div>
+
+              {allowedNextStates.includes("RESOLVED") ? (
                 <div>
-                  <span className="text-gray-500 text-xs mr-1.5">Expected net settlement</span>
-                  <span className="font-mono text-gray-200 font-semibold">
+                  <label className="mb-2 block text-[8px] font-medium uppercase tracking-[0.17em] text-[#62685f]">
+                    Resolution notes
+                  </label>
+
+                  <input
+                    value={resolutionText}
+                    onChange={(e) => setResolution(e.target.value)}
+                    placeholder="Describe the verified resolution..."
+                    className="h-10 w-full border border-[#30352f] bg-[#0a0d0a] px-3 text-[11px] text-[#d1d0c8] outline-none placeholder:text-[#4f554d] focus:border-[#687557]"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {/* Calculation */}
+      {calc ? (
+        <section className="border border-[#2a2e29] bg-[#0d100d]">
+          <div className="flex items-center justify-between border-b border-[#252a24] px-5 py-4">
+            <div className="flex items-center gap-2">
+              <Database className="h-3.5 w-3.5 text-[#9aa47f]" />
+
+              <div>
+                <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
+                  Deterministic engine
+                </div>
+
+                <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
+                  Settlement calculation
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowCalculation((value) => !value)}
+              className="text-[#6e756b]"
+            >
+              {showCalculation ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+
+          {showCalculation ? (
+            <div className="p-5">
+              <div className="overflow-hidden border border-[#292e28]">
+                <div className="flex items-center justify-between border-b border-[#20241f] bg-[#0a0d0a] px-4 py-3">
+                  <span className="text-[9px] uppercase tracking-[0.14em] text-[#626960]">
+                    Payment captured
+                  </span>
+
+                  <span className="font-mono text-[11px] text-[#d1d0c7]">
+                    {formatCurrency(calc.paymentAmount)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between border-b border-[#20241f] px-4 py-3">
+                  <span className="text-[9px] uppercase tracking-[0.14em] text-[#626960]">
+                    Razorpay fee deduction
+                  </span>
+
+                  <span className="font-mono text-[11px] text-[#aa7970]">
+                    -{formatCurrency(calc.fee)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between border-b border-[#20241f] px-4 py-3">
+                  <span className="text-[9px] uppercase tracking-[0.14em] text-[#626960]">
+                    GST on fee
+                  </span>
+
+                  <span className="font-mono text-[11px] text-[#aa7970]">
+                    -{formatCurrency(calc.tax)}
+                  </span>
+                </div>
+
+                {calc.refundAmount > 0 ? (
+                  <div className="flex items-center justify-between border-b border-[#20241f] px-4 py-3">
+                    <span className="text-[9px] uppercase tracking-[0.14em] text-[#626960]">
+                      Refunds applied
+                    </span>
+
+                    <span className="font-mono text-[11px] text-[#b8a06c]">
+                      -{formatCurrency(calc.refundAmount)}
+                    </span>
+                  </div>
+                ) : null}
+
+                {calc.chargebackAmount > 0 ? (
+                  <div className="flex items-center justify-between border-b border-[#20241f] px-4 py-3">
+                    <span className="text-[9px] uppercase tracking-[0.14em] text-[#626960]">
+                      Chargeback deductions
+                    </span>
+
+                    <span className="font-mono text-[11px] text-[#ab746c]">
+                      -{formatCurrency(calc.chargebackAmount)}
+                    </span>
+                  </div>
+                ) : null}
+
+                <div className="flex items-center justify-between bg-[#10140f] px-4 py-4">
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#9aa18f]">
+                    Expected net settlement
+                  </span>
+
+                  <span className="font-mono text-[15px] font-semibold text-[#b8c79a]">
                     {formatCurrency(calc.expectedNetAmount)}
                   </span>
                 </div>
-                <div className="text-gray-600">→</div>
-                <div>
-                  <span className="text-gray-500 text-xs mr-1.5">Actual settled</span>
-                  <span className="font-mono text-gray-300">
-                    {calc.actualSettledAmount ? formatCurrency(calc.actualSettledAmount) : "—"}
+
+                <div className="flex items-center justify-between border-t border-[#252a24] px-4 py-3">
+                  <span className="text-[9px] uppercase tracking-[0.14em] text-[#626960]">
+                    Actual settled amount
+                  </span>
+
+                  <span className="font-mono text-[11px] text-[#c9c8c0]">
+                    {calc.actualSettledAmount !== null
+                      ? formatCurrency(calc.actualSettledAmount)
+                      : "N/A"}
                   </span>
                 </div>
+
                 {calc.mismatchAmount ? (
-                  <div className="ml-auto flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Shortfall / discrepancy</span>
-                    <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-sm font-mono px-2.5 py-1">
+                  <div className="flex items-center justify-between border-t border-[#483731] bg-[#160f0d] px-4 py-4">
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#987066]">
+                      Discrepancy
+                    </span>
+
+                    <span className="font-mono text-[13px] font-semibold text-[#c27b70]">
                       Δ {formatCurrency(calc.mismatchAmount)}
-                    </Badge>
+                    </span>
                   </div>
                 ) : null}
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : null}
+        </section>
+      ) : null}
 
-      {/* ── WORKFLOW POSITION ── */}
-      <Card className="bg-gray-900 border-blue-800/40">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-blue-400 flex items-center gap-2">
-            <GitCommit className="w-4 h-4" /> Investigation Workflow — Where this case is now
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row md:items-center gap-3">
-            {WORKFLOW_PATH.map((state, idx) => {
-              const reached = workflowIndex >= idx && !offPath;
-              const isCurrent = workflowIndex === idx && !offPath;
-              return (
-                <div key={state} className="flex flex-1 items-center gap-3">
-                  <div
-                    className={`flex-1 rounded-lg border px-3 py-2 text-center ${
-                      isCurrent
-                        ? "bg-blue-600/25 border-blue-500 text-white"
-                        : reached
-                        ? "bg-gray-800 border-gray-700 text-gray-300"
-                        : "bg-gray-950 border-gray-800 text-gray-500"
-                    }`}
-                  >
-                    <p className="text-xs font-semibold">
-                      {state === "PENDING_APPROVAL" ? "PENDING APPROVAL" : state}
-                    </p>
-                    {isCurrent && (
-                      <p className="text-[10px] text-blue-300 mt-0.5">← you are here</p>
-                    )}
-                    {reached && !isCurrent && (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-400 mx-auto mt-0.5" />
-                    )}
-                  </div>
-                  {idx < WORKFLOW_PATH.length - 1 && (
-                    <ChevronRight className="w-4 h-4 text-gray-600 shrink-0" />
-                  )}
-                </div>
-              );
-            })}
-            {offPath && (
-              <div className="md:w-64 flex items-start gap-2 bg-rose-500/10 border border-rose-800/40 rounded-lg px-3 py-2">
-                <AlertTriangle className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-rose-300">
-                  <span className="font-semibold">{ex.status}:</span>{" "}
-                  {offPathLabel[ex.status] || "off the mainline approval path"}
-                </p>
+      {/* AI explanation */}
+      <section className="border border-[#2a2e29] bg-[#0d100d]">
+        <div className="flex flex-col gap-4 border-b border-[#252a24] px-5 py-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <MessageSquareText className="h-3.5 w-3.5 text-[#a4a17d]" />
+
+            <div>
+              <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
+                Grounded investigation
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* ── GOLDEN RECORD PROVENANCE CHAIN ── */}
-      <Card className="bg-gray-900 border-amber-800/40">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-semibold text-amber-400 flex items-center gap-2">
-            <Link2 className="w-4 h-4" /> Golden Record — Source Provenance Chain
-          </CardTitle>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowProvenance(!showProvenance)}
-            className="text-xs text-gray-400 hover:text-white h-7"
-          >
-            {showProvenance ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            {showProvenance ? "Collapse" : "Expand"}
-          </Button>
-        </CardHeader>
-        {showProvenance && (
-          <CardContent>
-            <div className="flex flex-col md:flex-row gap-3">
-              {provenanceSteps.map((step, idx) => {
-                const Icon = step.icon;
-                return (
-                  <div key={idx} className="flex-1">
-                    <div className={`bg-gray-950 rounded-lg border ${
-                      step.status === "FOUND" ? "border-gray-700" : "border-red-800"
-                    } p-3 h-full`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Icon className={`w-4 h-4 ${step.color}`} />
-                        <span className="text-xs font-semibold text-gray-300">{step.label}</span>
-                        {step.status === "FOUND" ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-green-400 ml-auto" />
-                        ) : (
-                          <XCircle className="w-3.5 h-3.5 text-red-400 ml-auto" />
-                        )}
+              <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
+                AI explanation & evidence
+              </div>
+            </div>
+          </div>
+
+          {!explanation ? (
+            <button
+              type="button"
+              disabled={explaining}
+              onClick={handleExplain}
+              className="inline-flex h-9 items-center justify-center gap-2 border border-[#514b38] bg-[#15130d] px-3 text-[9px] font-semibold uppercase tracking-[0.13em] text-[#c2b37f] transition hover:bg-[#1b1810] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {explaining ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Bot className="h-3.5 w-3.5" />
+              )}
+              {explaining ? "Generating..." : "Generate explanation"}
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 border border-[#394936] bg-[#10150e] px-2.5 py-1.5 text-[8px] uppercase tracking-[0.13em] text-[#9caf83]">
+              <CheckCircle2 className="h-3 w-3" />
+              Grounded output
+            </span>
+          )}
+        </div>
+
+        <div className="p-5">
+          {!explanation ? (
+            <div className="border border-dashed border-[#30362e] bg-[#0a0d0a] px-5 py-10 text-center">
+              <Bot className="mx-auto h-6 w-6 text-[#697064]" />
+
+              <div className="mt-4 text-[11px] font-medium text-[#8e948b]">
+                No explanation generated yet
+              </div>
+
+              <div className="mx-auto mt-1 max-w-md text-[9px] leading-5 text-[#565c54]">
+                Generate an evidence-grounded explanation using the
+                exception&apos;s verified source context.
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="border border-[#292e28] bg-[#0a0d0a] p-5">
+                <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#646b61]">
+                  Summary
+                </div>
+
+                <p className="mt-3 text-[12px] leading-6 text-[#c9c8c0]">
+                  {explanation.summary}
+                </p>
+
+                <div className="mt-6 border-t border-[#20241f] pt-4">
+                  <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#646b61]">
+                    Root cause
+                  </div>
+
+                  <p className="mt-3 text-[11px] leading-6 text-[#929890]">
+                    {explanation.reason}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border border-[#292e28] bg-[#0a0d0a] p-5">
+                <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#646b61]">
+                  Evidence chain
+                </div>
+
+                {evidence.length > 0 ? (
+                  <div className="mt-4 space-y-2">
+                    {evidence.map((item, index) => (
+                      <div
+                        key={`${item}-${index}`}
+                        className="flex items-start gap-2.5 border-b border-[#1f241f] pb-2.5 last:border-0"
+                      >
+                        <span className="mt-0.5 font-mono text-[8px] text-[#525950]">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+
+                        <span className="font-mono text-[9px] leading-5 text-[#858b83]">
+                          {item}
+                        </span>
                       </div>
-                      {step.data ? (
-                        <div className="space-y-1 text-[11px] font-mono text-gray-400">
-                          <p className="text-gray-300 font-semibold">{step.data.id}</p>
-                          <p>{step.data.amount}</p>
-                          <p className="truncate">{step.data.detail}</p>
-                          {step.data.date && <p className="text-gray-500">{step.data.date}</p>}
-                        </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 text-[9px] text-[#666c63]">
+                    No evidence references returned.
+                  </div>
+                )}
+
+                <div className="mt-6 border-t border-[#20241f] pt-4">
+                  <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#646b61]">
+                    Recommended action
+                  </div>
+
+                  <p className="mt-3 text-[11px] leading-6 text-[#aab994]">
+                    {explanation.recommendedAction}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Agent trace */}
+      {traces.length > 0 ? (
+        <section className="border border-[#2a2e29] bg-[#0d100d]">
+          <div className="flex items-center justify-between border-b border-[#252a24] px-5 py-4">
+            <div className="flex items-center gap-2">
+              <Bot className="h-3.5 w-3.5 text-[#929d7e]" />
+
+              <div>
+                <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
+                  Decision trace
+                </div>
+
+                <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
+                  Agent reasoning record
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTrace((value) => !value)}
+              className="inline-flex items-center gap-1.5 border border-[#30352f] px-3 py-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-[#737a71]"
+            >
+              {showTrace ? (
+                <>
+                  <ChevronUp className="h-3 w-3" />
+                  Collapse
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3 w-3" />
+                  Show trace
+                </>
+              )}
+            </button>
+          </div>
+
+          {showTrace ? (
+            <div className="divide-y divide-[#20241f]">
+              {traces.map((trace) => (
+                <div
+                  key={trace.id}
+                  className="grid gap-4 px-5 py-4 md:grid-cols-[160px_1fr]"
+                >
+                  <div>
+                    <div className="text-[8px] uppercase tracking-[0.14em] text-[#555c52]">
+                      Pass {trace.passNumber} / Step {trace.stepNumber}
+                    </div>
+
+                    <div className="mt-1 text-[10px] font-medium text-[#a9b18f]">
+                      {trace.agentName}
+                    </div>
+
+                    <div className="mt-1 text-[9px] text-[#666d64]">
+                      {trace.stepLabel}
+                    </div>
+                  </div>
+
+                  <div className="border-l border-[#2b302a] pl-4">
+                    <p className="font-mono text-[9px] leading-5 text-[#868c83]">
+                      {trace.stepDetail}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* Audit */}
+      <section className="border border-[#2a2e29] bg-[#0d100d]">
+        <SectionHeader
+          eyebrow="Provenance"
+          title="Exception audit history"
+          icon={Clock3}
+          right={
+            <span className="text-[8px] uppercase tracking-[0.14em] text-[#555c53]">
+              {auditTimeline.length} events
+            </span>
+          }
+        />
+
+        <div className="p-5">
+          {auditTimeline.length === 0 ? (
+            <div className="border border-dashed border-[#30362e] px-5 py-8 text-center text-[10px] text-[#626960]">
+              No audit records are associated with this exception.
+            </div>
+          ) : (
+            <div className="space-y-0">
+              {auditTimeline.map((log, index) => {
+                const isAI = log.actor === "AI";
+                const isSystem = log.actor === "SYSTEM";
+
+                return (
+                  <div
+                    key={log.id}
+                    className="relative grid grid-cols-[28px_1fr] gap-4 pb-6 last:pb-0"
+                  >
+                    {index < auditTimeline.length - 1 ? (
+                      <span className="absolute left-[13px] top-7 h-[calc(100%-16px)] w-px bg-[#282d27]" />
+                    ) : null}
+
+                    <div
+                      className={`relative z-10 flex h-7 w-7 items-center justify-center border ${
+                        isAI
+                          ? "border-[#4d4736] bg-[#15130d]"
+                          : isSystem
+                            ? "border-[#394633] bg-[#10150f]"
+                            : "border-[#354039] bg-[#101412]"
+                      }`}
+                    >
+                      {isAI ? (
+                        <Bot className="h-3.5 w-3.5 text-[#ae9e70]" />
+                      ) : isSystem ? (
+                        <ShieldCheckIcon />
                       ) : (
-                        <p className="text-[11px] text-red-400 italic">Not found in source records</p>
+                        <UserRound className="h-3.5 w-3.5 text-[#92aa83]" />
                       )}
+                    </div>
+
+                    <div className="border border-[#252a24] bg-[#0a0d0a] px-5 py-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-semibold text-[#d8d6ce]">
+                            {log.action}
+                          </span>
+
+                          <span className="border border-[#30352f] bg-[#10130f] px-1.5 py-0.5 text-[7px] uppercase tracking-[0.13em] text-[#7a8076]">
+                            {log.actor}
+                          </span>
+                        </div>
+
+                        <span className="text-[9px] text-[#676e65]">
+                          {formatDate(log.timestamp)}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-[11px] leading-6 text-[#858b82]">
+                        {log.reason}
+                      </p>
+
+                      {log.beforeState || log.afterState ? (
+                        <div className="mt-3 grid gap-2 border-t border-[#20241f] pt-3 md:grid-cols-2">
+                          {log.beforeState ? (
+                            <div>
+                              <div className="text-[7px] uppercase tracking-[0.15em] text-[#5b6158]">
+                                Before
+                              </div>
+
+                              <div className="mt-1 truncate font-mono text-[8px] text-[#a06f68]">
+                                {log.beforeState}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {log.afterState ? (
+                            <div>
+                              <div className="text-[7px] uppercase tracking-[0.15em] text-[#5b6158]">
+                                After
+                              </div>
+
+                              <div className="mt-1 truncate font-mono text-[8px] text-[#8fa17b]">
+                                {log.afterState}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );
               })}
             </div>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* State Machine Action Control */}
-      <Card className="bg-gray-900 border-blue-800/40">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-blue-400 flex items-center gap-2">
-            <GitCommit className="w-4 h-4" /> State Machine Action Control
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-400 mr-2">Available Transitions:</span>
-            {allowedNextStates.length === 0 ? (
-              <span className="text-xs text-gray-500 italic">No transitions available</span>
-            ) : (
-              allowedNextStates.map((nextState) => {
-                const isApproval = nextState === "RESOLVED" || nextState === "REJECTED";
-                const blocked = isApproval && currentRole !== "ADMIN";
-                return (
-                  <Button
-                    key={nextState}
-                    size="sm"
-                    disabled={transitioning || blocked}
-                    title={blocked ? "ADMIN only — separation of duties" : undefined}
-                    onClick={() => handleTransition(nextState)}
-                    className={
-                      nextState === "RESOLVED"
-                        ? "bg-green-600 hover:bg-green-700 text-white"
-                        : nextState === "REJECTED" || nextState === "ESCALATED"
-                        ? "bg-rose-600 hover:bg-rose-700 text-white"
-                        : "bg-blue-600 hover:bg-blue-700 text-white"
-                    }
-                  >
-                    {transitioning ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                    {nextState}
-                    {blocked && (
-                      <Shield className="w-3 h-3 ml-1.5 opacity-70" />
-                    )}
-                  </Button>
-                );
-              })
-            )}
-            {allowedNextStates.some((s) => s === "RESOLVED" || s === "REJECTED") && currentRole !== "ADMIN" && (
-              <span className="text-[11px] text-amber-400/90 italic w-full">
-                Approve / Reject requires ADMIN (separation of duties). You can investigate and prepare the case, but the final approval is ADMIN-only.
-              </span>
-            )}
-          </div>
-
-          {allowedNextStates.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-gray-800">
-              <Input
-                placeholder="Transition Reason (e.g. Verified with bank statement UTR)..."
-                value={actionReason}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReason(e.target.value)}
-                className="bg-gray-800 border-gray-700 text-xs text-gray-200 h-8"
-              />
-              {allowedNextStates.includes("RESOLVED") && (
-                <Input
-                  placeholder="Resolution Notes (Mandatory for RESOLVED state)..."
-                  value={resolutionText}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setResolution(e.target.value)}
-                  className="bg-gray-800 border-gray-700 text-xs text-gray-200 h-8"
-                />
-              )}
-            </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      {/* Calculation Breakdown */}
-      {calc && (
-        <Card className="bg-gray-900 border-gray-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-300">
-              🧮 Settlement Calculation Breakdown
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs font-mono space-y-1 text-gray-300 bg-gray-950 p-4 rounded-lg border border-gray-800">
-            <div className="flex justify-between">
-              <span>Payment Captured Amount:</span>
-              <span>{formatCurrency(calc.paymentAmount)}</span>
-            </div>
-            <div className="flex justify-between text-red-400">
-              <span>- Razorpay Fee Deduction:</span>
-              <span>-{formatCurrency(calc.fee)}</span>
-            </div>
-            <div className="flex justify-between text-red-400">
-              <span>- GST on Fee (18%):</span>
-              <span>-{formatCurrency(calc.tax)}</span>
-            </div>
-            {calc.refundAmount > 0 && (
-              <div className="flex justify-between text-amber-400">
-                <span>- Refunds Applied:</span>
-                <span>-{formatCurrency(calc.refundAmount)}</span>
-              </div>
-            )}
-            {calc.chargebackAmount > 0 && (
-              <div className="flex justify-between text-rose-400">
-                <span>- Chargeback Deductions:</span>
-                <span>-{formatCurrency(calc.chargebackAmount)}</span>
-              </div>
-            )}
-            <div className="border-t border-gray-700 my-2 pt-2 flex justify-between font-bold text-white">
-              <span>= Expected Net Settlement:</span>
-              <span>{formatCurrency(calc.expectedNetAmount)}</span>
-            </div>
-            <div className="flex justify-between text-gray-400">
-              <span>Actual Settled Amount:</span>
-              <span>{calc.actualSettledAmount ? formatCurrency(calc.actualSettledAmount) : "N/A"}</span>
-            </div>
-            {calc.mismatchAmount ? (
-              <div className="flex justify-between font-bold text-orange-400 pt-1">
-                <span>Discrepancy / Mismatch Amount:</span>
-                <span>Δ {formatCurrency(calc.mismatchAmount)}</span>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      )}
+      {/* Bottom provenance strip */}
+      <div className="flex flex-col gap-3 border-t border-[#20241f] pt-4 text-[8px] uppercase tracking-[0.16em] text-[#4f554d] sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Fingerprint className="h-3 w-3" />
+          Evidence chain preserved
+        </div>
 
-      {/* AI Analysis */}
-      <Card className="bg-gray-900 border-purple-800/40">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-semibold text-purple-400 flex items-center gap-2">
-            <Brain className="w-4 h-4" /> AI Analysis & Evidence
-          </CardTitle>
-          {!explanation && (
-            <Button
-              size="sm"
-              disabled={explaining}
-              onClick={handleExplain}
-              className="bg-purple-600 hover:bg-purple-700 text-xs h-7"
-            >
-              {explaining ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
-              Generate AI Analysis
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {explanation ? (
-            <>
-              <div>
-                <p className="text-xs text-gray-500 font-semibold">Summary</p>
-                <p className="text-sm text-gray-200">{explanation.summary}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 font-semibold">Root Cause Explanation</p>
-                <p className="text-xs text-gray-300">{explanation.reason}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 font-semibold mb-1">Evidence Chain</p>
-                <ul className="list-disc list-inside text-xs text-gray-400 space-y-1 font-mono">
-                  {(JSON.parse(explanation.evidence || "[]") as string[]).map((ev, idx) => (
-                    <li key={idx}>{ev}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="pt-2 border-t border-gray-800">
-                <p className="text-xs text-gray-500 font-semibold">Recommended Action</p>
-                <p className="text-xs text-green-400 font-medium">{explanation.recommendedAction}</p>
-              </div>
-            </>
-          ) : (
-            <p className="text-xs text-gray-500 italic">No AI analysis generated yet for this exception.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Agent Reasoning Trace */}
-      {traces.length > 0 && (
-        <Card className="bg-gray-900 border-gray-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-              <Bot className="w-4 h-4 text-blue-400" /> Agent Reasoning Trace (Step-by-Step)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {traces.map((trace) => (
-              <div key={trace.id} className="bg-gray-950 p-3 rounded border border-gray-800 text-xs">
-                <div className="flex items-center justify-between text-gray-400 mb-1">
-                  <span className="font-semibold text-blue-400">
-                    Pass {trace.passNumber}: {trace.agentName} (Step {trace.stepNumber})
-                  </span>
-                  <span>{trace.stepLabel}</span>
-                </div>
-                <p className="text-gray-300 font-mono">{trace.stepDetail}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Audit History */}
-      <Card className="bg-gray-900 border-gray-800">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-orange-400" /> Exception Audit History
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {auditTimeline.length === 0 ? (
-            <p className="text-xs text-gray-500 italic">No audit records for this exception.</p>
-          ) : (
-            auditTimeline.map((log) => (
-              <div key={log.id} className="flex items-start gap-3 text-xs border-b border-gray-800 pb-2.5 last:border-0">
-                <div className="mt-0.5">
-                  {log.actor === "AI" ? (
-                    <Bot className="w-4 h-4 text-purple-400" />
-                  ) : log.actor === "SYSTEM" ? (
-                    <Shield className="w-4 h-4 text-blue-400" />
-                  ) : (
-                    <User className="w-4 h-4 text-green-400" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-200">
-                      {log.action} by {log.actor}
-                    </span>
-                    <span className="text-[10px] text-gray-500">{formatDate(log.timestamp)}</span>
-                  </div>
-                  <p className="text-gray-400 mt-0.5">{log.reason}</p>
-                  {log.beforeState && (
-                    <p className="text-red-400/80 text-[10px] mt-1 font-mono">- {log.beforeState}</p>
-                  )}
-                  {log.afterState && (
-                    <p className="text-green-400/80 text-[10px] mt-0.5 font-mono">+ {log.afterState}</p>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+        <div className="flex items-center gap-4">
+          <span>Deterministic classification</span>
+          <span>Human controlled</span>
+          <span>Auditable</span>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ShieldCheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-3.5 w-3.5 text-[#91a17c]"
+      aria-hidden="true"
+    >
+      <path d="M12 3 5.5 6v5.2c0 4.2 2.7 7.9 6.5 9.4 3.8-1.5 6.5-5.2 6.5-9.4V6L12 3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
   );
 }

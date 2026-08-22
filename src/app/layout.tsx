@@ -1,30 +1,28 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AppShell } from "@/components/layout/app-shell";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "SettleMate AI — AI Finance Controller",
   description:
-    "Multi-agent payment reconciliation with adversarial self-testing. Built for Razorpay AI Buildathon Track 4.",
+    "Deterministic payment reconciliation with controlled AI, human approval, and complete auditability.",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="en" className="dark">
-      <body className={inter.className}>
-        <div className="flex h-screen overflow-hidden bg-gray-950 text-gray-100">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">
-            <div className="p-6 max-w-7xl mx-auto">{children}</div>
-          </main>
-        </div>
+      <body className={`${inter.className} bg-[#070b12] antialiased`}>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
