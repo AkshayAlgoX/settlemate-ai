@@ -8,6 +8,8 @@ import {
   findManyToManyMatch,
   type CardinalityMatch,
 } from "./cardinality";
+import { SCALE_CONFIG } from "./scale/buckets";
+import { runScalableCardinality } from "./scale/scale-run";
 
 interface CardinalityConfig {
   maxGroupSize: number;
@@ -61,13 +63,75 @@ function hasBankRelationship(result: MatchResult): boolean {
   return result.bankTxnIds.length > 0;
 }
 
-export function applyCardinalityMatching(
+export interface CardinalityMatchingOpts {
+  batchId?: string;
+  runId?: string;
+}
+
+/**
+ * Apply a resolved cardinality relationship to the affected ReconciliationResult rows
+ * and mark its bank credits consumed. Mirrors the application block used by the
+ * small-path PASS 3 so both paths label results consistently.
+ */
+function applyRelationshipToResults(
   results: MatchResult[],
   data: BatchData,
-): CardinalityApplication {
+  resultByPaymentId: Map<string, MatchResult>,
+  usedBankTxnIds: Set<string>,
+  relationship: CardinalityMatch,
+  settlementById?: Map<string, BatchData["settlements"][number]>,
+): void {
+  for (const settlementId of relationship.settlementIds) {
+    const settlement = settlementById
+      ? settlementById.get(settlementId)
+      : data.settlements.find((item) => item.settlementId === settlementId);
+
+    if (!settlement) continue;
+
+    const result = resultByPaymentId.get(settlement.paymentId);
+
+    if (!result) continue;
+
+    result.settlementIds = result.settlementIds.includes(settlementId)
+      ? result.settlementIds
+      : [...result.settlementIds, settlementId];
+
+    result.bankTxnIds = relationship.bankTxnIds;
+    result.bankCreditedAmount = relationship.bankAmount;
+
+    setCardinality(
+      result,
+      relationship.type,
+      relationship.reasonCode,
+      relationship.confidenceScore,
+    );
+
+    result.matchMethod =
+      `CARDINALITY_${relationship.type.replace(":", "_TO_")}`;
+
+    result.matchDetails =
+      `${relationship.details}. ` +
+      `Relationship verified within ` +
+      `${relationship.differencePaise} paise.`;
+  }
+
+  for (const bankTxnId of relationship.bankTxnIds) {
+    usedBankTxnIds.add(bankTxnId);
+  }
+}
+
+export async function applyCardinalityMatching(
+  results: MatchResult[],
+  data: BatchData,
+  opts?: CardinalityMatchingOpts,
+): Promise<CardinalityApplication> {
   const relationships: CardinalityMatch[] = [];
 
   const resultByPaymentId = new Map<string, MatchResult>();
+  const settlementById = new Map<string, BatchData["settlements"][number]>();
+  for (const s of data.settlements) {
+    settlementById.set(s.settlementId, s);
+  }
 
   for (const result of results) {
     if (result.paymentId.startsWith("orphan_")) {
@@ -109,6 +173,50 @@ export function applyCardinalityMatching(
   }
 
   /*
+   * SCALABLE PATH — only for large batches (>= scalableMinRecords).
+   *
+   * The whole-array passes below are O(S·B) and bounded only in their inner solver;
+   * above the threshold they would dominate. Route the unresolved settlements + unused
+   * bulk credits (the same sets PASS 3 would consume) through the partition-aware,
+   * durable cardinality engine instead. Below the threshold the existing passes run
+   * unchanged — the 250-record benchmark and all small e2e scenarios are byte-identical.
+   */
+  if (
+    data.settlements.length + data.bankTransactions.length >=
+    SCALE_CONFIG.scalableMinRecords
+  ) {
+    if (opts?.batchId && opts.runId) {
+      const eligibleSettlements = getAvailableSettlements();
+      const unusedBulkCredits = data.bankTransactions
+        .filter(isBulkBankCredit)
+        .filter((txn) => !usedBankTxnIds.has(txn.txnId));
+
+      const scaleResult = await runScalableCardinality({
+        batchId: opts.batchId,
+        runId: opts.runId,
+        settlements: eligibleSettlements,
+        credits: unusedBulkCredits,
+      });
+
+      for (const relationship of scaleResult.relationships) {
+        applyRelationshipToResults(
+          results,
+          data,
+          resultByPaymentId,
+          usedBankTxnIds,
+          relationship,
+          settlementById,
+        );
+        relationships.push(relationship);
+      }
+
+      return { results, relationships };
+    }
+    // Fall through to the small path if batchId/runId were not provided (correct, just
+    // not durable) — never a partial/incorrect result.
+  }
+
+  /*
    * PASS 1 — explicit bulk bank credits → N:1
    */
   const bulkCredits = data.bankTransactions.filter(
@@ -142,10 +250,7 @@ export function applyCardinalityMatching(
     usedBankTxnIds.add(bankTxn.txnId);
 
     for (const settlementId of nToOne.settlementIds) {
-      const settlement = data.settlements.find(
-        (item) =>
-          item.settlementId === settlementId,
-      );
+      const settlement = settlementById.get(settlementId);
 
       if (!settlement) continue;
 
@@ -276,12 +381,7 @@ export function applyCardinalityMatching(
       relationships.push(manyToMany);
 
       for (const settlementId of manyToMany.settlementIds) {
-        const settlement =
-          data.settlements.find(
-            (item) =>
-              item.settlementId ===
-              settlementId,
-          );
+        const settlement = settlementById.get(settlementId);
 
         if (!settlement) continue;
 

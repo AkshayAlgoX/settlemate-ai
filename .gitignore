@@ -54,3 +54,4 @@ dev.db-journal
 .agents/
 .claude/
 .windsurf/
+.aider*

@@ -5,6 +5,7 @@ import {
   InvalidTransitionError,
   type WorkflowState,
 } from "./state-machine";
+import { appendAuditEvent } from "@/lib/reconciliation/audit-chain";
 
 // ── Typed domain errors (mapped to HTTP codes by the route) ──
 export class ExceptionNotFoundError extends Error {
@@ -153,6 +154,19 @@ if (actor.toUpperCase() === "AI" && toState === "RESOLVED") {
         reason: input.reason || `Workflow transitioned ${fromState} -> ${toState}`,
       },
     });
+
+    // Tamper-evident lineage — a human actor's state change on an exception. Appended inside
+    // the same transaction (client: tx) so the human action and its audit event are atomic.
+    if (actor.toUpperCase() !== "AI") {
+      await appendAuditEvent({
+        batchId: current.batchId,
+        eventType: "HUMAN_ACTION",
+        actor,
+        entityId: input.exceptionId,
+        payload: { fromState, toState },
+        client: tx,
+      });
+    }
 
     // Preserve the learning-loop signal when a case is closed.
     if (toState === "RESOLVED") {

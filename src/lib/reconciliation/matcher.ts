@@ -271,9 +271,10 @@ export function matchAllRecords(
   for (const bankTxn of data.bankTransactions) {
     if (bankTxn.type === "CREDIT" && !matchedBankTxnIds.has(bankTxn.txnId)) {
       // Check if this bank credit matches any settlement by UTR
-      const isMatchedToSettlement = data.settlements.some(
-        (s) => s.utr === bankTxn.utr
-      );
+      const isMatchedToSettlement =
+        bankTxn.utr === null
+          ? indexes.hasNullSettlementUtr
+          : indexes.settlementUtrSet.has(bankTxn.utr);
 
       if (!isMatchedToSettlement) {
         // This is an orphan bank credit
@@ -317,6 +318,34 @@ export function matchAllRecords(
   return results;
 }
 
+function lowerBound(arr: number[], target: number): number {
+  let low = 0;
+  let high = arr.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (arr[mid] < target) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
+function upperBound(arr: number[], target: number): number {
+  let low = 0;
+  let high = arr.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (arr[mid] <= target) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
 function findFuzzyBankCandidates(
   settlement: { amount: number; settledAt: Date | null; settlementId: string; paymentId: string },
   indexes: Indexes,
@@ -324,24 +353,44 @@ function findFuzzyBankCandidates(
 ): BatchData["bankTransactions"] {
   const candidates: BatchData["bankTransactions"] = [];
   const TOLERANCE = Math.max(SETTLEMENT_CONFIG.AMOUNT_TOLERANCE_PAISE, Math.round(settlement.amount * 0.01));
+  const minAmount = settlement.amount - TOLERANCE;
+  const maxAmount = settlement.amount + TOLERANCE;
 
-  // Search by amount (with tolerance)
-  for (const [amount, txns] of indexes.bankByAmount.entries()) {
-    if (Math.abs(amount - settlement.amount) <= TOLERANCE) {
-      for (const txn of txns) {
-        if (matchedIds.has(txn.txnId)) continue;
-        if (txn.type !== "CREDIT") continue;
+  const sorted = indexes.sortedBankAmounts;
+  const startIdx = lowerBound(sorted, minAmount);
+  const endIdx = upperBound(sorted, maxAmount);
 
-        // Check date window
-        if (settlement.settledAt) {
-          const hoursDiff =
-            (txn.txnDate.getTime() - settlement.settledAt.getTime()) /
-            (1000 * 60 * 60);
-          if (hoursDiff < -1 || hoursDiff > SETTLEMENT_CONFIG.BANK_CREDIT_MAX_HOURS) continue;
-        }
+  if (startIdx >= endIdx) {
+    return candidates;
+  }
 
-        candidates.push(txn);
+  // Get matching amounts preserving original insertion order
+  let matchingAmounts: number[];
+  const count = endIdx - startIdx;
+  if (count === 1) {
+    matchingAmounts = [sorted[startIdx]];
+  } else {
+    matchingAmounts = sorted.slice(startIdx, endIdx);
+    const orderMap = indexes.amountFirstSeenIndex;
+    matchingAmounts.sort((a, b) => (orderMap.get(a) ?? 0) - (orderMap.get(b) ?? 0));
+  }
+
+  for (const amount of matchingAmounts) {
+    const txns = indexes.bankByAmount.get(amount);
+    if (!txns) continue;
+    for (const txn of txns) {
+      if (matchedIds.has(txn.txnId)) continue;
+      if (txn.type !== "CREDIT") continue;
+
+      // Check date window
+      if (settlement.settledAt) {
+        const hoursDiff =
+          (txn.txnDate.getTime() - settlement.settledAt.getTime()) /
+          (1000 * 60 * 60);
+        if (hoursDiff < -1 || hoursDiff > SETTLEMENT_CONFIG.BANK_CREDIT_MAX_HOURS) continue;
       }
+
+      candidates.push(txn);
     }
   }
 

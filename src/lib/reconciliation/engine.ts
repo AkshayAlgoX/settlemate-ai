@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { fetchBatchData } from "./normalizer";
 import { buildIndexes } from "./indexer";
@@ -13,14 +14,22 @@ import {
   evaluateInvariants,
   ControlFailureError,
 } from "./invariants";
-import { evaluateBatchDecisions } from "./decision";
+import { evaluateBatchDecisions, DECISION_CONFIG } from "./decision";
 import { evaluateGate } from "./risk-gate";
+import { appendAuditEvent } from "./audit-chain";
+import { buildLedgerEntries, persistLedger } from "./ledger";
+import {
+  buildInputFingerprint,
+  buildOutcomeFingerprint,
+  persistRunMetadata,
+} from "./run-metadata";
 
 export async function runReconciliation(
   batchId: string
 ): Promise<ReconciliationMetrics> {
   const totalStart = performance.now();
   const phaseTimings: Record<string, number> = {};
+  const runId = randomUUID();
 
   // Update batch status
   await prisma.batch.update({
@@ -44,6 +53,49 @@ export async function runReconciliation(
   const data = await fetchBatchData(batchId);
   phaseTimings["normalize"] = Math.round(performance.now() - phase1Start);
 
+  // Replay metadata — a deterministic fingerprint of the exact input this run consumed.
+  const inputFingerprint = buildInputFingerprint(data);
+
+  // Tamper-evident lineage — ingestion of source records, the active policy/model version,
+  // and the normalized batch shape. These are additive and never touch the metrics below.
+  await appendAuditEvent({
+    batchId,
+    eventType: "INGESTION",
+    actor: "SYSTEM",
+    payload: {
+      orders: data.orders.length,
+      payments: data.payments.length,
+      settlements: data.settlements.length,
+      bankTransactions: data.bankTransactions.length,
+      refunds: data.refunds.length,
+      chargebacks: data.chargebacks.length,
+      groundTruths: data.groundTruths.length,
+    },
+  });
+  await appendAuditEvent({
+    batchId,
+    eventType: "POLICY_MODEL_VERSION",
+    actor: "SYSTEM",
+    payload: {
+      policyVersion: "1.0",
+      modelVersion: "rule-based-pipeline-v1",
+      decisionConfig: DECISION_CONFIG,
+    },
+  });
+  await appendAuditEvent({
+    batchId,
+    eventType: "NORMALIZATION",
+    actor: "SYSTEM",
+    payload: {
+      orders: data.orders.length,
+      payments: data.payments.length,
+      settlements: data.settlements.length,
+      bankTransactions: data.bankTransactions.length,
+      refunds: data.refunds.length,
+      chargebacks: data.chargebacks.length,
+    },
+  });
+
   // Phase 2: Build Indexes
   const phase2Start = performance.now();
   const indexes = buildIndexes(data);
@@ -53,8 +105,40 @@ export async function runReconciliation(
   const phase3Start = performance.now();
   const results = matchAllRecords(data, indexes);
 
-const cardinalityApplication = applyCardinalityMatching(results, data);
+  const cardinalityApplication = await applyCardinalityMatching(
+    results,
+    data,
+    { batchId, runId },
+  );
   phaseTimings["match_classify"] = Math.round(performance.now() - phase3Start);
+
+  // Tamper-evident lineage — the matching pass and the cardinality relationship pass.
+  const matchStatusCounts: Record<string, number> = {};
+  const matchMethodCounts: Record<string, number> = {};
+  for (const r of results) {
+    matchStatusCounts[r.status] = (matchStatusCounts[r.status] ?? 0) + 1;
+    const m = r.matchMethod || "NONE";
+    matchMethodCounts[m] = (matchMethodCounts[m] ?? 0) + 1;
+  }
+  await appendAuditEvent({
+    batchId,
+    eventType: "MATCHING",
+    actor: "SYSTEM",
+    payload: { resultCount: results.length, byStatus: matchStatusCounts, byMethod: matchMethodCounts },
+  });
+  const cardinalityTypeCounts: Record<string, number> = {};
+  for (const rel of cardinalityApplication.relationships) {
+    cardinalityTypeCounts[rel.type] = (cardinalityTypeCounts[rel.type] ?? 0) + 1;
+  }
+  await appendAuditEvent({
+    batchId,
+    eventType: "CARDINALITY_RELATIONSHIP",
+    actor: "SYSTEM",
+    payload: {
+      relationshipCount: cardinalityApplication.relationships.length,
+      byType: cardinalityTypeCounts,
+    },
+  });
 
   // Decision Engine: centralize per-record outcomes (AUTO_MATCHED / SUGGESTED_MATCH /
   // EXCEPTION), confidence, reasonCode, matchStrategy, evidence, and risk. Drives the
@@ -68,11 +152,29 @@ const cardinalityApplication = applyCardinalityMatching(results, data);
     decisionReport.decisions.map((d) => [d.paymentId, d]),
   );
 
+  // Tamper-evident lineage — the Decision Engine's AI analysis of the batch.
+  await appendAuditEvent({
+    batchId,
+    eventType: "AI_ANALYSIS",
+    actor: "SYSTEM",
+    payload: {
+      autoMatched: decisionReport.aggregate.autoMatched,
+      suggestedMatches: decisionReport.aggregate.suggestedMatches,
+      exceptions: decisionReport.aggregate.exceptions,
+      maxRisk: decisionReport.aggregate.maxRisk,
+      amountAtRiskPaise: decisionReport.aggregate.amountAtRisk,
+      novelCount: decisionReport.aggregate.novelCount,
+    },
+  });
+
   // Phase 4: Evaluate
   const phase4Start = performance.now();
   const processingTimeMs = Math.round(performance.now() - totalStart);
   const metrics = evaluateResults(results, data, phaseTimings, processingTimeMs);
   phaseTimings["evaluate"] = Math.round(performance.now() - phase4Start);
+
+  // Replay metadata — a deterministic fingerprint of the outcome (excludes timing).
+  const outcomeFingerprint = buildOutcomeFingerprint(results, metrics);
 
   // Phase 5: Store results in database
   const phase5Start = performance.now();
@@ -117,14 +219,16 @@ await deleteCardinalityLinks(batchId);
     passNumber: 1,
   }));
 
-  // Batch insert in chunks of 100
-  for (let i = 0; i < reconResults.length; i += 100) {
-    const chunk = reconResults.slice(i, i + 100);
+  // Batch insert in chunks of 1000
+  const DB_CHUNK_SIZE = 1000;
+  for (let i = 0; i < reconResults.length; i += DB_CHUNK_SIZE) {
+    const chunk = reconResults.slice(i, i + DB_CHUNK_SIZE);
     await prisma.reconciliationResult.createMany({ data: chunk });
   }
   await persistCardinalityLinks(
   batchId,
   cardinalityApplication.relationships,
+  runId,
 );
 
   // Create exception records for non-matched results
@@ -151,8 +255,8 @@ await deleteCardinalityLinks(batchId);
     suggestedAction: generateSuggestedAction(r.status),
   }));
 
-  for (let i = 0; i < exceptions.length; i += 100) {
-    const chunk = exceptions.slice(i, i + 100);
+  for (let i = 0; i < exceptions.length; i += DB_CHUNK_SIZE) {
+    const chunk = exceptions.slice(i, i + DB_CHUNK_SIZE);
     await prisma.exception.createMany({ data: chunk });
   }
 
@@ -173,7 +277,28 @@ await deleteCardinalityLinks(batchId);
     metrics,
     cardinalityApplication.relationships,
   );
+
+  // Tamper-evident lineage — the invariant result (passed or failed; a failure throws below).
+  await appendAuditEvent({
+    batchId,
+    eventType: "INVARIANT_RESULT",
+    actor: "SYSTEM",
+    payload: {
+      passed: invariantReport.failures.length === 0,
+      failureCodes: invariantReport.failures.map((f) => f.code),
+      checkedCounts: invariantReport.checkedCounts,
+      checkedAmounts: invariantReport.checkedAmounts,
+    },
+  });
+
   if (invariantReport.failures.length > 0) {
+    await persistRunMetadata({
+      runId,
+      batchId,
+      inputFingerprint,
+      outcomeFingerprint,
+      outcomeStatus: "CONTROL_FAILURE",
+    });
     await prisma.batch.update({
       where: { id: batchId },
       data: { status: "CONTROL_FAILURE" },
@@ -209,6 +334,33 @@ await deleteCardinalityLinks(batchId);
     where: { batchId, action: "CONTROL_FAILURE" },
   });
   const verdict = evaluateGate(decisionReport, invariantReport, correctionAttempts);
+
+  // Persist the finalized financial state (ledger) with the approval state the routing implies.
+  // CRITICAL never reaches here — the invariants gate threw above, so the batch is not finalized.
+  const approvalState: "APPROVED" | "PENDING_REVIEW" | "PENDING_APPROVAL" =
+    verdict.routing === "STRAIGHT_THROUGH"
+      ? "APPROVED"
+      : verdict.routing === "CONTROLLED_REVIEW"
+      ? "PENDING_REVIEW"
+      : "PENDING_APPROVAL";
+  await persistLedger(
+    batchId,
+    buildLedgerEntries({ results, decisionReport, approvalState, runId }),
+  );
+
+  // Replay metadata — persist the run's captured versions + fingerprints + outcome status.
+  await persistRunMetadata({
+    runId,
+    batchId,
+    inputFingerprint,
+    outcomeFingerprint,
+    outcomeStatus:
+      verdict.routing === "STRAIGHT_THROUGH"
+        ? "COMPLETED"
+        : verdict.routing === "CONTROLLED_REVIEW"
+        ? "UNDER_REVIEW"
+        : "AWAITING_APPROVAL",
+  });
 
   async function riskGateAudit(
     routing: string,
@@ -288,6 +440,21 @@ await deleteCardinalityLinks(batchId);
         throughputRps: metrics.throughputRps,
         phaseTimings,
       }),
+    },
+  });
+
+  // Tamper-evident lineage — finalization (only reached on the COMPLETED path).
+  await appendAuditEvent({
+    batchId,
+    eventType: "FINALIZATION",
+    actor: "SYSTEM",
+    payload: {
+      status: "COMPLETED",
+      routing: verdict.routing,
+      riskLevel: verdict.riskLevel,
+      accuracy: metrics.accuracy,
+      exceptionsFound: metrics.exceptionsFound,
+      amountAtRiskPaise: metrics.amountAtRisk,
     },
   });
 

@@ -53,11 +53,26 @@ export async function persistCardinalityLinks(
   matches: CardinalityMatch[],
   runId?: string,
 ): Promise<void> {
-  for (const match of matches) {
-    await persistCardinalityLink({
-      batchId,
-      runId,
-      match,
+  if (matches.length === 0) return;
+  const rows = matches.map((match) => ({
+    batchId,
+    runId: runId ?? null,
+    relationshipType: match.type,
+    sourceType: sourceTypeFor(),
+    sourceIds: JSON.stringify(match.settlementIds),
+    targetType: targetTypeFor(),
+    targetIds: JSON.stringify(match.bankTxnIds),
+    amount: match.settlementAmount,
+    differencePaise: match.differencePaise,
+    confidenceScore: match.confidenceScore,
+    reasonCode: match.reasonCode,
+    matchMethod: `CARDINALITY_${match.type.replace(":", "_TO_")}`,
+  }));
+
+  const CHUNK = 2000;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await prisma.cardinalityLink.createMany({
+      data: rows.slice(i, i + CHUNK),
     });
   }
 }

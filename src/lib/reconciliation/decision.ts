@@ -323,9 +323,10 @@ export function evaluateBatchDecisions(
   }
 
   // Amount-at-risk for exceptions/suggestions only (mirrors the evaluator).
-  for (const d of decisions) {
+  for (let i = 0; i < decisions.length; i++) {
+    const d = decisions[i];
     if (d.outcome === "AUTO_MATCHED") continue;
-    const result = results.find((r) => r.paymentId === d.paymentId);
+    const result = results[i];
     aggregate.amountAtRisk += result
       ? Math.abs(result.expectedNetAmount || result.bankCreditedAmount || 0)
       : 0;

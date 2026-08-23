@@ -189,6 +189,12 @@ function checkDebitCreditBalance(
   amounts: Record<string, number>,
 ): void {
   const attributed = attributedTxnIds(results);
+  const settlementUtrs = new Set<string>();
+  let hasNullSettlementUtr = false;
+  for (const s of data.settlements) {
+    if (s.utr) settlementUtrs.add(s.utr);
+    else hasNullSettlementUtr = true;
+  }
 
   let creditTotal = 0;
   let debitTotal = 0;
@@ -204,9 +210,8 @@ function checkDebitCreditBalance(
       // AMOUNT_MISMATCH, ...) for human review, not silently lost. Only a credit that
       // is attached to nothing AND shares no UTR with any settlement is money the
       // engine lost track of entirely (the matcher would have orphaned it).
-      const sharesUtrWithSettlement = data.settlements.some(
-        (s) => s.utr === b.utr,
-      );
+      const sharesUtrWithSettlement =
+        b.utr === null ? hasNullSettlementUtr : settlementUtrs.has(b.utr);
       if (!attributed.has(b.txnId) && !sharesUtrWithSettlement) {
         unexplainedCredit += b.amount;
       }
@@ -349,13 +354,19 @@ function checkPartitionComplete(
   }
 
   let unaccountedCredits = 0;
+  const settlementUtrs = new Set<string>();
+  let hasNullSettlementUtr = false;
+  for (const s of data.settlements) {
+    if (s.utr) settlementUtrs.add(s.utr);
+    else hasNullSettlementUtr = true;
+  }
+
   for (const b of data.bankTransactions) {
     // Same attribution rule as the debit/credit balance: a credit unattached to any
     // result is a partition violation only when no settlement shares its UTR (i.e. it
     // is not surfaced via a settlement's exception).
-    const sharesUtrWithSettlement = data.settlements.some(
-      (s) => s.utr === b.utr,
-    );
+    const sharesUtrWithSettlement =
+      b.utr === null ? hasNullSettlementUtr : settlementUtrs.has(b.utr);
     if (b.type === "CREDIT" && !attributed.has(b.txnId) && !sharesUtrWithSettlement) {
       unaccountedCredits++;
     }

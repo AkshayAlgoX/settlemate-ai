@@ -43,6 +43,10 @@ model Batch {
   groundTruths      GroundTruth[]
   agentTraces       AgentTrace[]
   feedbackEntries   FeedbackEntry[]
+  ledgerEntries     ReconciliationLedger[]
+  auditEvents       AuditEvent[]
+  runMetadata       RunMetadata[]
+  scaleRuns         ScaleRun[]
 }
 
 model Order {
@@ -352,4 +356,139 @@ model CardinalityLink {
   @@index([relationshipType])
   @@index([sourceType])
   @@index([targetType])
+}
+
+// One row per reconciled payment — the finalized financial state, tracing back to the
+// batch/run, the decision, the source records, and the gross/fee/tax/refund/chargeback/net
+// breakdown. `status` holds ACTIVE | SUPERSEDED so a re-run keeps version history instead of
+// deleting the prior finalized state; `version` increments each run; `approvalState` records
+// how the batch was routed (APPROVED straight-through / PENDING_REVIEW / PENDING_APPROVAL).
+model ReconciliationLedger {
+  id                 String   @id @default(cuid())
+  batchId            String
+  batch              Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId          String
+  orderId            String
+  runId              String?
+  version            Int      @default(1)
+  status             String   @default("ACTIVE")
+  outcome            String
+  riskLevel          String
+  reasonCode         String
+  matchStrategy      String
+  approvalState      String
+  sourceRecordIds    String
+  grossPaise         Int
+  feePaise           Int
+  taxPaise           Int
+  refundPaise        Int
+  chargebackPaise    Int
+  netPaise           Int
+  currency           String   @default("INR")
+  expectedNetPaise   Int
+  actualSettledPaise Int?
+  bankCreditedPaise  Int?
+  mismatchPaise      Int?
+  createdAt          DateTime @default(now())
+
+  @@index([batchId])
+  @@index([paymentId])
+  @@index([status])
+}
+
+// Append-only, per-batch tamper-evident lineage. Each event links to the previous one via
+// the hash chain: currentHash = sha256(previousHash + canonicalPayload). The first event in a
+// batch chains off GENESIS_HASH. seq is consecutive per batch (enforced by @@unique). This
+// makes row alteration, deletion, or reordering detectable by verifyAuditChain — tamper-EVIDENT,
+// not cryptographically immutable.
+model AuditEvent {
+  id               String   @id @default(cuid())
+  batchId          String
+  batch            Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  seq              Int
+  eventType        String
+  actor            String
+  entityId         String?
+  occurredAt       DateTime @default(now())
+  canonicalPayload String
+  previousHash     String
+  currentHash      String
+
+  @@unique([batchId, seq])
+  @@index([batchId])
+}
+
+// One row per reconciliation run — captures what versions executed and on what input, so a run can
+// be reproduced and audited. inputFingerprint is a deterministic hash of the actual normalized input;
+// outcomeFingerprint is a deterministic hash of the reconciliation outcome (excluding timing). Replay
+// identity = (inputFingerprint, version set): same input + same versions ⇒ same outcome. A changed
+// version on a stored row means the run is no longer reproducible against the current pipeline.
+model RunMetadata {
+  id                      String   @id @default(cuid())
+  runId                   String   @unique
+  batchId                 String
+  batch                   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  inputFingerprint        String
+  outcomeFingerprint      String?
+  providerSchemaVersion   String
+  normalizerVersion       String
+  matcherVersion          String
+  cardinalityVersion      String
+  rulesetVersion          String
+  policyVersion           String
+  modelVersion            String
+  engineVersion           String
+  outcomeStatus           String?
+  createdAt               DateTime @default(now())
+
+  @@index([batchId])
+  @@index([inputFingerprint])
+}
+
+// Durable / resumable execution of the scalable cardinality path. One ScaleRun per reconciliation
+// run; one ScalePartition per deterministic candidate cluster. Statuses are stored as strings so the
+// state machine can evolve without migrations. idempotencyKey is unique so re-executing an already
+// COMPLETED partition is a no-op (safe duplicate retry — never double-counts or double-writes).
+model ScaleRun {
+  id                 String   @id @default(cuid())
+  batchId            String
+  batch              Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  runId              String
+  idempotencyKey     String   @unique // hash(runId + pipelineVersion) — one durable run per reconciliation run
+  status             String   @default("RUNNING") // RUNNING | COMPLETED | FAILED | DEAD_LETTER
+  attempt            Int      @default(0)
+  retryCount         Int      @default(0)
+  progressPct        Int      @default(0)
+  totalPartitions    Int      @default(0)
+  completedPartitions Int     @default(0)
+  checkpoint         String? // JSON: completed partitionIds + per-partition result refs, for resume
+  lastError          String?
+  nextRetryAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  partitions         ScalePartition[]
+
+  @@index([batchId])
+  @@index([status])
+}
+
+model ScalePartition {
+  id             String   @id @default(cuid())
+  scaleRunId     String
+  scaleRun       ScaleRun @relation(fields: [scaleRunId], references: [id], onDelete: Cascade)
+  partitionId    String
+  bucketKey      String
+  status         String   @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED | DEAD_LETTER
+  attempt        Int      @default(0)
+  retryCount     Int      @default(0)
+  idempotencyKey String   @unique // hash(runId + partitionId + attempt)
+  matchedCount   Int      @default(0)
+  lastError      String?
+  nextRetryAt    DateTime?
+  checkpoint     String? // JSON progress, for resume
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([scaleRunId, partitionId])
+  @@index([status])
 }
