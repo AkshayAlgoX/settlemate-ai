@@ -28,10 +28,44 @@ export async function GET(
       };
     }
 
-    const [exceptions, totalCount, aggregateRisk] = await Promise.all([
+    const search = searchParams.get("search")?.trim();
+    if (search) {
+      where.OR = [
+        { paymentId: { contains: search } },
+        { orderId: { contains: search } },
+        { settlementId: { contains: search } },
+        { exceptionType: { contains: search } },
+        { id: { contains: search } },
+      ];
+    }
+
+    const sortBy = searchParams.get("sortBy") || "risk";
+    const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+
+    let orderBy: Array<Record<string, "asc" | "desc">> = [];
+    if (sortBy === "amount") {
+      orderBy = [{ amount: sortOrder }];
+    } else if (sortBy === "confidence") {
+      orderBy = [{ confidenceScore: sortOrder }];
+    } else if (sortBy === "date") {
+      orderBy = [{ createdAt: sortOrder }];
+    } else if (sortBy === "type") {
+      orderBy = [{ exceptionType: sortOrder }];
+    } else {
+      // Default: sort by risk
+      orderBy = [{ riskLevel: sortOrder }, { confidenceScore: "asc" }];
+    }
+
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const pageSize = Math.min(200, Math.max(1, parseInt(searchParams.get("pageSize") || "50", 10)));
+    const skip = (page - 1) * pageSize;
+
+    const [exceptions, totalCount, aggregateRisk, highCount, medCount, lowCount] = await Promise.all([
       prisma.exception.findMany({
         where,
-        orderBy: [{ riskLevel: "asc" }, { confidenceScore: "asc" }],
+        skip,
+        take: pageSize,
+        orderBy,
         include: {
           aiExplanation: {
             select: { summary: true, recommendedAction: true },
@@ -40,25 +74,30 @@ export async function GET(
       }),
       prisma.exception.count({ where }),
       prisma.exception.aggregate({
-        where,
+        where: { batchId },
         _sum: { amount: true },
       }),
+      prisma.exception.count({ where: { batchId, riskLevel: "HIGH" } }),
+      prisma.exception.count({ where: { batchId, riskLevel: "MEDIUM" } }),
+      prisma.exception.count({ where: { batchId, riskLevel: "LOW" } }),
     ]);
 
-    // Count by risk
-    const highRisk = exceptions.filter((e) => e.riskLevel === "HIGH").length;
-    const mediumRisk = exceptions.filter((e) => e.riskLevel === "MEDIUM").length;
-    const lowRisk = exceptions.filter((e) => e.riskLevel === "LOW").length;
+    const totalPages = Math.ceil(totalCount / pageSize);
 
     return NextResponse.json({
       success: true,
       batchId,
+      page,
+      pageSize,
+      totalPages,
       totalCount,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
       summary: {
         totalAmountAtRisk: aggregateRisk._sum.amount || 0,
-        highRiskCount: highRisk,
-        mediumRiskCount: mediumRisk,
-        lowRiskCount: lowRisk,
+        highRiskCount: highCount,
+        mediumRiskCount: medCount,
+        lowRiskCount: lowCount,
       },
       exceptions,
     });

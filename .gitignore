@@ -55,3 +55,5 @@ dev.db-journal
 .claude/
 .windsurf/
 .aider*
+.storage_vault/
+.storage_staging/

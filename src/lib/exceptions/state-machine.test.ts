@@ -16,25 +16,31 @@ function check(name: string, fn: () => void) {
   try {
     fn();
     passed++;
-    console.log(`  ✓ ${name}`);
+    console.log("  ✓ " + name);
   } catch (err) {
     failed++;
-    console.error(`  ✗ ${name} — ${(err as Error).message}`);
+    console.error("  ✗ " + name + " — " + (err as Error).message);
   }
 }
 
-console.log("\nException Workflow State Machine — pure logic tests");
+console.log("\nException Workflow State Machine — M5 Finance-Ops logic tests");
 
 // ── Enum integrity ──
-check("exposes exactly the 7 required states", () => {
+check("exposes exactly the 13 required states", () => {
   assert.deepEqual([...WORKFLOW_STATES].sort(), [
+    "APPROVED",
+    "CORRECTING",
     "ESCALATED",
+    "FINALIZABLE",
     "INVESTIGATING",
     "OPEN",
     "PENDING_APPROVAL",
+    "RE_CALCULATING",
+    "RE_VERIFICATION",
     "REJECTED",
     "REOPENED",
     "RESOLVED",
+    "UNRESOLVABLE",
   ].sort());
 });
 
@@ -43,16 +49,21 @@ const VALID: Array<[WorkflowState, WorkflowState]> = [
   ["OPEN", "INVESTIGATING"],
   ["OPEN", "ESCALATED"],
   ["INVESTIGATING", "PENDING_APPROVAL"],
+  ["INVESTIGATING", "CORRECTING"],
   ["INVESTIGATING", "ESCALATED"],
-  ["PENDING_APPROVAL", "RESOLVED"],
+  ["PENDING_APPROVAL", "APPROVED"],
   ["PENDING_APPROVAL", "REJECTED"],
-  ["REJECTED", "INVESTIGATING"],
-  ["ESCALATED", "INVESTIGATING"],
+  ["APPROVED", "CORRECTING"],
+  ["APPROVED", "RE_CALCULATING"],
+  ["CORRECTING", "RE_CALCULATING"],
+  ["RE_CALCULATING", "RE_VERIFICATION"],
+  ["RE_VERIFICATION", "FINALIZABLE"],
+  ["FINALIZABLE", "RESOLVED"],
   ["RESOLVED", "REOPENED"],
   ["REOPENED", "INVESTIGATING"],
 ];
 for (const [from, to] of VALID) {
-  check(`valid: ${from} -> ${to}`, () => {
+  check("valid: " + from + " -> " + to, () => {
     assert.equal(canTransition(from, to), true);
     assert.doesNotThrow(() => assertValidTransition(from, to));
   });
@@ -60,22 +71,17 @@ for (const [from, to] of VALID) {
 
 // ── Key invalid transitions ──
 const INVALID: Array<[WorkflowState, WorkflowState]> = [
-  ["OPEN", "RESOLVED"], // AI/human shortcut to terminal — forbidden
-  ["OPEN", "PENDING_APPROVAL"],
-  ["OPEN", "REJECTED"],
-  ["OPEN", "REOPENED"],
+  ["OPEN", "RESOLVED"], // shortcut forbidden
+  ["OPEN", "FINALIZABLE"],
+  ["OPEN", "APPROVED"],
+  ["CORRECTING", "RESOLVED"], // shortcut forbidden
+  ["APPROVED", "RESOLVED"], // shortcut forbidden
   ["RESOLVED", "OPEN"],
-  ["RESOLVED", "PENDING_APPROVAL"],
-  ["RESOLVED", "INVESTIGATING"],
-  ["REJECTED", "RESOLVED"],
-  ["REJECTED", "REOPENED"],
   ["REOPENED", "RESOLVED"],
   ["INVESTIGATING", "RESOLVED"],
-  ["PENDING_APPROVAL", "OPEN"],
-  ["ESCALATED", "REJECTED"],
 ];
 for (const [from, to] of INVALID) {
-  check(`invalid: ${from} -> ${to} rejected`, () => {
+  check("invalid: " + from + " -> " + to + " rejected", () => {
     assert.equal(canTransition(from, to), false);
     assert.throws(
       () => assertValidTransition(from, to),
@@ -88,8 +94,8 @@ for (const [from, to] of INVALID) {
 check("getAllowedTransitions(OPEN) = [INVESTIGATING, ESCALATED]", () => {
   assert.deepEqual(getAllowedTransitions("OPEN"), ["INVESTIGATING", "ESCALATED"]);
 });
-check("getAllowedTransitions(PENDING_APPROVAL) = [RESOLVED, REJECTED]", () => {
-  assert.deepEqual(getAllowedTransitions("PENDING_APPROVAL"), ["RESOLVED", "REJECTED"]);
+check("getAllowedTransitions(FINALIZABLE) = [RESOLVED, ESCALATED]", () => {
+  assert.deepEqual(getAllowedTransitions("FINALIZABLE"), ["RESOLVED", "ESCALATED"]);
 });
 check("getAllowedTransitions(RESOLVED) = [REOPENED]", () => {
   assert.deepEqual(getAllowedTransitions("RESOLVED"), ["REOPENED"]);
@@ -98,27 +104,25 @@ check("getAllowedTransitions(RESOLVED) = [REOPENED]", () => {
 // ── isWorkflowState ──
 check("isWorkflowState rejects arbitrary strings", () => {
   assert.equal(isWorkflowState("OPEN"), true);
+  assert.equal(isWorkflowState("FINALIZABLE"), true);
   assert.equal(isWorkflowState("MANUAL_REVIEW"), false);
   assert.equal(isWorkflowState("AMOUNT_MISMATCH"), false);
   assert.equal(isWorkflowState(""), false);
 });
 
 // ── Financial-safety invariants at the machine level ──
-check("NO path reaches RESOLVED without an explicit approval step (single gateway)", () => {
-  // RESOLVED is reachable ONLY from PENDING_APPROVAL — the single, explicit
-  // human-approval gateway. ESCALATED only returns to INVESTIGATING, so an
-  // escalated case must re-investigate and pass through approval again; it can
-  // never bypass the approval step.
+check("NO path reaches RESOLVED without FINALIZABLE gate", () => {
   const sourcesOfResolved = WORKFLOW_STATES.filter(
     (s) => (WORKFLOW_TRANSITIONS[s] as readonly string[]).includes("RESOLVED")
   );
-  assert.deepEqual([...sourcesOfResolved].sort(), ["PENDING_APPROVAL"].sort());
+  assert.deepEqual([...sourcesOfResolved].sort(), ["FINALIZABLE"].sort());
 });
+
 check("OPEN has no terminal/shortcut exits", () => {
   const opensTo = WORKFLOW_TRANSITIONS["OPEN"] as readonly string[];
   assert.ok(!opensTo.includes("RESOLVED"));
-  assert.ok(!opensTo.includes("REJECTED"));
+  assert.ok(!opensTo.includes("FINALIZABLE"));
 });
 
-console.log(`\nstate-machine: ${passed} passed, ${failed} failed`);
-process.exitCode = failed > 0 ? 1 : 0;
+console.log("\nstate-machine: " + passed + " passed, " + failed + " failed\n");
+if (failed > 0) process.exit(1);

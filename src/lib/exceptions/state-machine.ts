@@ -1,35 +1,42 @@
-// ── Exception Workflow State Machine ──
-//
-// WORKFLOW STATE (Exception.status) describes WHERE an investigation is.
-// This is distinct from reconciliation CLASSIFICATION (Exception.exceptionType),
-// which describes WHAT happened. The two are independent concerns:
-//   - exceptionType: AMOUNT_MISMATCH, MISSING_BANK_CREDIT, ...  (never changes here)
-//   - status:        OPEN, INVESTIGATING, PENDING_APPROVAL, ... (driven by this module)
-//
-// Financial safety: the machine is intentionally NOT a full lattice. There is
-// NO path from OPEN (or INVESTIGATING / PENDING_APPROVAL) directly to any
-// terminal state other than the allowed ones below, and no AI-driven path may
-// reach RESOLVED without passing through an explicit human workflow step.
+/*
+ * SettleMate AI — Exception Workflow State Machine (M5 Complete Finance-Ops Loop)
+ *
+ * Implements strict, non-lattice workflow states with explicit governance gates.
+ * Prohibits shortcuts from OPEN -> RESOLVED, CORRECTING -> RESOLVED, and APPROVED -> LEDGER.
+ * Finalization strictly requires passing deterministic re-verification.
+ */
 
 export const WORKFLOW_STATES = [
   "OPEN",
   "INVESTIGATING",
   "PENDING_APPROVAL",
-  "ESCALATED",
-  "RESOLVED",
+  "APPROVED",
   "REJECTED",
+  "CORRECTING",
+  "RE_CALCULATING",
+  "RE_VERIFICATION",
+  "FINALIZABLE",
+  "RESOLVED",
+  "ESCALATED",
+  "UNRESOLVABLE",
   "REOPENED",
 ] as const;
 
 export type WorkflowState = (typeof WORKFLOW_STATES)[number];
 
-// Allowed transitions, from → [to...]. Anything not listed is rejected.
+// Allowed transitions, from -> [to...]. Anything not listed is strictly rejected.
 export const WORKFLOW_TRANSITIONS: Record<WorkflowState, readonly WorkflowState[]> = {
   OPEN: ["INVESTIGATING", "ESCALATED"],
-  INVESTIGATING: ["PENDING_APPROVAL", "ESCALATED"],
-  PENDING_APPROVAL: ["RESOLVED", "REJECTED"],
-  REJECTED: ["INVESTIGATING"],
-  ESCALATED: ["INVESTIGATING"],
+  INVESTIGATING: ["PENDING_APPROVAL", "CORRECTING", "ESCALATED"],
+  PENDING_APPROVAL: ["APPROVED", "REJECTED", "ESCALATED"],
+  REJECTED: ["INVESTIGATING", "CORRECTING", "ESCALATED"],
+  APPROVED: ["CORRECTING", "RE_CALCULATING"],
+  CORRECTING: ["RE_CALCULATING", "ESCALATED"],
+  RE_CALCULATING: ["RE_VERIFICATION", "ESCALATED"],
+  RE_VERIFICATION: ["FINALIZABLE", "CORRECTING", "ESCALATED", "UNRESOLVABLE"],
+  FINALIZABLE: ["RESOLVED", "ESCALATED"],
+  ESCALATED: ["INVESTIGATING", "UNRESOLVABLE"],
+  UNRESOLVABLE: ["INVESTIGATING"], // Controller override only
   RESOLVED: ["REOPENED"],
   REOPENED: ["INVESTIGATING"],
 };
@@ -51,14 +58,13 @@ export class InvalidTransitionError extends Error {
   readonly to: WorkflowState;
 
   constructor(from: WorkflowState, to: WorkflowState) {
-    super(`Invalid workflow transition: ${from} -> ${to}`);
+    super("Invalid workflow transition: " + from + " -> " + to);
     this.name = "InvalidTransitionError";
     this.from = from;
     this.to = to;
   }
 }
 
-// Throws InvalidTransitionError when the transition is not permitted.
 export function assertValidTransition(from: WorkflowState, to: WorkflowState): void {
   if (!canTransition(from, to)) {
     throw new InvalidTransitionError(from, to);

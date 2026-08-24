@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Bot,
+  Brain,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -19,6 +20,8 @@ import {
   Loader2,
   LockKeyhole,
   MessageSquareText,
+  ShieldAlert,
+  ShieldCheck,
   UserRound,
   XCircle,
 } from "lucide-react";
@@ -121,6 +124,141 @@ interface CalculationData {
   mismatchAmount: number | null;
 }
 
+interface EvidenceItemUI {
+  evidenceId: string;
+  sourceType: string;
+  sourceReference: string;
+  title: string;
+  contentHash: string;
+  hashAlgorithm: string;
+  byteLength: number;
+  accessClassification: string;
+  provider: string;
+  verificationStatus: "VALID" | "TAMPER_DETECTED";
+  rawText?: string;
+  structuredData?: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface ContradictionFindingUI {
+  type: string;
+  sourceA: string;
+  claimA: string;
+  valueA: string | number;
+  sourceB: string;
+  claimB: string;
+  valueB: string | number;
+  severity: string;
+  description: string;
+  recommendedReviewLevel: string;
+}
+
+interface GraphNodeUI {
+  id: string;
+  type: string;
+  label: string;
+  classification: string;
+}
+
+interface GraphEdgeUI {
+  source: string;
+  target: string;
+  relationType: string;
+  confidence: number;
+  reason: string;
+  evidenceIds: string[];
+  isTrusted: boolean;
+}
+
+
+interface ClaimCheckUI {
+  checkName: string;
+  passed: boolean;
+  message: string;
+}
+
+interface ClaimValidationUI {
+  claimId: string;
+  type: string;
+  status: "VERIFIED" | "DISPUTED" | "UNSUPPORTED" | "INSUFFICIENT_EVIDENCE";
+  statement: string;
+  evidenceIds: string[];
+  checks: ClaimCheckUI[];
+  disputeReasons: string[];
+  receiptHash: string;
+}
+
+interface ClaimAuditReceiptUI {
+  receiptId: string;
+  totalClaimsCount: number;
+  verifiedClaimsCount: number;
+  disputedClaimsCount: number;
+  unsupportedClaimsCount: number;
+  abstain: boolean;
+  canonicalHash: string;
+}
+
+interface CouncilChallengeUI {
+  code: string;
+  detail: string;
+  severity: string;
+}
+
+interface VerificationCouncilUI {
+  routing: {
+    shouldInvoke: boolean;
+    routingReason: string;
+    materialityScore: number;
+  };
+  decision: {
+    councilRunId: string;
+    outcome: string;
+    investigator: {
+      hypothesis: string;
+      reasoning: string;
+      evidenceIds: string[];
+      supportingFacts: string[];
+      uncertainties: string[];
+      recommendedAction: string;
+      confidence: number;
+    };
+    skeptic: {
+      verdict: string;
+      challenges: CouncilChallengeUI[];
+      verifiedEvidenceIds: string[];
+      confidence: number;
+      riskAdjustment: string;
+      reason: string;
+    };
+    claimReceipt?: ClaimAuditReceiptUI;
+    claimValidation?: ClaimValidationUI[];
+    finalRiskLevel: string;
+    auditTrail: {
+      councilRunId: string;
+      policyVersion: string;
+      investigatorInputHash: string;
+      investigatorOutputHash: string;
+      skepticInputHash: string;
+      skepticOutputHash: string;
+      decisionOutcome: string;
+    };
+    authorityDisclaimer: string;
+  };
+}
+
+interface GroundedInvestigationUI {
+  summary: string;
+  reason: string;
+  evidenceIds: string[];
+  recommendedAction: string;
+  confidence: number;
+  uncertainties: string[];
+  questionsRemaining: string[];
+  conflictsFound: ContradictionFindingUI[];
+  decisionOutcome: string;
+  authorityNotice: string;
+}
+
 interface ExceptionDetailResponse {
   success: boolean;
   exception?: ExceptionData;
@@ -132,6 +270,18 @@ interface ExceptionDetailResponse {
   };
   calculation?: CalculationData | null;
   auditTimeline?: AuditLogItem[];
+    evidenceVault?: {
+    items: EvidenceItemUI[];
+    totalItems: number;
+    tamperedCount: number;
+    contradictions: ContradictionFindingUI[];
+    graph: {
+      nodes: GraphNodeUI[];
+      edges: GraphEdgeUI[];
+    };
+  };
+  groundedInvestigation?: GroundedInvestigationUI;
+  verificationCouncil?: VerificationCouncilUI;
 }
 
 const WORKFLOW_PATH = [
@@ -1243,6 +1393,392 @@ export default function ExceptionDetailPage({
               </div>
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {/* Contradiction Alert Banner */}
+      {data.evidenceVault?.contradictions && data.evidenceVault.contradictions.length > 0 ? (
+        <section className="border border-[#683935] bg-[#160e0d]">
+          <div className="flex items-center justify-between border-b border-[#3d2320] px-5 py-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-[#cf796c]" />
+              <div>
+                <div className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#cf796c]">
+                  Contradiction Detected
+                </div>
+                <div className="mt-0.5 text-[12px] font-semibold text-[#eed5d0]">
+                  Conflicting claims across financial & contextual evidence
+                </div>
+              </div>
+            </div>
+            <span className="border border-[#552e2a] bg-[#221312] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.14em] text-[#e0897d]">
+              MANDATORY MAKER/CHECKER ESCALATION
+            </span>
+          </div>
+
+          <div className="p-5 space-y-3">
+            {data.evidenceVault.contradictions.map((c, idx) => (
+              <div key={idx} className="border border-[#38201d] bg-[#0f0909] p-4 text-[11px]">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="font-semibold uppercase tracking-wider text-[#e6988d]">
+                    {c.type.replace(/_/g, " ")} ({c.severity} SEVERITY)
+                  </span>
+                  <span className="font-mono text-[9px] text-[#916b65]">
+                    {c.recommendedReviewLevel}
+                  </span>
+                </div>
+                <p className="mt-1 text-[#b59e9a]">{c.description}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="border border-[#2d1a18] bg-[#140c0b] p-2.5">
+                    <div className="text-[7px] uppercase tracking-wider text-[#755752]">{c.sourceA}</div>
+                    <div className="mt-1 font-mono text-[10px] text-[#e3ceca]">{c.claimA}</div>
+                  </div>
+                  <div className="border border-[#2d1a18] bg-[#140c0b] p-2.5">
+                    <div className="text-[7px] uppercase tracking-wider text-[#755752]">{c.sourceB}</div>
+                    <div className="mt-1 font-mono text-[10px] text-[#e3ceca]">{c.claimB}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Context Vault & Evidence Graph */}
+      {data.evidenceVault ? (
+        <section className="border border-[#2a2e29] bg-[#0d100d]">
+          <div className="flex flex-col gap-4 border-b border-[#252a24] px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <Database className="h-3.5 w-3.5 text-[#98a47f]" />
+              <div>
+                <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
+                  Context Vault & Lineage
+                </div>
+                <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
+                  Deterministic Evidence Graph ({data.evidenceVault.totalItems} verified items)
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 border border-[#3e4d36] bg-[#11160f] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.14em] text-[#a4b58a]">
+                <CheckCircle2 className="h-3 w-3" />
+                SHA-256 Verified
+              </span>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* Evidence Items List */}
+            <div className="space-y-3">
+              <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[#687066]">
+                Verified Evidence Items in Vault
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {data.evidenceVault.items.map((item) => (
+                  <div
+                    key={item.evidenceId}
+                    className="border border-[#252a24] bg-[#0a0d0a] p-3.5 transition hover:border-[#384234]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="truncate font-semibold text-[11px] text-[#dddcd4]">
+                        {item.title}
+                      </div>
+                      <span className={"px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider border " + (
+                        item.verificationStatus === "VALID"
+                          ? "border-[#384a32] bg-[#10160d] text-[#a8b88d]"
+                          : "border-[#552e2a] bg-[#221312] text-[#e0897d]"
+                      )}>
+                        {item.verificationStatus}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between font-mono text-[8px] text-[#60675e]">
+                      <span>{item.sourceType}</span>
+                      <span>{item.provider}</span>
+                    </div>
+
+                    {item.rawText ? (
+                      <p className="mt-2 line-clamp-2 text-[9px] leading-4 text-[#8a9186]">
+                        {item.rawText}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-3 border-t border-[#1f241e] pt-2 flex items-center justify-between text-[7px] font-mono text-[#525950]">
+                      <span className="truncate max-w-[120px]">hash: {item.contentHash.slice(0, 12)}...</span>
+                      <span>{item.byteLength} bytes</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Relationship Graph Nodes & Edges */}
+            {data.evidenceVault.graph.edges.length > 0 ? (
+              <div className="border-t border-[#20241f] pt-4">
+                <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-[#687066]">
+                  Active Graph Relations ({data.evidenceVault.graph.edges.length} edges)
+                </div>
+
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full min-w-[600px] border-collapse text-left text-[9px]">
+                    <thead>
+                      <tr className="border-b border-[#20241f] bg-[#0a0d0a] text-[7px] uppercase tracking-[0.16em] text-[#555c52]">
+                        <th className="px-3 py-2">Source Node</th>
+                        <th className="px-3 py-2">Relation Type</th>
+                        <th className="px-3 py-2">Target Node</th>
+                        <th className="px-3 py-2 text-right">Confidence</th>
+                        <th className="px-3 py-2">Trust Level</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#181c18]">
+                      {data.evidenceVault.graph.edges.map((edge, idx) => (
+                        <tr key={idx} className="hover:bg-[#0f130f]">
+                          <td className="px-3 py-2 font-mono text-[#b3b9ab] truncate max-w-[160px]">{edge.source}</td>
+                          <td className="px-3 py-2 font-bold text-[#8ba373]">{edge.relationType}</td>
+                          <td className="px-3 py-2 font-mono text-[#b3b9ab] truncate max-w-[160px]">{edge.target}</td>
+                          <td className="px-3 py-2 text-right font-mono text-[#9caf83]">{edge.confidence}%</td>
+                          <td className="px-3 py-2">
+                            <span className={"px-1.5 py-0.5 text-[7px] uppercase font-semibold " + (edge.isTrusted ? "text-[#9caf83]" : "text-[#bda068]")}>
+                              {edge.isTrusted ? "DETERMINISTIC" : "AI_SUGGESTED"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+
+      {/* MULTI-AGENT VERIFICATION COUNCIL */}
+      {data.verificationCouncil ? (
+        <section className="border border-[#2a2e29] bg-[#0d100d]">
+          <div className="flex flex-col gap-4 border-b border-[#252a24] px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-[#98a47f]" />
+              <div>
+                <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
+                  Multi-Agent Verification Council
+                </div>
+                <div className="mt-0.5 text-[13px] font-semibold text-[#dddcd4]">
+                  Dual Adversarial Review (Investigator vs. Skeptic)
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className={"px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.14em] border " + (
+                data.verificationCouncil.decision.outcome === "VERIFIED"
+                  ? "border-[#4a5839] bg-[#12180e] text-[#a8b88d]"
+                  : data.verificationCouncil.decision.outcome === "CONTROL_FAILURE"
+                  ? "border-[#552e2a] bg-[#221312] text-[#e0897d]"
+                  : "border-[#4e432a] bg-[#14120a] text-[#c9b275]"
+              )}>
+                COUNCIL VERDICT: {data.verificationCouncil.decision.outcome}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* Dual Agent Grid */}
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Investigator Card */}
+              <div className="border border-[#252a24] bg-[#0a0d0a] p-4">
+                <div className="flex items-center justify-between border-b border-[#1f241e] pb-3">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-3.5 w-3.5 text-[#98a47f]" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#dddcd4]">
+                      Agent 1: Investigator
+                    </span>
+                  </div>
+                  <span className="font-mono text-[9px] text-[#a8b88d]">
+                    {data.verificationCouncil.decision.investigator.confidence}% confidence
+                  </span>
+                </div>
+
+                <div className="mt-3 space-y-2.5 text-[11px]">
+                  <div>
+                    <div className="text-[7px] uppercase tracking-wider text-[#60675d]">Hypothesis</div>
+                    <p className="mt-0.5 text-[#c8c7bf]">{data.verificationCouncil.decision.investigator.hypothesis}</p>
+                  </div>
+
+                  <div>
+                    <div className="text-[7px] uppercase tracking-wider text-[#60675d]">Reasoning</div>
+                    <p className="mt-0.5 text-[10px] text-[#8e958a]">{data.verificationCouncil.decision.investigator.reasoning}</p>
+                  </div>
+
+                  {data.verificationCouncil.decision.investigator.supportingFacts.length > 0 ? (
+                    <div>
+                      <div className="text-[7px] uppercase tracking-wider text-[#60675d]">Supporting Evidence Facts</div>
+                      <ul className="mt-1 space-y-1">
+                        {data.verificationCouncil.decision.investigator.supportingFacts.map((fact, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5 text-[9px] text-[#7a8176]">
+                            <span className="mt-1 h-1 w-1 rounded-full bg-[#525a4d]" />
+                            <span>{fact}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* AI CLAIMS & DETERMINISTIC VALIDATION PANEL */}
+            {data.verificationCouncil.decision.claimValidation && data.verificationCouncil.decision.claimValidation.length > 0 ? (
+              <div className="border border-[#252a24] bg-[#070a07] p-4">
+                <div className="flex items-center justify-between border-b border-[#1f241e] pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#a8b88d]" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#dddcd4]">
+                      AI Claims & Deterministic Validation ({data.verificationCouncil.decision.claimValidation.length})
+                    </span>
+                  </div>
+                  {data.verificationCouncil.decision.claimReceipt ? (
+                    <span className="font-mono text-[8px] text-[#697265]">
+                      Receipt: {data.verificationCouncil.decision.claimReceipt.canonicalHash.slice(0, 16)}...
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  {data.verificationCouncil.decision.claimValidation.map((c, cIdx) => (
+                    <div
+                      key={cIdx}
+                      className={"border p-3 " + (
+                        c.status === "VERIFIED"
+                          ? "border-[#2a3a22] bg-[#0c140a]"
+                          : c.status === "DISPUTED"
+                          ? "border-[#4a2220] bg-[#1a0a09]"
+                          : "border-[#3d331d] bg-[#141006]"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] font-bold text-[#dddcd4]">
+                            Claim {c.claimId}
+                          </span>
+                          <span className="text-[8px] uppercase tracking-wider text-[#798175]">
+                            [{c.type}]
+                          </span>
+                        </div>
+                        <span className={"px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider border " + (
+                          c.status === "VERIFIED"
+                            ? "border-[#4a5839] bg-[#12180e] text-[#a8b88d]"
+                            : c.status === "DISPUTED"
+                            ? "border-[#552e2a] bg-[#221312] text-[#e0897d]"
+                            : "border-[#4e432a] bg-[#14120a] text-[#c9b275]"
+                        )}>
+                          {c.status}
+                        </span>
+                      </div>
+
+                      <p className="mt-1.5 text-[11px] font-medium text-[#c8c7bf]">
+                        &ldquo;{c.statement}&rdquo;
+                      </p>
+
+                      {c.evidenceIds.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[7px] uppercase tracking-wider text-[#60675d]">Evidence:</span>
+                          {c.evidenceIds.map((eid, eIdx) => (
+                            <span key={eIdx} className="border border-[#2a3028] bg-[#141813] px-1.5 py-0.5 font-mono text-[8px] text-[#98a47f]">
+                              {eid}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {/* Deterministic Checks */}
+                      <div className="mt-2.5 border-t border-[#1a2018] pt-2 space-y-1">
+                        <div className="text-[7px] uppercase tracking-wider text-[#60675d]">Deterministic Validator Checks:</div>
+                        <div className="grid gap-1 sm:grid-cols-2">
+                          {c.checks.map((chk, chkIdx) => (
+                            <div key={chkIdx} className="flex items-center gap-1.5 text-[9px]">
+                              {chk.passed ? (
+                                <Check className="h-3 w-3 text-[#a8b88d] shrink-0" />
+                              ) : (
+                                <XCircle className="h-3 w-3 text-[#e0897d] shrink-0" />
+                              )}
+                              <span className={chk.passed ? "text-[#8e958a]" : "font-bold text-[#e0897d]"}>
+                                {chk.message}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {c.disputeReasons.length > 0 ? (
+                        <div className="mt-2 border border-[#4a2220] bg-[#22100e] p-2 text-[9px] text-[#e0897d]">
+                          <span className="font-bold">Dispute Reason: </span>
+                          {c.disputeReasons.join(" | ")}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Skeptic Card */}
+              <div className="border border-[#252a24] bg-[#0a0d0a] p-4">
+                <div className="flex items-center justify-between border-b border-[#1f241e] pb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-3.5 w-3.5 text-[#c9b275]" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#dddcd4]">
+                      Agent 2: Skeptic / Verifier
+                    </span>
+                  </div>
+                  <span className={"font-mono text-[9px] font-bold uppercase " + (
+                    data.verificationCouncil.decision.skeptic.verdict === "VERIFIED"
+                      ? "text-[#a8b88d]"
+                      : "text-[#e0897d]"
+                  )}>
+                    {data.verificationCouncil.decision.skeptic.verdict}
+                  </span>
+                </div>
+
+                <div className="mt-3 space-y-2.5 text-[11px]">
+                  <div>
+                    <div className="text-[7px] uppercase tracking-wider text-[#60675d]">Verification Rationale</div>
+                    <p className="mt-0.5 text-[#c8c7bf]">{data.verificationCouncil.decision.skeptic.reason}</p>
+                  </div>
+
+                  {data.verificationCouncil.decision.skeptic.challenges.length > 0 ? (
+                    <div>
+                      <div className="text-[7px] uppercase tracking-wider text-[#916b65]">Adversarial Challenges ({data.verificationCouncil.decision.skeptic.challenges.length})</div>
+                      <div className="mt-1.5 space-y-1.5">
+                        {data.verificationCouncil.decision.skeptic.challenges.map((ch, idx) => (
+                          <div key={idx} className="border border-[#38201d] bg-[#140c0b] p-2 text-[9px]">
+                            <span className="font-bold text-[#e0897d]">{ch.code}: </span>
+                            <span className="text-[#b59e9a]">{ch.detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-[#384a32] bg-[#10160d] p-2.5 text-[9px] text-[#a8b88d]">
+                      ✓ Passed all mathematical invariant, timing window, and evidence authenticity checks.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Audit Lineage & Disclaimer Banner */}
+            <div className="flex flex-col gap-2 border-t border-[#1f241e] pt-3 text-[8px] font-mono text-[#5f665c] sm:flex-row sm:items-center sm:justify-between">
+              <div className="truncate">
+                Council Run: <span className="text-[#8e958a]">{data.verificationCouncil.decision.councilRunId}</span> | Policy: <span className="text-[#8e958a]">v{data.verificationCouncil.decision.auditTrail.policyVersion}</span>
+              </div>
+              <div className="text-[#968361] uppercase tracking-wider">
+                {data.verificationCouncil.decision.authorityDisclaimer}
+              </div>
+            </div>
+          </div>
         </section>
       ) : null}
 

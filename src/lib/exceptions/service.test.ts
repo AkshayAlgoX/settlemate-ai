@@ -121,6 +121,10 @@ async function run() {
 
   await check("RESOLVED transition sets resolution/resolvedBy/resolvedAt", async () => {
     await transitionException({ exceptionId: exId, toState: "PENDING_APPROVAL", actor: "USER" });
+    await transitionException({ exceptionId: exId, toState: "APPROVED", actor: "USER" });
+    await transitionException({ exceptionId: exId, toState: "RE_CALCULATING", actor: "USER" });
+    await transitionException({ exceptionId: exId, toState: "RE_VERIFICATION", actor: "USER" });
+    await transitionException({ exceptionId: exId, toState: "FINALIZABLE", actor: "USER" });
     const res = await transitionException({
       exceptionId: exId,
       toState: "RESOLVED",

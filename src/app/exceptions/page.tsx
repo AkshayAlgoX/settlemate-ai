@@ -302,6 +302,15 @@ function ExceptionsQueueContent() {
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterRisk, setFilterRisk] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("risk");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [pageSize, setPageSize] = useState(50);
+
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrev, setHasPrev] = useState(false);
 
   useEffect(() => {
     if (batchId) return;
@@ -338,6 +347,11 @@ function ExceptionsQueueContent() {
     if (filterType !== "ALL") query.set("type", filterType);
     if (filterStatus !== "ALL") query.set("status", filterStatus);
     if (filterRisk !== "ALL") query.set("risk", filterRisk);
+    if (searchQuery.trim()) query.set("search", searchQuery.trim());
+    query.set("sortBy", sortBy);
+    query.set("sortOrder", sortOrder);
+    query.set("page", String(page));
+    query.set("pageSize", String(pageSize));
 
     // Reset the spinner outside the synchronous effect frame; the fetch's own
     // async completion clears it (react-hooks/set-state-in-effect).
@@ -350,12 +364,21 @@ function ExceptionsQueueContent() {
           success: boolean;
           exceptions: ExceptionItem[];
           summary: Summary;
+          page?: number;
+          totalPages?: number;
+          totalCount?: number;
+          hasNext?: boolean;
+          hasPrev?: boolean;
         }) => {
           if (!active) return;
 
           if (data.success) {
             setExceptions(data.exceptions);
             setSummary(data.summary);
+            if (data.totalPages !== undefined) setTotalPages(data.totalPages);
+            if (data.totalCount !== undefined) setTotalCount(data.totalCount);
+            if (data.hasNext !== undefined) setHasNext(data.hasNext);
+            if (data.hasPrev !== undefined) setHasPrev(data.hasPrev);
           }
 
           setLoading(false);
@@ -370,26 +393,13 @@ function ExceptionsQueueContent() {
     return () => {
       active = false;
     };
-  }, [batchId, filterType, filterStatus, filterRisk]);
-
-  const filteredExceptions = exceptions.filter((exception) => {
-    const query = searchQuery.trim().toLowerCase();
-
-    if (!query) return true;
-
-    return [
-      exception.paymentId,
-      exception.orderId,
-      exception.settlementId,
-      exception.exceptionType,
-      exception.status,
-    ].some((value) => value?.toLowerCase().includes(query));
-  });
+  }, [batchId, filterType, filterStatus, filterRisk, searchQuery, sortBy, sortOrder, pageSize, page]);
 
   const activeFilterCount =
     Number(filterType !== "ALL") +
     Number(filterStatus !== "ALL") +
-    Number(filterRisk !== "ALL");
+    Number(filterRisk !== "ALL") +
+    Number(searchQuery.trim() !== "");
 
   const clearFilters = () => {
     setFilterType("ALL");
@@ -498,7 +508,7 @@ function ExceptionsQueueContent() {
 
             <div className="mt-1 flex items-center gap-2">
               <span className="text-[12px] text-[#cccac2]">
-                {filteredExceptions.length} visible exceptions
+                {totalCount.toLocaleString()} total exceptions (Page {page} of {totalPages})
               </span>
 
               {activeFilterCount > 0 ? (
@@ -520,11 +530,11 @@ function ExceptionsQueueContent() {
           ) : null}
         </div>
 
-        <div className="grid gap-px bg-[#252a24] md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-px bg-[#252a24] md:grid-cols-2 xl:grid-cols-5">
   <PremiumSelect
     label="Exception type"
     value={filterType}
-    onChange={setFilterType}
+    onChange={(v) => { setFilterType(v); setPage(1); }}
     options={[
       { value: "ALL", label: "All exception types" },
       ...Object.entries(EXCEPTION_LABELS).map(([key, label]) => ({
@@ -537,7 +547,7 @@ function ExceptionsQueueContent() {
   <PremiumSelect
     label="Workflow state"
     value={filterStatus}
-    onChange={setFilterStatus}
+    onChange={(v) => { setFilterStatus(v); setPage(1); }}
     options={[
       { value: "ALL", label: "All workflow states" },
       ...WORKFLOW_STATES.map((state) => ({
@@ -550,14 +560,45 @@ function ExceptionsQueueContent() {
   <PremiumSelect
     label="Risk level"
     value={filterRisk}
-    onChange={setFilterRisk}
+    onChange={(v) => { setFilterRisk(v); setPage(1); }}
     options={[
       { value: "ALL", label: "All risk levels" },
-      { value: "HIGH", label: "High" },
-      { value: "MEDIUM", label: "Medium" },
-      { value: "LOW", label: "Low" },
+      { value: "HIGH", label: "High risk" },
+      { value: "MEDIUM", label: "Medium risk" },
+      { value: "LOW", label: "Low risk" },
     ]}
   />
+
+  <div className="bg-[#0a0d0a] p-4">
+    <div className="mb-2 flex items-center justify-between">
+      <label className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#687066]">
+        Sort & Order
+      </label>
+
+      <button
+        type="button"
+        onClick={() => { setSortOrder((o) => o === "asc" ? "desc" : "asc"); setPage(1); }}
+        className="text-[8px] uppercase font-mono tracking-[0.13em] text-[#a8b58d] transition hover:text-[#d0d8bc]"
+      >
+        {sortOrder === "desc" ? "DESC ↓" : "ASC ↑"}
+      </button>
+    </div>
+
+    <div className="relative">
+      <select
+        value={sortBy}
+        onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+        className="h-10 w-full appearance-none border border-[#30352f] bg-[#10130f] px-3 pr-8 text-[11px] text-[#d0cec5] outline-none transition hover:border-[#4a5342] focus:border-[#687557]"
+      >
+        <option value="risk">Risk Level</option>
+        <option value="amount">Exposure Amount</option>
+        <option value="confidence">Confidence Score</option>
+        <option value="date">Creation Date</option>
+        <option value="type">Exception Type</option>
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#687066]" />
+    </div>
+  </div>
 
   <div className="bg-[#0a0d0a] p-4">
     <div className="mb-2 flex items-center justify-between">
@@ -568,7 +609,7 @@ function ExceptionsQueueContent() {
       {searchQuery && (
         <button
           type="button"
-          onClick={() => setSearchQuery("")}
+          onClick={() => { setSearchQuery(""); setPage(1); }}
           className="text-[8px] uppercase tracking-[0.13em] text-[#666d63] transition hover:text-[#b5b9af]"
         >
           Clear
@@ -587,8 +628,8 @@ function ExceptionsQueueContent() {
 
       <input
         value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Payment, order or settlement ID"
+        onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+        placeholder="ID / UTR / Order / Payment"
         className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-[11px] text-[#d0cec5] outline-none placeholder:text-[#50564e]"
       />
 
@@ -613,9 +654,10 @@ function ExceptionsQueueContent() {
             </div>
           </div>
 
-          <span className="text-[8px] uppercase tracking-[0.15em] text-[#555b52]">
-            {filteredExceptions.length} records
-          </span>
+          <div className="flex items-center gap-4 text-[8px] uppercase tracking-[0.15em] text-[#555b52]">
+            <span>{totalCount.toLocaleString()} total exceptions</span>
+            <span>Page {page} of {totalPages}</span>
+          </div>
         </div>
 
         {loading ? (
@@ -630,7 +672,7 @@ function ExceptionsQueueContent() {
               </p>
             </div>
           </div>
-        ) : filteredExceptions.length === 0 ? (
+        ) : exceptions.length === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
             <div className="flex h-12 w-12 items-center justify-center border border-[#394736] bg-[#10150f]">
               <CheckCircle2 className="h-5 w-5 text-[#9daf83]" />
@@ -694,7 +736,7 @@ function ExceptionsQueueContent() {
                 </thead>
 
                 <tbody>
-                  {filteredExceptions.map((item, index) => (
+                  {exceptions.map((item, index) => (
                     <tr
                       key={item.id}
                       className="group border-b border-[#1d211d] transition hover:bg-[#10140f]"
@@ -799,7 +841,7 @@ function ExceptionsQueueContent() {
 
             {/* Mobile */}
             <div className="divide-y divide-[#1e231e] md:hidden">
-              {filteredExceptions.map((item, index) => (
+              {exceptions.map((item, index) => (
                 <Link
                   key={item.id}
                   href={`/exceptions/${batchId}/${item.id}`}
@@ -871,6 +913,53 @@ function ExceptionsQueueContent() {
                   </div>
                 </Link>
               ))}
+            </div>
+            {/* Pagination Controls */}
+            <div className="flex flex-col gap-3 border-t border-[#252a24] bg-[#0a0d0a] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4 text-[11px] text-[#788075]">
+                <div>
+                  Showing page <span className="font-semibold text-[#dddcd4]">{page}</span> of{" "}
+                  <span className="font-semibold text-[#dddcd4]">{totalPages}</span> ({totalCount.toLocaleString()} exceptions)
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[9px]">
+                  <span>Rows:</span>
+                  {[25, 50, 100].map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => { setPageSize(sz); setPage(1); }}
+                      className={`border px-1.5 py-0.5 font-mono text-[9px] transition ${
+                        pageSize === sz
+                          ? "border-[#657151] bg-[#151b11] text-[#c5d0aa]"
+                          : "border-[#30352f] text-[#788075] hover:border-[#4b5442]"
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!hasPrev || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="border border-[#30352f] bg-[#10130f] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#bfc0b8] transition hover:border-[#4a5342] disabled:opacity-40 disabled:hover:border-[#30352f]"
+                >
+                  Previous
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!hasNext || loading}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="border border-[#30352f] bg-[#10130f] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#bfc0b8] transition hover:border-[#4a5342] disabled:opacity-40 disabled:hover:border-[#30352f]"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </>
         )}
