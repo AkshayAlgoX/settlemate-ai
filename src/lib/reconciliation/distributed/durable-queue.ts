@@ -9,7 +9,6 @@
  *   5. Dead-Letter Queues (DLQ) & Exponential Retry Backoff with Jitter
  */
 
-import { randomUUID } from "node:crypto";
 import type { PartitionLease, PartitionMessage } from "./types";
 
 export interface ConsumerGroupMember {
@@ -57,6 +56,7 @@ export class DurablePartitionedQueue {
   private totalQueuedCount = 0;
   private deadLetterCount = 0;
   private retryCount = 0;
+  private leaseCounter = 0;
 
   // Backpressure resolver listeners
   private drainListeners: Array<() => void> = [];
@@ -209,7 +209,7 @@ export class DurablePartitionedQueue {
             continue;
           }
 
-          const leaseId = randomUUID();
+          const leaseId = `lse_${++this.leaseCounter}_${now}`;
           const expiresAt = now + this.leaseDurationMs;
 
           ev.status = "ASSIGNED";

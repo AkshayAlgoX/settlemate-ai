@@ -9,10 +9,27 @@ import {
   Upload,
   AlertTriangle,
   MessageSquare,
-  ScrollText,
   ShieldCheck,
+  ShieldAlert,
   Zap,
+  Award,
+  Target,
+  FlaskConical,
   LogOut,
+  PlugZap,
+  Code2,
+  BarChart3,
+  Settings2,
+  Building2,
+  History,
+  Scale,
+  Activity,
+  TrendingUp,
+  Gauge,
+  BookOpen,
+  Globe,
+  Swords,
+  BellRing,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,13 +40,34 @@ interface SessionUser {
 }
 
 const navItems = [
+  { href: "/judge-mode", label: "Judge Mode", meta: "⭐ 00", icon: Award },
+  { href: "/benchmark-comparison", label: "Benchmark Comparison", meta: "📊 00J", icon: BarChart3 },
+  { href: "/calibration", label: "Confidence Calibration", meta: "📈 00Q", icon: Gauge },
+  { href: "/playbook", label: "Reconciliation Playbooks", meta: "📚 00R", icon: BookOpen },
+  { href: "/multi-currency", label: "Multi-Currency Recon", meta: "🌍 00S", icon: Globe },
+  { href: "/ai-comparison", label: "AI vs Deterministic", meta: "⚖️ 00N", icon: Scale },
+  { href: "/live-monitor", label: "Live Monitor", meta: "📡 00O", icon: Activity },
+  { href: "/business-impact", label: "Business Impact", meta: "💼 00P", icon: TrendingUp },
+  { href: "/risk-dashboard", label: "Risk Dashboard", meta: "🚨 00T", icon: AlertTriangle },
+  { href: "/red-team", label: "Red Team", meta: "⚔️ 00U", icon: Swords },
+  { href: "/alerts", label: "Alerting Simulator", meta: "🔔 00V", icon: BellRing },
+  { href: "/forensics", label: "Forensics Playback", meta: "🔍 00W", icon: History },
+  { href: "/track04-compliance", label: "Track 04 Compliance", meta: "🎯 00F", icon: Target },
+  { href: "/sandbox", label: "Interactive Sandbox", meta: "🧪 00B", icon: FlaskConical },
+  { href: "/verify", label: "Verification Hub", meta: "🛡️ 00C", icon: ShieldCheck },
+  { href: "/scenarios", label: "Scenario Lab", meta: "🧪 00D", icon: FlaskConical },
+  { href: "/security-lab", label: "Security Lab", meta: "🛡️ 00E", icon: ShieldAlert },
+  { href: "/integration-simulator", label: "Integration Simulator", meta: "🔌 00H", icon: PlugZap },
+  { href: "/developer", label: "Developer API", meta: "💻 00I", icon: Code2 },
+  { href: "/policy-playground", label: "Policy Playground", meta: "⚙️ 00K", icon: Settings2 },
+  { href: "/multi-tenant", label: "Multi-Tenant Sim", meta: "🏢 00L", icon: Building2 },
+  { href: "/audit-trail", label: "Audit Trail Explorer", meta: "📜 00M", icon: History },
   { href: "/", label: "Overview", meta: "01", icon: LayoutDashboard },
   { href: "/demo", label: "Demo Data", meta: "02", icon: Database },
   { href: "/upload", label: "Upload CSV", meta: "03", icon: Upload },
   { href: "/dashboard", label: "Dashboard", meta: "04", icon: Zap },
   { href: "/exceptions", label: "Exceptions", meta: "05", icon: AlertTriangle },
   { href: "/chat", label: "Finance Q&A", meta: "06", icon: MessageSquare },
-  { href: "/audit", label: "Audit Trail", meta: "07", icon: ScrollText },
   { href: "/security", label: "Self-Test", meta: "08", icon: ShieldCheck },
 ];
 
@@ -44,7 +82,12 @@ function BrandMark() {
   );
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -82,23 +125,48 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="flex h-screen w-[276px] shrink-0 flex-col border-r border-[#242820] bg-[#090b09]">
-      {/* Brand */}
-      <div className="border-b border-[#242820] px-6 py-5">
-        <Link href="/" className="flex items-center gap-3">
-          <BrandMark />
+    <>
+      {/* Mobile Backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm lg:hidden animate-in fade-in"
+          onClick={onCloseMobile}
+        />
+      )}
 
-          <div>
-            <div className="text-[15px] font-semibold tracking-[-0.02em] text-[#f0eee5]">
-              SettleMate AI
-            </div>
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex h-screen w-[276px] shrink-0 flex-col border-r border-[#242820] bg-[#090b09] transition-transform duration-200 lg:static lg:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {/* Brand */}
+        <div className="flex items-center justify-between border-b border-[#242820] px-6 py-5">
+          <Link href="/" onClick={onCloseMobile} className="flex items-center gap-3">
+            <BrandMark />
 
-            <div className="mt-0.5 text-[9px] font-medium uppercase tracking-[0.28em] text-[#82877b]">
-              Finance Control Plane
+            <div>
+              <div className="text-[15px] font-semibold tracking-[-0.02em] text-[#f0eee5]">
+                SettleMate AI
+              </div>
+
+              <div className="mt-0.5 text-[9px] font-medium uppercase tracking-[0.28em] text-[#82877b]">
+                Finance Control Plane
+              </div>
             </div>
-          </div>
-        </Link>
-      </div>
+          </Link>
+
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="p-1 text-[#82877b] hover:text-[#f0eee5] lg:hidden"
+              aria-label="Close menu"
+            >
+              <LogOut className="h-4 w-4 rotate-180" />
+            </button>
+          )}
+        </div>
 
       {/* Workspace */}
       <div className="px-6 pb-3 pt-6">
@@ -108,7 +176,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3">
+      <nav className="flex-1 px-3 overflow-y-auto">
         <div className="space-y-1">
           {navItems.map((item) => {
             const isActive =
@@ -221,5 +289,6 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

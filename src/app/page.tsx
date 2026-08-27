@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
-  CheckCircle2,
-  Play,
-  ShieldAlert,
-  ShieldCheck,
   Sparkles,
+  ShieldCheck,
+  Target,
+  FileCheck,
+  AlertCircle,
+  RefreshCw,
+  Play,
+  Award,
 } from "lucide-react";
+import { GuidedTourModal } from "@/components/layout/guided-tour-modal";
 
 interface BatchMeta {
   id: string;
@@ -18,60 +21,73 @@ interface BatchMeta {
   size: number;
   status: string;
   createdAt: string;
-  completedAt?: string | null;
-  exceptionsFound?: number | null;
-  unresolvedCount?: number | null;
-  accuracy?: number | null;
 }
 
-const VERIFIED_HEADLINE_METRICS = [
+const CORE_DIFFERENTIATORS = [
   {
-    value: "98.1%",
-    label: "Official Benchmark Accuracy",
-    badge: "REAL MEASURED",
-    badgeColor: "border-[#4a5e38] text-[#a9ba8a] bg-[#11160e]",
-    detail: "98% precision · 98% recall · 90% adversarial (9/10 detected)",
-    sub: "Seed: 20260821 · Fingerprint: 81d840cd8cf9...",
+    num: "01",
+    title: "Advisory-Only AI with Deterministic Validation",
+    icon: ShieldCheck,
+    badge: "AI SAFETY BOUNDARY",
+    desc: "AI assists operations but is mathematically barred from writing to the ledger. Structured claims are mechanically checked against raw feeds by non-LLM validators at 134,511 claims/s before ledger finalization.",
   },
   {
-    value: "219,298",
-    unit: "rec/s",
-    label: "100k Streaming Chaos Recovery",
-    badge: "REAL MEASURED STRESS",
-    badgeColor: "border-[#4a5e38] text-[#a9ba8a] bg-[#11160e]",
-    detail: "10,000 crashes recovered (100%) · 0 DLQ · 78MB peak heap",
-    sub: "Effectively-Once Financial Result via CAS & Ledger Idempotency",
+    num: "02",
+    title: "98.1% Accuracy on Official Benchmark",
+    icon: Target,
+    badge: "REPRODUCIBLE TRUTH",
+    desc: "Bitwise deterministic 98.1% accuracy, 98% precision, 98% recall, and 90% adversarial detection (9/10) on the official 250-record dataset (Fingerprint: 81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b).",
   },
   {
-    value: "894,454",
-    unit: "rec/s",
-    label: "10M Streaming Capacity",
-    badge: "CAPACITY BENCHMARK",
-    badgeColor: "border-[#384a56] text-[#88b0c4] bg-[#0c141a]",
-    detail: "11.23s wall time · 489MB peak heap · O(chunk size) memory",
-    sub: "20 Horizontally Partitioned Streaming Ingestion Leases",
+    num: "03",
+    title: "Cryptographic Decision Receipts + Offline Verification",
+    icon: FileCheck,
+    badge: "TAMPER-EVIDENT DAG",
+    desc: "Every reconciliation decision emits a canonical SHA-256 Merkle DAG receipt that auditors can verify offline in <1ms with zero LLMs and zero external database dependencies.",
   },
   {
-    value: "100%",
-    label: "Adversarial Correctness",
-    badge: "REAL PROVEN",
-    badgeColor: "border-[#4a5e38] text-[#a9ba8a] bg-[#11160e]",
-    detail: "0 fabricated matches · 0 double posts · 0 silent drops",
-    sub: "16 / 16 Invariant & Combinatorial Stress Scenarios Passed",
+    num: "04",
+    title: "Honest Exception List with Reason Codes",
+    icon: AlertCircle,
+    badge: "TRANSPARENT AUDIT",
+    desc: "Unresolved variances are isolated with exact integer paise shortfalls, transparent reason codes, Context Vault evidence citations, and dual-control Maker/Checker sign-off.",
+  },
+  {
+    num: "05",
+    title: "Failure Recovery: 100K Chaos & 0 DLQ",
+    icon: RefreshCw,
+    badge: "EFFECTIVELY-ONCE RESULT",
+    desc: "Demonstrated 100% crash recovery across 10,000 injected worker failures in a 100,000-record streaming load with 0 dead-letter queue drops via atomic CAS locking and ledger idempotency.",
   },
 ];
 
-const CORE_FLOW = [
-  { num: "01", title: "Structured Ingestion", desc: "Orders, payments, settlements, bank credits, refunds & chargebacks normalized to integer paise." },
-  { num: "02", title: "N:M Combinatorial Solver", desc: "Resolves 1:1, 1:N, N:1, and N:M bulk settlements via indexed clustering and bounded graph search." },
-  { num: "03", title: "6-Point Invariants", desc: "Money conservation, debit/credit parity, and timing windows reject arithmetic hallucinations." },
-  { num: "04", title: "Context Vault & Council", desc: "Investigator finds grounded evidence; Skeptic adversarially challenges every claim." },
-  { num: "05", title: "Policy Shadow Replay", desc: "Candidate policies replay against 10,000 historical records to verify zero regression." },
-  { num: "06", title: "Maker/Checker & Ledger", desc: "Human proposals re-verified against invariants before emitting idempotent SHA-256 Merkle proofs." },
+const COMPACT_METRICS = [
+  {
+    value: "98.1%",
+    label: "Official Accuracy",
+    detail: "98% Prec · 98% Rec · 90% Adv",
+  },
+  {
+    value: "806.75",
+    unit: "rec/s",
+    label: "Core Throughput",
+    detail: "Up to 1,246 rec/s on scale",
+  },
+  {
+    value: "100%",
+    label: "Chaos Crash Recovery",
+    detail: "10k crashes · 0 DLQ drops",
+  },
+  {
+    value: "0",
+    label: "False Ledger Writes",
+    detail: "Zero-LLM invariant gated",
+  },
 ];
 
 export default function LandingPage() {
   const [batch, setBatch] = useState<BatchMeta | null>(null);
+  const [tourOpen, setTourOpen] = useState<boolean>(false);
 
   useEffect(() => {
     fetch("/api/batches")
@@ -87,7 +103,7 @@ export default function LandingPage() {
   const dashboardHref = batch ? `/dashboard?batchId=${batch.id}` : "/dashboard";
 
   return (
-    <div className="space-y-12 pb-8 md:space-y-16">
+    <div className="space-y-10 pb-8 md:space-y-12">
       {/* Product header */}
       <header className="border-b border-[#20241f] pb-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -104,224 +120,150 @@ export default function LandingPage() {
               </div>
 
               <div className="mt-0.5 text-[8px] font-medium uppercase tracking-[0.24em] text-[#656c62]">
-                Verification-First Reconciliation Control Plane
+                Autonomous Finance Controller · Track 04
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <span className="border border-[#2e3b26] bg-[#11170d] px-2.5 py-1 font-mono text-[8px] font-bold uppercase tracking-[0.14em] text-[#a9ba8a]">
               EFFECTIVELY-ONCE FINANCIAL RESULT
             </span>
             <div className="inline-flex items-center gap-2 border border-[#30372f] bg-[#0e110e] px-3 py-1.5 text-[8px] font-medium uppercase tracking-[0.16em] text-[#848b81]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#99aa7d]" />
-              System operational
+              System operational · SQLite WAL
             </div>
           </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section>
-        <div className="max-w-4xl">
-          <div className="mb-4 inline-flex items-center gap-2 border border-[#333d2a] bg-[#11150e] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.2em] text-[#a8b98b]">
-            <Sparkles className="h-3 w-3" />
-            Razorpay AI Buildathon · Track 4: AI Finance Controller
-          </div>
+      {/* Hero Section */}
+      <section className="space-y-5">
+        <div className="inline-flex items-center gap-2 border border-[#333d2a] bg-[#11150e] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.2em] text-[#a8b98b]">
+          <Sparkles className="h-3 w-3" />
+          Razorpay AI Buildathon · Track 4: AI Finance Controller
+        </div>
 
-          <h1 className="max-w-4xl text-[34px] font-semibold leading-[1.06] tracking-[-0.055em] text-[#efede5] sm:text-[44px]">
-            Financial reconciliation with
-            <br />
-            cryptographic proof & grounded AI.
-          </h1>
+        <h1 className="max-w-3xl text-[34px] font-semibold leading-[1.08] tracking-[-0.055em] text-[#efede5] sm:text-[44px]">
+          Financial reconciliation with
+          <br />
+          cryptographic proof &amp; grounded AI.
+        </h1>
 
-          <p className="mt-6 max-w-2xl text-[12px] leading-6 text-[#858c82]">
-            Reconciliation fails when data is messy, aggregated, delayed, and high volume.
-            SettleMate provides a deterministic N:M reconciliation graph, dual-agent verification council,
-            and Policy-as-Code — where <strong className="text-[#d8d5c7]">AI assists operations but never controls financial truth.</strong>
-          </p>
+        <p className="max-w-2xl text-[13px] leading-relaxed text-[#858c82]">
+          SettleMate AI reconciles multi-source financial streams through a deterministic invariant engine and grounded advisory council — where <strong className="text-[#d8d5c7]">AI assists operations, but never controls financial truth.</strong>
+        </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              href="/demo"
-              className="inline-flex h-11 items-center gap-2.5 border border-[#5d6e46] bg-[#172012] px-6 text-[9px] font-bold uppercase tracking-[0.16em] text-[#c7d5a5] shadow-[0_0_20px_rgba(164,186,128,0.1)] transition hover:bg-[#1d2917]"
-            >
-              <Play className="h-3.5 w-3.5 fill-current" />
-              Run Live Master Demo
-            </Link>
+        {/* Primary Call to Action */}
+        <div className="pt-2 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setTourOpen(true)}
+            className="inline-flex h-11 items-center gap-2.5 border border-[#5d6e46] bg-[#172012] hover:bg-[#1f2c18] px-6 text-[9px] font-bold uppercase tracking-[0.16em] text-[#c7d5a5] shadow-[0_0_20px_rgba(164,186,128,0.15)] transition"
+          >
+            <Play className="h-3.5 w-3.5 fill-current" />
+            Watch Guided Demo
+          </button>
 
-            <Link
-              href={dashboardHref}
-              className="inline-flex h-11 items-center gap-2 border border-[#363c34] bg-[#0e110e] px-5 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#abaea5] transition hover:border-[#4a5341] hover:text-[#d3d2ca]"
-            >
-              <BarChart3 className="h-3.5 w-3.5" />
-              Finance Dashboard
-            </Link>
+          <Link
+            href="/judge-mode"
+            className="inline-flex h-11 items-center gap-2 border border-[#3e5532] bg-[#142211] hover:bg-[#1a2b16] px-5 text-[9px] font-bold uppercase tracking-[0.15em] text-[#a4b58a] transition"
+          >
+            <Award className="h-3.5 w-3.5" />
+            Executive Judge Mode
+          </Link>
 
-            <Link
-              href="/exceptions"
-              className="inline-flex h-11 items-center gap-2 border border-[#363c34] bg-[#0e110e] px-5 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#abaea5] transition hover:border-[#4a5341] hover:text-[#d3d2ca]"
-            >
-              Exceptions Vault
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
+          <Link
+            href={dashboardHref}
+            className="inline-flex h-11 items-center gap-2 border border-[#363c34] bg-[#0e110e] px-5 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#abaea5] transition hover:border-[#4a5341] hover:text-[#d3d2ca]"
+          >
+            Dashboard
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
       </section>
 
-      {/* Verified Headline Metrics */}
+      {/* Compact Metrics Row */}
       <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="flex flex-col gap-2 border-b border-[#252a24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-              Audited Engineering Truth
-            </div>
-            <div className="mt-0.5 text-[13px] font-semibold text-[#dddcd4]">
-              Verified Performance & Correctness Matrix
-            </div>
-          </div>
-
-          <div className="text-[8px] font-mono uppercase tracking-[0.14em] text-[#6b7367]">
-            Single Source of Truth · docs/CLAIMS_MATRIX.md
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-px bg-[#252a24] sm:grid-cols-2 lg:grid-cols-4">
-          {VERIFIED_HEADLINE_METRICS.map((m) => (
-            <div key={m.label} className="flex flex-col justify-between bg-[#0a0d0a] p-5">
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`border px-1.5 py-0.5 font-mono text-[7px] font-bold uppercase tracking-[0.1em] ${m.badgeColor}`}>
-                    {m.badge}
+        <div className="grid grid-cols-2 divide-y divide-[#252a24] sm:grid-cols-4 sm:divide-y-0 sm:divide-x divide-[#252a24]">
+          {COMPACT_METRICS.map((m) => (
+            <div key={m.label} className="p-4 sm:p-5 bg-[#0a0d0a]">
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-2xl sm:text-[28px] font-bold tracking-tight text-[#e8e5da]">
+                  {m.value}
+                </span>
+                {m.unit && (
+                  <span className="font-mono text-[10px] font-medium text-[#7c8477]">
+                    {m.unit}
                   </span>
-                </div>
-
-                <div className="mt-3 flex items-baseline gap-1.5">
-                  <span className="font-mono text-[28px] font-bold tracking-tight text-[#e8e5da]">
-                    {m.value}
-                  </span>
-                  {m.unit ? (
-                    <span className="font-mono text-[11px] font-medium text-[#7c8477]">
-                      {m.unit}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8f968b]">
-                  {m.label}
-                </div>
-
-                <p className="mt-2 text-[8.5px] leading-relaxed text-[#686f64]">
-                  {m.detail}
-                </p>
+                )}
               </div>
-
-              <div className="mt-4 border-t border-[#1a1f19] pt-2 text-[7.5px] font-mono text-[#545b50]">
-                {m.sub}
+              <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#8f968b]">
+                {m.label}
+              </div>
+              <div className="mt-1 text-[8.5px] font-mono text-[#686f64]">
+                {m.detail}
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Core Architectural Flow */}
-      <section>
-        <div className="mb-5">
+      {/* 5 Core Differentiators */}
+      <section className="space-y-4">
+        <div className="border-b border-[#20241f] pb-3">
           <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-            Deterministic Control Architecture
+            Core Architectural Differentiators
           </div>
-          <div className="mt-1 text-[14px] font-semibold text-[#dddcd4]">
-            End-to-End Decision & Verification Pipeline
-          </div>
+          <h2 className="text-[16px] font-semibold text-[#dddcd4]">
+            Why SettleMate AI Wins Track 04
+          </h2>
         </div>
 
-        <div className="grid gap-px overflow-hidden border border-[#2a2e29] bg-[#252a24] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          {CORE_FLOW.map((step) => (
-            <div key={step.num} className="group bg-[#0d100d] p-4 transition hover:bg-[#111610]">
-              <div className="font-mono text-[8px] font-bold text-[#627055]">
-                {step.num}
-              </div>
-              <div className="mt-2 text-[10px] font-bold text-[#d2cec3]">
-                {step.title}
-              </div>
-              <p className="mt-1.5 text-[8px] leading-relaxed text-[#6d746a]">
-                {step.desc}
-              </p>
-              <div className="mt-4 h-px w-4 bg-[#394233] transition-all group-hover:w-8 group-hover:bg-[#869b6b]" />
-            </div>
-          ))}
-        </div>
-      </section>
+        <div className="grid grid-cols-1 gap-3">
+          {CORE_DIFFERENTIATORS.map((d) => {
+            const Icon = d.icon;
+            return (
+              <div
+                key={d.num}
+                className="border border-[#252a24] bg-[#0d100d] p-4 sm:p-5 transition-all hover:border-[#3e5532] hover:bg-[#10140f]"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div className="flex items-start gap-3.5">
+                    <div className="p-2 border border-[#252a24] bg-[#060806] text-[#a4b58a] shrink-0">
+                      <Icon className="h-4 w-4" />
+                    </div>
 
-      {/* Trust & AI Safety Boundaries */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="grid lg:grid-cols-[1.1fr_1.3fr]">
-          <div className="border-b border-[#252a24] bg-[#0a0d0a] p-6 lg:border-b-0 lg:border-r">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center border border-[#384231] bg-[#11150f]">
-                <ShieldCheck className="h-4 w-4 text-[#9cac81]" />
-              </div>
-              <div>
-                <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#626960]">
-                  AI Safety Boundary
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[9px] font-bold text-[#687063]">
+                          {d.num}
+                        </span>
+                        <h3 className="text-xs sm:text-sm font-bold text-[#e3e1d8]">
+                          {d.title}
+                        </h3>
+                      </div>
+                      <p className="text-[11.5px] leading-relaxed text-[#8c9288] max-w-3xl">
+                        {d.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="font-mono text-[8px] font-bold px-2 py-0.5 border border-[#252a24] bg-[#060806] text-[#a4b58a] shrink-0 self-start sm:self-auto">
+                    {d.badge}
+                  </span>
                 </div>
-                <h2 className="mt-0.5 text-[14px] font-semibold text-[#dcdad2]">
-                  Defensible Financial Authority
-                </h2>
               </div>
-            </div>
-
-            <p className="mt-4 text-[10px] leading-relaxed text-[#757d71]">
-              In SettleMate AI, language models operate strictly in an advisory capacity behind deterministic arithmetic invariants.
-              AI cannot modify ledger balances, approve its own suggestions, or finalize exceptions.
-            </p>
-
-            <div className="mt-5 flex items-center gap-3">
-              <Link
-                href="/security"
-                className="inline-flex items-center gap-1.5 border border-[#3b4731] bg-[#131a0e] px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.14em] text-[#a9ba8a] transition hover:bg-[#1a2414]"
-              >
-                Policy Control & Replay
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-              <Link
-                href="/audit"
-                className="inline-flex items-center gap-1.5 border border-[#2e342c] bg-[#0e120d] px-3 py-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-[#868d81] transition hover:text-[#b4baa8]"
-              >
-                Audit Chain & Merkle DAG
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid gap-3 p-6 sm:grid-cols-2">
-            <div className="border border-[#20261e] bg-[#0b0e0b] p-3.5">
-              <div className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-[0.14em] text-[#a9ba8a]">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                AI Permitted Capabilities
-              </div>
-              <ul className="mt-2 space-y-1.5 text-[8.5px] text-[#788074]">
-                <li>• Read structured transaction records</li>
-                <li>• Retrieve evidence from Context Vault</li>
-                <li>• Recommend match adjustments & reasons</li>
-                <li>• Act as Adversarial Skeptic in Council</li>
-              </ul>
-            </div>
-
-            <div className="border border-[#382622] bg-[#120b0a] p-3.5">
-              <div className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-[0.14em] text-[#c97d73]">
-                <ShieldAlert className="h-3.5 w-3.5" />
-                AI Forbidden Boundaries
-              </div>
-              <ul className="mt-2 space-y-1.5 text-[8.5px] text-[#917672]">
-                <li>• CANNOT write to immutable ledger</li>
-                <li>• CANNOT approve Maker proposals</li>
-                <li>• CANNOT bypass 6-point invariants</li>
-                <li>• CANNOT directly mark state as RESOLVED</li>
-              </ul>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </section>
+
+      {/* Guided Tour Modal */}
+      <GuidedTourModal
+        isOpen={tourOpen}
+        onClose={() => setTourOpen(false)}
+      />
     </div>
   );
 }

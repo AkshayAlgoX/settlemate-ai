@@ -78,10 +78,8 @@ function selectCandidates(
     .sort((a, b) => {
       const amountDeltaA = Math.abs(a.netAmount - bankTxn.amount);
       const amountDeltaB = Math.abs(b.netAmount - bankTxn.amount);
-      return (
-        amountDeltaA - amountDeltaB ||
-        a.settlement.settlementId.localeCompare(b.settlement.settlementId)
-      );
+      if (amountDeltaA !== amountDeltaB) return amountDeltaA - amountDeltaB;
+      return a.settlement.settlementId < b.settlement.settlementId ? -1 : a.settlement.settlementId > b.settlement.settlementId ? 1 : 0;
     })
     .slice(0, config.maxCandidates);
 }
@@ -270,18 +268,31 @@ export function generateSubsetSums<T>(
   amountOf: (item: T) => number,
   maxItems: number
 ): SubsetSumEntry<T>[] {
+  const n = items.length;
+  if (n === 0) return [{ sum: 0, items: [], count: 0 }];
+
+  // Efficient bounded BFS tree generation
   const result: SubsetSumEntry<T>[] = [{ sum: 0, items: [], count: 0 }];
 
-  for (const item of items) {
+  for (let itemIdx = 0; itemIdx < n; itemIdx++) {
+    const item = items[itemIdx]!;
     const itemAmount = amountOf(item);
     const len = result.length;
+
     for (let i = 0; i < len; i++) {
-      const prev = result[i];
+      const prev = result[i]!;
       if (prev.count < maxItems) {
+        const newCount = prev.count + 1;
+        const newItems = new Array<T>(newCount);
+        for (let j = 0; j < prev.count; j++) {
+          newItems[j] = prev.items[j]!;
+        }
+        newItems[prev.count] = item;
+
         result.push({
           sum: prev.sum + itemAmount,
-          items: [...prev.items, item],
-          count: prev.count + 1,
+          items: newItems,
+          count: newCount,
         });
       }
     }
@@ -312,13 +323,23 @@ export function meetInTheMiddleSubsets<T>(
 
   const combined: SubsetSumEntry<T>[] = [];
 
-  for (const left of leftSubsets) {
-    for (const right of rightSubsets) {
-      const totalCount = left.count + right.count;
+  for (let l = 0; l < leftSubsets.length; l++) {
+    const left = leftSubsets[l]!;
+    const lCount = left.count;
+    const lSum = left.sum;
+    const lItems = left.items;
+
+    for (let r = 0; r < rightSubsets.length; r++) {
+      const right = rightSubsets[r]!;
+      const totalCount = lCount + right.count;
       if (totalCount >= 2 && totalCount <= maxTotalItems) {
+        const combinedItems = new Array<T>(totalCount);
+        for (let i = 0; i < lCount; i++) combinedItems[i] = lItems[i]!;
+        for (let j = 0; j < right.count; j++) combinedItems[lCount + j] = right.items[j]!;
+
         combined.push({
-          sum: left.sum + right.sum,
-          items: [...left.items, ...right.items],
+          sum: lSum + right.sum,
+          items: combinedItems,
           count: totalCount,
         });
       }
@@ -335,12 +356,12 @@ export function solveManyToManyMeetInMiddle(
 ): CardinalityMatch | null {
   const credits = bankTransactions
     .filter((txn) => txn.type === "CREDIT")
-    .sort((a, b) => a.txnId.localeCompare(b.txnId))
+    .sort((a, b) => (a.txnId < b.txnId ? -1 : a.txnId > b.txnId ? 1 : 0))
     .slice(0, config.maxCandidates);
 
   const settlementCandidates = settlements
     .slice()
-    .sort((a, b) => a.settlementId.localeCompare(b.settlementId))
+    .sort((a, b) => (a.settlementId < b.settlementId ? -1 : a.settlementId > b.settlementId ? 1 : 0))
     .slice(0, config.maxCandidates);
 
   if (settlementCandidates.length < 2 || credits.length < 2) {
@@ -441,14 +462,12 @@ export function findManyToManyMatch(
 ): CardinalityMatch | null {
   const credits = bankTransactions
     .filter((txn) => txn.type === "CREDIT")
-    .sort((a, b) => a.txnId.localeCompare(b.txnId))
+    .sort((a, b) => (a.txnId < b.txnId ? -1 : a.txnId > b.txnId ? 1 : 0))
     .slice(0, config.maxCandidates);
 
   const settlementCandidates = settlements
     .slice()
-    .sort((a, b) =>
-      a.settlementId.localeCompare(b.settlementId),
-    )
+    .sort((a, b) => (a.settlementId < b.settlementId ? -1 : a.settlementId > b.settlementId ? 1 : 0))
     .slice(0, config.maxCandidates);
 
   if (

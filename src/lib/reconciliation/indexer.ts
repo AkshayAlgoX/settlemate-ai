@@ -87,8 +87,10 @@ export function buildIndexes(data: BatchData): Indexes {
     }
   }
 
-  for (const c of data.chargebacks) {
-    if (["open", "under_review", "accepted"].includes(c.status)) {
+  for (let i = 0; i < data.chargebacks.length; i++) {
+    const c = data.chargebacks[i]!;
+    const status = c.status;
+    if (status === "open" || status === "under_review" || status === "accepted") {
       const existing = chargebacksByPaymentId.get(c.paymentId);
       if (existing) {
         existing.push(c);

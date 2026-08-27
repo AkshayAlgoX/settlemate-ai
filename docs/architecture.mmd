@@ -1,0 +1,78 @@
+flowchart LR
+    %% ─────────────────────────────────────────────────────────────
+    %% SETTLEMATE AI — ARCHITECTURE & FINANCIAL SAFETY SUBMISSION MAP
+    %% ─────────────────────────────────────────────────────────────
+
+    subgraph INGESTION["1. Multi-Source Ingestion & Evidence Vault"]
+        direction TB
+        SRC_ORD["Order Feeds"]
+        SRC_PAY["Captured Payments"]
+        SRC_SET["Settlements & UTRs"]
+        SRC_BNK["Bank Credits"]
+        SRC_VAULT["Context Vault (OCR Invoices & Vouchers)"]
+    end
+
+    subgraph ENGINE["2. Deterministic Core Engine (806.75 rec/s)"]
+        direction TB
+        NORM["Normalizer (Integer Minor Units)"]
+        MATCH["3-Pass Matcher + Bounded N:M Solver"]
+        INV["Financial Invariant Gates (7 Controls)"]
+        FAST_MATCH{"Status?"}
+        
+        NORM --> MATCH --> INV --> FAST_MATCH
+    end
+
+    subgraph ADVISORY_AI["3. Selective AI & Non-LLM Validation (96.4% Bypass)"]
+        direction TB
+        AI_AGENT["Advisory AI Investigator (Gemini Flash)"]
+        CLAIMS["Structured Claims Payload (Voucher, Amount, Window)"]
+        MECH_VAL["Mechanical Non-LLM Validator (134k claims/s)"]
+        VAL_GATE{"Valid?"}
+
+        AI_AGENT --> CLAIMS --> MECH_VAL --> VAL_GATE
+    end
+
+    subgraph GOVERNANCE["4. Governance & Ledger Seal"]
+        direction TB
+        MAKER_CHECKER["Maker/Checker Dual Sign-off (Admin Gate)"]
+        LEDGER["Double-Entry Immutable Journal"]
+        RECEIPT["Canonical Decision Receipt (SHA-256 + Merkle)"]
+
+        MAKER_CHECKER --> LEDGER --> RECEIPT
+    end
+
+    subgraph AUDIT["5. Independent Offline Verifier"]
+        direction TB
+        OFFLINE["Offline Standalone Verifier (0 LLMs, 0 DBs)"]
+        AUDITOR["External Auditor / Regulator Proof"]
+
+        OFFLINE --> AUDITOR
+    end
+
+    %% Data Flow Connections
+    SRC_ORD & SRC_PAY & SRC_SET & SRC_BNK --> NORM
+    SRC_VAULT -.-> AI_AGENT
+    SRC_VAULT --> MECH_VAL
+
+    FAST_MATCH -- "Auto-Matched (96.4%)" --> LEDGER
+    FAST_MATCH -- "Exception / Variance" --> AI_AGENT
+
+    VAL_GATE -- "Verified [PASS]" --> MAKER_CHECKER
+    VAL_GATE -- "Fabricated [FAIL]" --> DISPUTED["Disputed & Rejection Lock"]
+
+    RECEIPT --> OFFLINE
+
+    %% Non-Negotiable Safety Barriers
+    AI_AGENT -. "BLOCKED: Direct Ledger Write" .-> LEDGER
+    AI_AGENT -. "BLOCKED: Self-Approval" .-> MAKER_CHECKER
+
+    %% Styling & Classes
+    classDef safe fill:#182614,stroke:#3e5532,stroke-width:1.5px,color:#e3e1d8;
+    classDef ai fill:#1e1a10,stroke:#665427,stroke-width:1.5px,color:#e3e1d8;
+    classDef alert fill:#291211,stroke:#6e2b26,stroke-width:1.5px,color:#e89088;
+    classDef audit fill:#0f171f,stroke:#264057,stroke-width:1.5px,color:#e3e1d8;
+
+    class SRC_ORD,SRC_PAY,SRC_SET,SRC_BNK,SRC_VAULT,NORM,MATCH,INV,LEDGER,RECEIPT safe;
+    class AI_AGENT,CLAIMS ai;
+    class MECH_VAL,MAKER_CHECKER,OFFLINE,AUDITOR audit;
+    class DISPUTED alert;

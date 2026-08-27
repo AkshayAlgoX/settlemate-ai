@@ -14,6 +14,7 @@ import type { ReconciliationPolicy } from "../policy/types";
 import { DEFAULT_POLICY } from "../policy/manager";
 import type { AIClaim, ClaimAuditReceipt, ClaimValidationResult } from "./claim-types";
 import { DeterministicClaimValidator } from "./claim-validator";
+import { executeAiInvestigator, generateDeterministicClaims } from "./llm-investigator";
 
 export type CouncilVerdict =
   | "VERIFIED"
@@ -207,7 +208,7 @@ export class VerificationCouncil {
   private validator = new DeterministicClaimValidator();
 
   /**
-   * Run multi-agent adversarial deliberation with claim-level validation.
+   * Run multi-agent adversarial deliberation synchronously (using deterministic claim generator).
    */
   deliberate(request: CouncilReviewRequest): CouncilDecision {
     const startedAt = new Date();
@@ -233,77 +234,58 @@ export class VerificationCouncil {
       return this.buildConflictingEvidenceResponse(request, councilRunId, policy, contradictions, startedAt, completedAt, trace);
     }
 
-    // -------------------------------------------------------------------------
-    // 1. Investigator Formulates Structured Claims
-    // -------------------------------------------------------------------------
-    const citedIds = evidenceItems.map((e) => e.evidenceId || (e as unknown as Record<string, unknown>).id as string);
+    const investigator = generateDeterministicClaims(request);
+    trace.push("[Investigator] Emitted " + investigator.claims.length + " structured claims (deterministic)");
 
-    let expectedNetPaise = request.amountPaise;
-    if (request.paymentRecord) {
-      const p = request.paymentRecord;
-      expectedNetPaise = Math.round((p.amount - p.fee - p.tax) * 100);
-      if (request.refundRecord && request.refundRecord.status === "processed") {
-        expectedNetPaise -= Math.round(request.refundRecord.amount * 100);
-      }
-      if (request.chargebackRecord && request.chargebackRecord.status === "reversed") {
-        expectedNetPaise -= Math.round(request.chargebackRecord.amount * 100);
-      }
+    return this.evaluateDeliberation(request, investigator, councilRunId, policy, startedAt, trace);
+  }
+
+  /**
+   * Run multi-agent adversarial deliberation asynchronously (invoking real LLM when API key is set).
+   */
+  async deliberateAsync(request: CouncilReviewRequest): Promise<CouncilDecision> {
+    const startedAt = new Date();
+    const trace: string[] = [];
+    const policy = request.activePolicy || DEFAULT_POLICY;
+    const councilRunId = "ccl_" + Math.random().toString(36).slice(2, 10);
+
+    trace.push("[Council Async Started] Run " + councilRunId + " for exception " + request.exceptionId + " (" + request.exceptionType + ")");
+
+    const evidenceItems = request.evidenceItems || [];
+    const contradictions = request.contradictions || [];
+
+    // Check Evidence Sufficiency & Contradictions
+    if (evidenceItems.length === 0) {
+      trace.push("[Investigator] INSUFFICIENT_EVIDENCE: No evidence items available in vault");
+      const completedAt = new Date();
+      return this.buildInsufficientEvidenceResponse(request, councilRunId, policy, startedAt, completedAt, trace);
     }
 
-    // Formulate structured claims
-    const claims: AIClaim[] = [];
-
-    // Claim 1: Financial Explanation Claim
-    if (request.refundRecord) {
-      claims.push({
-        claimId: "C1",
-        type: "FINANCIAL_EXPLANATION",
-        statement: `₹${request.refundRecord.amount / 100} refund explains the observed variance.`,
-        evidenceIds: citedIds,
-        assertedValues: [
-          { key: "refundAmount", value: request.refundRecord.amount, expectedPaise: request.refundRecord.amount, observedPaise: request.refundRecord.amount },
-        ],
-        confidence: 90,
-        uncertainties: [],
-      });
-    } else {
-      claims.push({
-        claimId: "C1",
-        type: "AMOUNT",
-        statement: `Net expected settlement is ₹${(expectedNetPaise / 100).toFixed(2)}.`,
-        evidenceIds: citedIds,
-        assertedValues: [
-          { key: "netAmount", value: expectedNetPaise, expectedPaise: expectedNetPaise, observedPaise: expectedNetPaise },
-        ],
-        confidence: 85,
-        uncertainties: [],
-      });
+    if (contradictions.length > 0) {
+      trace.push("[Investigator] CONFLICTING_EVIDENCE: Vault reported " + contradictions.length + " contradiction(s)");
+      const completedAt = new Date();
+      return this.buildConflictingEvidenceResponse(request, councilRunId, policy, contradictions, startedAt, completedAt, trace);
     }
 
-    // Claim 2: Policy Compliance Claim
-    claims.push({
-      claimId: "C2",
-      type: "POLICY",
-      statement: "Transaction falls within allowable policy timing and variance tolerance.",
-      evidenceIds: citedIds,
-      assertedValues: [],
-      confidence: 95,
-      uncertainties: [],
-    });
+    const execResult = await executeAiInvestigator(request);
+    const investigator = execResult.investigator;
+    trace.push(
+      `[Investigator] Emitted ${investigator.claims.length} claims via ${execResult.model} (${execResult.latencyMs}ms)`
+    );
 
-    const investigator: InvestigatorOutput = {
-      hypothesis: "Discrepancy explained by verified payment transaction lifecycle and supporting evidence context.",
-      reasoning: "Verified " + evidenceItems.length + " evidence items from providers: " + Array.from(new Set(evidenceItems.map((e) => e.provider || "SYSTEM"))).join(", "),
-      evidenceIds: citedIds,
-      supportingFacts: evidenceItems.map((e) => (e.title || "Evidence") + " (ref: " + (e.sourceReference || e.evidenceId || (e as unknown as Record<string, unknown>).id) + ")"),
-      uncertainties: [],
-      recommendedAction: "MAKER_CHECKER_SIGN_OFF",
-      confidence: 88,
-      claimedNetPaise: expectedNetPaise,
-      claims,
-    };
+    return this.evaluateDeliberation(request, investigator, councilRunId, policy, startedAt, trace);
+  }
 
-    trace.push("[Investigator] Emitted " + claims.length + " structured claims for deterministic validation");
+  private evaluateDeliberation(
+    request: CouncilReviewRequest,
+    investigator: InvestigatorOutput,
+    councilRunId: string,
+    policy: ReconciliationPolicy,
+    startedAt: Date,
+    trace: string[]
+  ): CouncilDecision {
+    const claims = investigator.claims || [];
+    const citedIds = investigator.evidenceIds || [];
 
     // -------------------------------------------------------------------------
     // 2. Deterministic Non-LLM Claim Validator Gate
@@ -317,7 +299,7 @@ export class VerificationCouncil {
     const skepticChallenges: SkepticChallengeItem[] = [];
     const verifiedEvidenceIds: string[] = [];
 
-        // If any claim is disputed, translate dispute reasons to Skeptic challenges
+    // If any claim is disputed, translate dispute reasons to Skeptic challenges
     for (const claimResult of claimReceipt.claims) {
       if (claimResult.status === "DISPUTED" || claimResult.status === "UNSUPPORTED") {
         for (const reason of claimResult.disputeReasons) {

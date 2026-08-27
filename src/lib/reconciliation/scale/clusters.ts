@@ -38,11 +38,11 @@ function bySettlementId(
   a: NormalizedSettlement,
   b: NormalizedSettlement,
 ): number {
-  return a.settlementId.localeCompare(b.settlementId);
+  return a.settlementId < b.settlementId ? -1 : a.settlementId > b.settlementId ? 1 : 0;
 }
 
 function byTxnId(a: NormalizedBankTxn, b: NormalizedBankTxn): number {
-  return a.txnId.localeCompare(b.txnId);
+  return a.txnId < b.txnId ? -1 : a.txnId > b.txnId ? 1 : 0;
 }
 
 /**
@@ -57,39 +57,46 @@ export function partitionCandidates(
 ): ScalePartition[] {
   const byBucket = new Map<string, BucketAccumulator>();
 
-  for (const s of settlements) {
+  for (let i = 0; i < settlements.length; i++) {
+    const s = settlements[i]!;
     const key = dateBucketKey(s.settledAt?.getTime(), windowMs);
-    const acc = byBucket.get(key) ?? {
-      bucketKey: key,
-      settlements: [],
-      credits: [],
-    };
+    let acc = byBucket.get(key);
+    if (!acc) {
+      acc = {
+        bucketKey: key,
+        settlements: [],
+        credits: [],
+      };
+      byBucket.set(key, acc);
+    }
     acc.settlements.push(s);
-    byBucket.set(key, acc);
   }
 
-  for (const c of credits) {
+  for (let i = 0; i < credits.length; i++) {
+    const c = credits[i]!;
     if (c.type !== "CREDIT") continue;
     const key = dateBucketKey(c.txnDate.getTime(), windowMs);
-    const acc = byBucket.get(key) ?? {
-      bucketKey: key,
-      settlements: [],
-      credits: [],
-    };
+    let acc = byBucket.get(key);
+    if (!acc) {
+      acc = {
+        bucketKey: key,
+        settlements: [],
+        credits: [],
+      };
+      byBucket.set(key, acc);
+    }
     acc.credits.push(c);
-    byBucket.set(key, acc);
   }
 
   const keys = [...byBucket.keys()].sort(numericCompare);
 
   return keys.map((key, index) => {
-    const acc = byBucket.get(key);
-    if (!acc) throw new Error(`missing bucket ${key}`);
+    const acc = byBucket.get(key)!;
     return {
       id: `p-${key}-${index}`,
       bucketKey: acc.bucketKey,
-      settlements: [...acc.settlements].sort(bySettlementId),
-      credits: [...acc.credits].sort(byTxnId),
+      settlements: acc.settlements.sort(bySettlementId),
+      credits: acc.credits.sort(byTxnId),
     };
   });
 }
@@ -98,5 +105,5 @@ function numericCompare(a: string, b: string): number {
   const na = Number(a);
   const nb = Number(b);
   if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
-  return a.localeCompare(b);
+  return a < b ? -1 : a > b ? 1 : 0;
 }

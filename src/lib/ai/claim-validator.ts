@@ -18,7 +18,15 @@
  */
 
 import { createHash } from "node:crypto";
-import type { AIClaim, ClaimCheckDetail, ClaimValidationResult, ClaimValidationStatus, ClaimAuditReceipt } from "./claim-types";
+import type {
+  AIClaim,
+  ClaimType,
+  AssertedValue,
+  ClaimCheckDetail,
+  ClaimValidationResult,
+  ClaimValidationStatus,
+  ClaimAuditReceipt,
+} from "./claim-types";
 import type { CouncilReviewRequest } from "./council";
 
 export class DeterministicClaimValidator {
@@ -29,11 +37,28 @@ export class DeterministicClaimValidator {
     const checks: ClaimCheckDetail[] = [];
     const disputeReasons: string[] = [];
 
-    const evidenceMap = new Map((context.evidenceItems || []).map((e) => [(e.evidenceId || (e as unknown as Record<string, unknown>).id) as string, e]));
+    const evidenceIds: string[] = Array.isArray(claim?.evidenceIds)
+      ? claim.evidenceIds
+      : (Array.isArray((claim as unknown as Record<string, unknown>)?.citedEvidenceIds)
+        ? ((claim as unknown as Record<string, unknown>).citedEvidenceIds as string[])
+        : []);
+
+    const assertedValues: AssertedValue[] = Array.isArray(claim?.assertedValues)
+      ? claim.assertedValues
+      : [];
+
+    const statement = typeof claim?.statement === "string" ? claim.statement : "";
+
+    const evidenceMap = new Map(
+      (Array.isArray(context?.evidenceItems) ? context.evidenceItems : []).map((e) => [
+        (e?.evidenceId || (e as unknown as Record<string, unknown>)?.id || "") as string,
+        e,
+      ])
+    );
 
     // 1. Check: EVIDENCE_EXISTS
     let allEvidenceExists = true;
-    for (const eid of claim.evidenceIds) {
+    for (const eid of evidenceIds) {
       if (!evidenceMap.has(eid)) {
         allEvidenceExists = false;
         checks.push({
@@ -46,17 +71,17 @@ export class DeterministicClaimValidator {
         disputeReasons.push(`INVENTED_EVIDENCE_ID: ${eid}`);
       }
     }
-    if (claim.evidenceIds.length > 0 && allEvidenceExists) {
+    if (evidenceIds.length > 0 && allEvidenceExists) {
       checks.push({
         checkName: "EVIDENCE_EXISTS",
         passed: true,
-        message: `All ${claim.evidenceIds.length} referenced evidence items exist`,
+        message: `All ${evidenceIds.length} referenced evidence items exist`,
       });
     }
 
     // 2. Check: EVIDENCE_AUTHORIZED
     let allAuthorized = true;
-    for (const eid of claim.evidenceIds) {
+    for (const eid of evidenceIds) {
       const item = evidenceMap.get(eid);
       const access = item ? ((item as unknown as Record<string, string>).accessLevel || item.accessClassification) : null;
       if (item && (access === "HIGHLY_RESTRICTED" || access === "RESTRICTED_CLEARANCE_REQUIRED")) {
@@ -71,7 +96,7 @@ export class DeterministicClaimValidator {
         disputeReasons.push(`UNAUTHORIZED_EVIDENCE: ${eid}`);
       }
     }
-    if (claim.evidenceIds.length > 0 && allAuthorized) {
+    if (evidenceIds.length > 0 && allAuthorized) {
       checks.push({
         checkName: "EVIDENCE_AUTHORIZED",
         passed: true,
@@ -81,7 +106,7 @@ export class DeterministicClaimValidator {
 
     // 3. Check: EVIDENCE_LINKED
     let allLinked = true;
-    for (const eid of claim.evidenceIds) {
+    for (const eid of evidenceIds) {
       const item = evidenceMap.get(eid);
       if (item) {
         const paymentId = context.paymentRecord?.paymentId;
@@ -109,7 +134,7 @@ export class DeterministicClaimValidator {
         }
       }
     }
-    if (claim.evidenceIds.length > 0 && allLinked) {
+    if (evidenceIds.length > 0 && allLinked) {
       checks.push({
         checkName: "EVIDENCE_LINKED",
         passed: true,
@@ -138,7 +163,7 @@ export class DeterministicClaimValidator {
     }
 
     // 5. Check: NUMERIC_ASSERTION_MATCH
-    for (const assertion of claim.assertedValues) {
+    for (const assertion of assertedValues) {
       if (assertion.expectedPaise !== undefined && assertion.observedPaise !== undefined) {
         if (assertion.expectedPaise !== assertion.observedPaise) {
           checks.push({
@@ -161,7 +186,7 @@ export class DeterministicClaimValidator {
       }
     }
 
-        // 6. Check: ARITHMETIC_RECOMPUTED
+    // 6. Check: ARITHMETIC_RECOMPUTED
     if (claim.type === "FINANCIAL_EXPLANATION" || claim.type === "AMOUNT") {
       const grossPaise = context.paymentRecord?.amount ?? context.amountPaise ?? 0;
       const feePaise = (context.paymentRecord?.fee || context.settlementRecord?.fee) ?? 0;
@@ -174,7 +199,7 @@ export class DeterministicClaimValidator {
       const variancePaise = Math.abs(grossPaise - actualSettledPaise);
 
       // If claim asserts that a refund explains the entire variance
-      if (claim.statement.toLowerCase().includes("refund explains") || claim.statement.toLowerCase().includes("variance")) {
+      if (statement.toLowerCase().includes("refund explains") || statement.toLowerCase().includes("variance")) {
         const explainedAmount = feePaise + taxPaise + refundPaise + chargebackPaise;
         if (explainedAmount !== variancePaise) {
           checks.push({
@@ -256,9 +281,12 @@ export class DeterministicClaimValidator {
       });
     }
 
+    const safeClaimId = typeof claim?.claimId === "string" ? claim.claimId : "CLAIM_UNKNOWN";
+    const safeClaimType = (claim?.type || "FINANCIAL_EXPLANATION") as ClaimType;
+
     // Determine Final Claim Status
     let status: ClaimValidationStatus = "VERIFIED";
-    if (claim.evidenceIds.length === 0 && (claim.type === "AMOUNT" || claim.type === "FINANCIAL_EXPLANATION")) {
+    if (evidenceIds.length === 0 && (safeClaimType === "AMOUNT" || safeClaimType === "FINANCIAL_EXPLANATION")) {
       status = "INSUFFICIENT_EVIDENCE";
       disputeReasons.push("NO_EVIDENCE_CITED");
     } else if (disputeReasons.length > 0) {
@@ -270,15 +298,16 @@ export class DeterministicClaimValidator {
     }
 
     // Compute canonical receipt hash for claim
-    const receiptPayload = `${claim.claimId}|${claim.type}|${status}|${claim.evidenceIds.sort().join(",")}|${disputeReasons.join(";")}`;
+    const sortedEids = [...evidenceIds].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const receiptPayload = `${safeClaimId}|${safeClaimType}|${status}|${sortedEids.join(",")}|${disputeReasons.join(";")}`;
     const receiptHash = createHash("sha256").update(receiptPayload).digest("hex");
 
     return {
-      claimId: claim.claimId,
-      type: claim.type,
+      claimId: safeClaimId,
+      type: safeClaimType,
       status,
-      statement: claim.statement,
-      evidenceIds: claim.evidenceIds,
+      statement,
+      evidenceIds: sortedEids,
       checks,
       disputeReasons,
       receiptHash,

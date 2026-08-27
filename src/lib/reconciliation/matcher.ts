@@ -397,12 +397,18 @@ function findFuzzyBankCandidates(
   return candidates;
 }
 
+const PREFIX_REGEX_CACHE = new Map<string, RegExp>();
+
 function extractIdFromNarration(
   narration: string | null,
   prefix: string
 ): string | null {
   if (!narration) return null;
-  const regex = new RegExp(`${prefix}[a-z0-9_]+`, "i");
+  let regex = PREFIX_REGEX_CACHE.get(prefix);
+  if (!regex) {
+    regex = new RegExp(`${prefix}[a-z0-9_]+`, "i");
+    PREFIX_REGEX_CACHE.set(prefix, regex);
+  }
   const match = narration.match(regex);
-  return match ? match[0].toLowerCase() : null;
+  return match ? match[0]!.toLowerCase() : null;
 }

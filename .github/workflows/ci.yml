@@ -1,0 +1,66 @@
+name: SettleMate AI — CI / CD & Financial Correctness Gate
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, Test, Build & Benchmark Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DATABASE_URL: "file:./dev.db"
+      NODE_ENV: "test"
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Initialize Database Schema
+        run: npx prisma db push --skip-generate
+
+      - name: Run Static Code Analysis & Linting
+        run: npm run lint
+
+      - name: Verify Production Next.js Build
+        run: npm run build
+
+      - name: Execute Full Deterministic Test Pipeline
+        run: npm test
+
+      - name: Verify Official Razorpay Track 04 Benchmark & SHA-256 Fingerprint
+        run: npm run evaluate
+
+      - name: Verify Decision Receipt Offline Verifier
+        run: npm run verify:receipt
+
+      - name: Verify Live Demo Ingestion Script
+        run: npm run verify:demo
+
+      - name: Upload Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-results
+          path: |
+            docs/FINAL_METRICS.json
+            docs/CLAIMS_MATRIX.md
+          retention-days: 14

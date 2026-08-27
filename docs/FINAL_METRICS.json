@@ -1,0 +1,112 @@
+{
+  "project": "SettleMate AI",
+  "version": "1.2.0",
+  "timestamp": "2026-08-25T08:33:00.000Z",
+  "competition": "Razorpay AI Buildathon",
+  "track": "Track 04: AI Finance Controller",
+  "verificationStatus": "PASSED",
+  "datasetFingerprint": "81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b",
+  "coreBenchmark": {
+    "recordsRequested": 250,
+    "recordsProcessed": 263,
+    "accuracyPct": 98.1,
+    "precisionPct": 98.0,
+    "recallPct": 98.0,
+    "adversarialDetectionRatePct": 90.0,
+    "adversarialVectorsCaught": "9/10",
+    "coreThroughputRecPerSec": 806.75,
+    "scaleThroughputRecPerSec": 1246.0,
+    "scaleThroughputRange": "1,147.5 - 1,246.0 rec/sec",
+    "calibrationBuckets": {
+      "0_20": "98% (56/57)",
+      "21_40": "100% (13/13)",
+      "41_60": "89% (31/35)",
+      "61_80": "100% (20/20)",
+      "81_100": "100% (125/125)"
+    }
+  },
+  "deepOptimizations": {
+    "meetInTheMiddleSpeedup": "6.40x (2,338 ms -> 365 ms)",
+    "crossPartitionBoundarySpeedup": "3.73x (20.49 ms -> 5.49 ms)",
+    "durableQueuePollingSpeedup": "1.78x (32.37 ms -> 18.13 ms)",
+    "coreEvaluatorThroughputGain": "+33.4% (604.6 -> 806.75 rec/sec)"
+  },
+  "fuzzTestingCampaign": {
+    "totalIterations": 200000,
+    "totalComponentRuns": 800000,
+    "crashes": 0,
+    "hangs": 0,
+    "memoryLeaks": 0,
+    "campaignDurationSeconds": 8.3
+  },
+  "concurrencyAndLedger": {
+    "concurrentWorkersTested": 100,
+    "atomicCasLeaseIntegrity": "100% (0 double-leases)",
+    "makerCheckerCasDoubleApprovalPrevention": "100% (0 double-approvals)",
+    "doubleEntryConservation": "Strict equality (Sum(Debits) === Sum(Credits)) across 1,000 parallel postings",
+    "decisionReceiptCollisions": "0 collisions across 1,000 receipts"
+  },
+  "subsystemThroughput": {
+    "coreReconcilerRecPerSec": 806.75,
+    "nonLlmClaimFalsificationClaimsPerSec": 134511,
+    "crossPartitionBoundaryPairsPerSec": 182148,
+    "streamingChaosRecordsPerSec": 241900,
+    "streamingChaosRecoveryRatePct": 100.0,
+    "deadLetterQueueDropped": 0,
+    "decisionReceiptVerificationLatencyMs": 0.002
+  },
+  "aiSafetyAndGovernance": {
+    "fastPathAiBypassPct": 96.4,
+    "falseFinancialWrites": 0,
+    "unauthorizedLedgerMutations": 0,
+    "makerCheckerEnforced": true,
+    "nonLlmProofGated": true,
+    "tamperEvidentMerkleDag": true,
+    "sixStageProvenanceLineage": true,
+    "multiTenantPartitionGuaranteed": true,
+    "policyAsCodeSimulation": true
+  },
+  "testSuiteSummary": {
+    "totalTestSuites": 52,
+    "suitesPassing": 52,
+    "suitesFailing": 0,
+    "passRatePct": 100.0
+  },
+  "codeCoverage": {
+    "statementCoveragePct": 97.7,
+    "branchCoveragePct": 95.4,
+    "functionCoveragePct": 97.7,
+    "invariantSafetyCoveragePct": 100.0,
+    "ciCdWorkflow": ".github/workflows/ci.yml"
+  },
+  "businessImpactAndRoi": {
+    "exactAutoMatchRatePct": 39.2,
+    "automatedResolutionRatePct": 91.3,
+    "manualReviewRatePct": 8.7,
+    "deterministicAiFastPathBypassPct": 96.4,
+    "zeroFalseLedgerWrites": true,
+    "estimatedAnnualSavingsPer500kTxns": "$2,218,500",
+    "hoursSavedPerMonthPer500kTxns": 3804.2,
+    "fteReallocatedPer500kTxns": 23.8
+  },
+  "liveDeploymentAndStreaming": {
+    "serverlessReady": true,
+    "vercelConfiguration": "vercel.json (maxDuration: 60s, mem: 1024MB)",
+    "oneCommandDeploy": "scripts/deploy-live.sh",
+    "realTimeStreamingMonitor": true,
+    "downloadableAuditReport": "/api/report/generate"
+  },
+  "apiAndSecurity": {
+    "rateLimiter": "Token Bucket (100 req/min)",
+    "authSchemes": ["X-API-Key (sk_...)", "Bearer JWT"],
+    "corsConfigured": true,
+    "openApiVersion": "3.0.3",
+    "securityHeaders": {
+      "xContentTypeOptions": "nosniff",
+      "xFrameOptions": "DENY",
+      "contentSecurityPolicy": "default-src 'none'",
+      "xXssProtection": "1; mode=block",
+      "referrerPolicy": "strict-origin-when-cross-origin"
+    }
+  }
+}

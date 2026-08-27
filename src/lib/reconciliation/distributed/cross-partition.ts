@@ -213,11 +213,11 @@ export class BoundedCrossPartitionResolver {
     remainingCredits: UnmatchedCreditWrapper[];
   } {
     const canonicalSettlements = [...settlements].sort((a, b) =>
-      a.settlement.settlementId.localeCompare(b.settlement.settlementId)
+      a.settlement.settlementId < b.settlement.settlementId ? -1 : a.settlement.settlementId > b.settlement.settlementId ? 1 : 0
     );
 
     const canonicalCredits = [...credits].sort((a, b) =>
-      a.credit.txnId.localeCompare(b.credit.txnId)
+      a.credit.txnId < b.credit.txnId ? -1 : a.credit.txnId > b.credit.txnId ? 1 : 0
     );
 
     const matchedResults: CrossPartitionMatchResult[] = [];
@@ -226,11 +226,15 @@ export class BoundedCrossPartitionResolver {
 
     // Fast Index: UTR -> Settlement
     const settlementsByUtr = new Map<string, UnmatchedSettlementWrapper[]>();
-    for (const s of canonicalSettlements) {
+    for (let i = 0; i < canonicalSettlements.length; i++) {
+      const s = canonicalSettlements[i]!;
       if (s.settlement.utr) {
-        const bucket = settlementsByUtr.get(s.settlement.utr) ?? [];
+        let bucket = settlementsByUtr.get(s.settlement.utr);
+        if (!bucket) {
+          bucket = [];
+          settlementsByUtr.set(s.settlement.utr, bucket);
+        }
         bucket.push(s);
-        settlementsByUtr.set(s.settlement.utr, bucket);
       }
     }
 

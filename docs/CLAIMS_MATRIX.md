@@ -2,16 +2,24 @@
 
 This document is the **single source of truth** for all externally visible performance, scale, architecture, and reliability claims made by SettleMate AI.
 
+### 🛡️ One-Command Automated Claims Verification
+To independently reproduce and verify all 14 empirical claims and benchmarks in this matrix in sequence:
+```bash
+npm run verify-claims
+```
+This command resets to clean fixtures, checks the official SHA-256 fingerprint (`81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b`), executes all 8 suites, and outputs a consolidated report in `test-results/claims-verification-report.json`.
+
 ---
 
 ## 1. Authoritative Evidence Matrix
 
 | Capability / Subsystem | Exact Measured Value | Workload Size | Execution Environment | Run Identifier | Metric | Classification | Reproducibility Command |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Official Competition Benchmark** | **98.1% Accuracy**<br>• 98% Precision<br>• 98% Recall<br>• 90% Adversarial (9/10)<br>• 730.56 rec/s (520ms) | 250 records (263 normalized events) | Local Node.js v22.17<br>SQLite / In-Memory | Seed: `20260821`<br>Fingerprint: `81d840cd8cf9...` | Accuracy & Adversarial Detection | **REAL MEASURED (Competition Truth)** | `npm run evaluate` |
+| **Official Competition Benchmark** | **98.1% Accuracy**<br>• 98% Precision<br>• 98% Recall<br>• 90% Adversarial (9/10)<br>• **806.75 rec/s** | 250 records (263 normalized events) | Local Node.js v22.17<br>SQLite / In-Memory | Seed: `20260821`<br>Fingerprint: `81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b` | Accuracy & Adversarial Detection | **REAL MEASURED (Competition Truth)** | `npm run evaluate` |
+| **Scale Reconciliation Engine** | **1,147.5 – 1,246 rec/s**<br>• 10k: 1,246 rec/s (99.9% acc)<br>• 25k: 1,174.8 rec/s (100% acc)<br>• 50k: 1,156.2 rec/s (100% acc)<br>• 100k: 1,147.5 rec/s (100% acc) | 10,000 – 100,000 records | Scalable Cardinality + Durable Path | Run: `scale-v1` | Scale Batch Throughput & Accuracy | **REAL MEASURED SCALE** | `npm run scale` |
 | **Cardinality Solver Engine** | **100% Score (8/8 Scenarios)**<br>• Exact N:1, 1:N, N:M<br>• Tolerance N:1<br>• Timing boundary exclusion | 8 complex combinatorial topologies | Local Node.js v22.17 | Run: `eval-card-v1` | Combinatorial Topology Resolution | **REAL MEASURED** | `npx tsx scripts/evaluate-cardinality.ts` |
-| **Policy Shadow Replay** | **555,556 rec/s (18ms)**<br>• +14.28% auto-match delta<br>• 0 invariant violations<br>• Safety: `SAFE` | 10,000 historical transactions | Streaming memory buffer ($O(\text{chunk size})$) | Run: `v3-vs-v4-10k` | Policy Impact & Regression Gate | **REAL MEASURED** | `npx tsx scripts/demo-scenario.ts` (Phase 8) |
-| **Distributed Chaos & Recovery** | **219,298 rec/s**<br>• 10,000 crashes recovered (100%)<br>• 5,000 duplicate writes prevented<br>• 0 DLQ, 78MB heap | 100,000 streaming transactions | Partitioned Queue (20 partitions, 4 workers) | Run: `chaos-100k-v1` | Crash Recovery & Effectively-Once Finalization | **REAL MEASURED STRESS** | `npx tsx scripts/benchmark-100k-chaos.ts` |
+| **Policy Shadow Replay Micro-Benchmark** | **555,556 rec/s (18ms)**<br>• +14.28% auto-match delta<br>• 0 invariant violations<br>• Safety: `SAFE` | 10,000 historical transactions | Streaming memory buffer ($O(\text{chunk size})$) | Run: `v3-vs-v4-10k` | Policy Impact & Regression Gate | **REAL MEASURED MICRO-BENCHMARK** | `npx tsx scripts/demo-scenario.ts` (Phase 8) |
+| **Distributed Chaos Queue Micro-Benchmark** | **219,298 rec/s**<br>• 10,000 crashes recovered (100%)<br>• 5,000 duplicate writes prevented<br>• 0 DLQ, 78MB heap | 100,000 streaming transactions | Partitioned Queue (20 partitions, 4 workers) | Run: `chaos-100k-v1` | Crash Recovery & Effectively-Once Finalization | **REAL MEASURED STRESS MICRO-BENCHMARK** | `npx tsx scripts/benchmark-100k-chaos.ts` |
 | **N:M Pathological Complexity** | **3.27ms – 14.49ms**<br>• 1,000 dense items: 14.49ms<br>• 20x20 prime cluster: 3.27ms<br>• 0 false matches | Pathological candidate density clusters | Local Combinatorial Solver | Run: `nm-patho-v1` | Combinatorial Pruning & Anti-Fabrication | **REAL PROVEN** | `npx tsx scripts/benchmark-nm-complexity.ts` |
 | **Hot-Key CAS Contention** | **14.23ms** (99 conflicts resolved)<br>• 0 lost updates, 0 state leaks<br>• Independent keys: 0.02ms | 100 concurrent workers on single hot key | In-Memory Relational Engine | Run: `cas-cont-v1` | Optimistic Concurrency & SQLSTATE 40001 | **REAL PROVEN** | `npx tsx scripts/benchmark-cas-contention.ts` |
 | **Financial Correctness Attack Suite** | **16/16 Passed (100%)**<br>• 0 fabricated matches<br>• 0 silent drops<br>• 0 double posts | 16 adversarial financial edge cases | Local Rule & Invariant Engine | Run: `fin-attack-v1` | Fail-Closed Conservation Invariant | **REAL PROVEN** | `npx tsx scripts/financial-correctness-attack.ts` |

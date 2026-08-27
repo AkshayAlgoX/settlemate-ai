@@ -74,21 +74,34 @@ export interface CanonicalDecisionReceipt {
 /**
  * Deterministically sort object keys for bitwise canonical JSON serialization.
  */
-export function canonicalizeJson(obj: unknown): string {
+export function canonicalizeJson(obj: unknown, seen: Set<unknown> = new Set()): string {
   if (obj === null || typeof obj !== "object") {
+    if (typeof obj === "bigint") return (obj as bigint).toString();
+    if (typeof obj === "number" && !Number.isFinite(obj)) return "null";
     return JSON.stringify(obj);
   }
 
+  if (seen.has(obj)) {
+    return '"[Circular]"';
+  }
+  seen.add(obj);
+
   if (Array.isArray(obj)) {
-    return "[" + obj.map((item) => canonicalizeJson(item)).join(",") + "]";
+    const serialized = obj.map((item) => canonicalizeJson(item, seen)).join(",");
+    seen.delete(obj);
+    return "[" + serialized + "]";
   }
 
   const sortedKeys = Object.keys(obj as Record<string, unknown>).sort();
-  const pairs = sortedKeys.map((key) => {
+  const pairs: string[] = [];
+  for (const key of sortedKeys) {
     const val = (obj as Record<string, unknown>)[key];
-    return JSON.stringify(key) + ":" + canonicalizeJson(val);
-  });
+    if (val !== undefined && typeof val !== "function" && typeof val !== "symbol") {
+      pairs.push(JSON.stringify(key) + ":" + canonicalizeJson(val, seen));
+    }
+  }
 
+  seen.delete(obj);
   return "{" + pairs.join(",") + "}";
 }
 

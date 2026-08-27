@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  settlemate-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: settlemate-control-plane
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - AUTH_SECRET=settlemate_production_super_secret_key_8899776655443322
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-""}
+      - DATABASE_URL=file:./dev.db
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    volumes:
+      - settlemate_data:/app/prisma
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+volumes:
+  settlemate_data:
+    driver: local

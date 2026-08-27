@@ -3,18 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "init-db": "npx tsx scripts/init-db.ts",
+    "db:init": "npx tsx scripts/init-db.ts",
+    "predev": "npx tsx scripts/init-db.ts",
+    "postinstall": "npx tsx scripts/init-db.ts || true",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/lib/adapters/adapters.test.ts && npx tsx src/lib/auth/rate-limiter.test.ts && npx tsx src/lib/exceptions/state-machine.test.ts && npx tsx src/lib/exceptions/service.test.ts && npx tsx src/lib/auth/session.test.ts && npx tsx src/lib/reconciliation/matcher-equivalence.test.ts && npx tsx src/lib/reconciliation/distributed/distributed.test.ts && npx tsx src/lib/reconciliation/distributed/failure-injection.test.ts && npx tsx src/lib/reconciliation/multi-pass.test.ts && npx tsx src/lib/reconciliation/cardinality.test.ts && npx tsx src/lib/reconciliation/cardinality-e2e.test.ts && npx tsx src/lib/reconciliation/invariants.test.ts && npx tsx src/lib/reconciliation/decision.test.ts && npx tsx src/lib/reconciliation/risk-gate.test.ts && npx tsx src/lib/reconciliation/audit-chain.test.ts && npx tsx src/lib/reconciliation/ledger.test.ts && npx tsx src/lib/reconciliation/audit-e2e.test.ts && npx tsx src/lib/reconciliation/run-metadata.test.ts && npx tsx src/lib/reconciliation/replay-e2e.test.ts && npx tsx src/lib/reconciliation/scale/buckets.test.ts && npx tsx src/lib/reconciliation/scale/clusters.test.ts && npx tsx src/lib/reconciliation/scale/strategy.test.ts && npx tsx src/lib/reconciliation/scale/durable.test.ts && npx tsx src/lib/reconciliation/scale/scale-run.test.ts && npx tsx src/lib/evidence/vault.test.ts && npx tsx src/lib/policy/policy.test.ts && npx tsx src/lib/ai/council.test.ts && npx tsx src/lib/reconciliation/scale/scale-contract.test.ts",
+    "test": "npx tsx src/lib/adapters/adapters.test.ts && npx tsx src/lib/auth/rate-limiter.test.ts && npx tsx src/lib/security/api-security.test.ts && npx tsx src/lib/simulator/simulator.test.ts && npx tsx src/lib/exceptions/state-machine.test.ts && npx tsx src/lib/exceptions/service.test.ts && npx tsx src/lib/auth/session.test.ts && npx tsx src/lib/reconciliation/matcher-equivalence.test.ts && npx tsx src/lib/reconciliation/distributed/distributed.test.ts && npx tsx src/lib/reconciliation/distributed/failure-injection.test.ts && npx tsx src/lib/reconciliation/multi-pass.test.ts && npx tsx src/lib/reconciliation/cardinality.test.ts && npx tsx src/lib/reconciliation/cardinality-e2e.test.ts && npx tsx src/lib/reconciliation/invariants.test.ts && npx tsx src/lib/reconciliation/decision.test.ts && npx tsx src/lib/reconciliation/risk-gate.test.ts && npx tsx src/lib/reconciliation/audit-chain.test.ts && npx tsx src/lib/reconciliation/ledger.test.ts && npx tsx src/lib/reconciliation/audit-e2e.test.ts && npx tsx src/lib/reconciliation/run-metadata.test.ts && npx tsx src/lib/reconciliation/replay-e2e.test.ts && npx tsx src/lib/reconciliation/scale/buckets.test.ts && npx tsx src/lib/reconciliation/scale/clusters.test.ts && npx tsx src/lib/reconciliation/scale/strategy.test.ts && npx tsx src/lib/reconciliation/scale/durable.test.ts && npx tsx src/lib/reconciliation/scale/scale-run.test.ts && npx tsx src/lib/evidence/vault.test.ts && npx tsx src/lib/policy/policy.test.ts && npx tsx src/lib/ai/council.test.ts && npx tsx src/lib/reconciliation/scale/scale-contract.test.ts && npx tsx src/lib/reconciliation/aggregate-risk.test.ts && npx tsx src/lib/ai/finance-ops-loop.test.ts && npx tsx src/app/api/sandbox/reconcile/sandbox.test.ts && npx tsx src/app/api/verify/run/verify-route.test.ts && npx tsx src/app/api/verify/progress/verify-progress.test.ts && npx tsx src/app/api/scenarios/run/scenarios.test.ts && npx tsx src/app/api/security/attack/attack.test.ts && npx tsx src/app/api/v1/v1-api.test.ts && npx tsx src/app/developer/developer.test.ts && npx tsx tests/e2e/e2e-workflows.test.ts && npx tsx src/app/benchmark-comparison/benchmark-comparison.test.ts && npx tsx src/app/provenance/provenance.test.ts && npx tsx src/app/api/policy/run/policy-run.test.ts && npx tsx src/app/api/tenant/run/tenant.test.ts && npx tsx src/app/audit-trail/audit-trail.test.ts && npx tsx src/lib/fuzz/fuzz.test.ts && npx tsx src/lib/security/penetration.test.ts && npx tsx tests/concurrency-stress.test.ts && npx tsx src/app/ai-comparison/ai-comparison.test.ts && npx tsx src/app/api/report/generate/report.test.ts && npx tsx src/app/live-monitor/live-monitor.test.ts && npx tsx src/lib/business-impact/calculator.test.ts && npx tsx src/app/exception-analysis/exception-analysis.test.ts && npx tsx src/lib/calibration/calibration.test.ts && npx tsx src/lib/playbooks/playbooks.test.ts && npx tsx tests/calibration-playbooks-e2e.test.ts && npx tsx src/lib/currency/multi-currency.test.ts && npx tsx src/lib/currency/reconcile-multi-currency.test.ts && npx tsx tests/multi-currency-api-e2e.test.ts && npx tsx src/lib/storage/sqlite-db.test.ts && npx tsx src/lib/ai/llm-investigator.test.ts && npx tsx src/lib/api/webhook-dispatch.test.ts && npx tsx src/lib/risk/scoring.test.ts && npx tsx src/app/api/risk/exposure/exposure.test.ts && npx tsx src/app/risk-dashboard/risk-dashboard.test.ts && npx tsx src/app/api/red-team/attack/attack.test.ts && npx tsx src/lib/alerts/alerts.test.ts && npx tsx src/app/api/forensics/forensics.test.ts",
     "test:e2e-cardinality": "npx tsx src/lib/reconciliation/cardinality-e2e.test.ts",
     "scale": "npx tsx scripts/scale-benchmark.ts",
     "evaluate": "npx tsx scripts/evaluate.ts",
     "verify:demo": "npx tsx scripts/verify-demo.ts",
-    "verify:receipt": "npx tsx scripts/verify-receipt.ts"
+    "verify:receipt": "npx tsx scripts/verify-receipt.ts",
+    "verify-claims": "npx tsx scripts/verify-claims.ts",
+    "test:coverage": "npx tsx scripts/test-coverage.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@base-ui/react": "^1.7.0",
     "@google/generative-ai": "^0.24.1",
     "@prisma/adapter-better-sqlite3": "^7.9.1",
@@ -28,6 +35,7 @@
     "date-fns": "^4.4.0",
     "lucide-react": "^1.33.0",
     "next": "16.3.1",
+    "openai": "^7.5.0",
     "papaparse": "^5.6.0",
     "prisma": "^7.9.1",
     "react": "19.2.8",
@@ -41,6 +49,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

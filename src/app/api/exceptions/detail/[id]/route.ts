@@ -299,7 +299,7 @@ export async function GET(
       hasContradictions: contradictions.length > 0,
     });
 
-    const councilDecision = council.deliberate({
+    const councilDecision = await council.deliberateAsync({
       exceptionId: id,
       batchId,
       exceptionType: exception.exceptionType,

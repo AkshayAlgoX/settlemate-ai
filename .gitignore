@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -49,6 +50,10 @@ prisma/dev.db-journal
 
 dev.db
 dev.db-journal
+data/
+data/*.db
+data/*.db-wal
+data/*.db-shm
 
 # Local AI tool directories
 .agents/
