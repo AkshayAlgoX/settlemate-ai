@@ -2,7 +2,10 @@ import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
 const rawUrl = process.env.DATABASE_URL || "";
-const isPostgres = rawUrl.startsWith("postgres://") || rawUrl.startsWith("postgresql://");
+const isPostgres =
+  process.env.PRISMA_TARGET_PROVIDER === "postgresql" ||
+  (process.env.PRISMA_TARGET_PROVIDER !== "sqlite" &&
+    (rawUrl.startsWith("postgres://") || rawUrl.startsWith("postgresql://")));
 
 export default defineConfig({
   schema: isPostgres ? "prisma/schema.postgresql.prisma" : "prisma/schema.prisma",
@@ -10,6 +13,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: rawUrl || "file:./dev.db",
+    url: isPostgres
+      ? (rawUrl || "postgresql://placeholder:placeholder@localhost:5432/settlemate")
+      : (rawUrl || "file:./dev.db"),
   },
 });

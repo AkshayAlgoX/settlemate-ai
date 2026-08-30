@@ -1,23 +1,23 @@
 # =========================================================================
 # SettleMate AI — Production Container Dockerfile (Multi-Stage)
-# Base Image: Node.js 22 Alpine for minimal attack surface
+# Base Image: Node.js 22 (Debian / glibc / official build toolchain)
 # =========================================================================
 
 # --- STAGE 1: Dependency Installation ---
-FROM node:22-alpine AS deps
+FROM node:22 AS deps
 WORKDIR /app
-
-# Install libc compatibility and native build toolchain for better-sqlite3
-RUN apk add --no-cache libc6-compat python3 make g++
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
 
+# Configure target provider for production PostgreSQL
+ENV PRISMA_TARGET_PROVIDER=postgresql
+
 RUN npm ci
 
 # --- STAGE 2: Build Application ---
-FROM node:22-alpine AS builder
+FROM node:22 AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -26,24 +26,25 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Generate Prisma Client & Build Next.js standalone application
-RUN npx prisma generate
-RUN npm run build
+# Explicitly configure PostgreSQL Prisma generation for the production container
+ENV PRISMA_TARGET_PROVIDER=postgresql
+
+# Generate Prisma Client for PostgreSQL & Build Next.js standalone application
+RUN npx prisma generate --schema=prisma/schema.postgresql.prisma
+RUN npx next build
 
 # --- STAGE 3: Production Runner ---
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
-ENV DATABASE_URL="file:/app/data/dev.db"
-ENV SETTLEMATE_DB_PATH="/app/data/settlemate.db"
 
 # Security: Create non-root system user and group
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 -g nodejs nextjs
 
 # Create persistent storage volume mount point with non-root ownership
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
@@ -54,7 +55,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 # Copy and configure startup entrypoint
@@ -65,9 +65,9 @@ USER nextjs
 
 EXPOSE 3000
 
-# Healthcheck configuration: probe real database health via /api/v1/health
+# Healthcheck configuration: probe real database health via /api/v1/health using native Node.js fetch
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/v1/health || exit 1
+  CMD node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]

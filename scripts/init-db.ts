@@ -75,6 +75,15 @@ async function main() {
       stdio: "inherit",
       env: {
         ...process.env,
+        PRISMA_TARGET_PROVIDER: "sqlite",
+        DATABASE_URL: `file:${prismaDbPath}`,
+      },
+    });
+    execSync("npx prisma generate --schema=prisma/schema.prisma", {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        PRISMA_TARGET_PROVIDER: "sqlite",
         DATABASE_URL: `file:${prismaDbPath}`,
       },
     });

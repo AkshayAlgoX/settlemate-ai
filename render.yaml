@@ -3,12 +3,14 @@ services:
     name: settlemate-ai
     env: node
     plan: free
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci && npm run build:prod
     startCommand: npm run start
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PRISMA_TARGET_PROVIDER
+        value: postgresql
       - key: DATABASE_URL
         sync: false
       - key: AUTH_SECRET

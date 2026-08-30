@@ -9,23 +9,21 @@ echo "========================================================================="
 echo " 🚀 SETTLEMATE AI — PRODUCTION PERSISTENT CONTROL PLANE STARTUP"
 echo "========================================================================="
 
-# 1. Ensure persistent volume directory structure exists
-DATA_DIR="/app/data"
-mkdir -p "$DATA_DIR"
-
-echo "→ Verifying unified persistent storage mount at: $DATA_DIR"
-echo "→ DATABASE_URL: ${DATABASE_URL:-file:/app/data/dev.db}"
-echo "→ SETTLEMATE_DB_PATH: ${SETTLEMATE_DB_PATH:-/app/data/settlemate.db}"
-
-# 2. Synchronize databases on the persistent volume
-echo "→ Running idempotent database verification and initialization..."
-if [ -f "scripts/init-db.ts" ]; then
-  npx tsx scripts/init-db.ts || {
-    echo "⚠️ Database initialization completed with warnings. Continuing startup..."
-  }
+# 1. Verify runtime environment configuration safely without exposing credentials
+if [ -n "$DATABASE_URL" ]; then
+  case "$DATABASE_URL" in
+    postgresql://*|postgres://*)
+      echo "✓ Authoritative PostgreSQL connection configured (credentials masked)."
+      ;;
+    *)
+      echo "✓ Database connection configured (credentials masked)."
+      ;;
+  esac
+else
+  echo "⚠️ Notice: DATABASE_URL not set in container environment."
 fi
 
-echo "✓ Production persistence verified."
+# 2. Launch SettleMate AI Standalone Node Server
 echo "✓ Launching SettleMate AI Standalone Node Server on ${HOSTNAME:-0.0.0.0}:${PORT:-3000}..."
 echo "========================================================================="
 

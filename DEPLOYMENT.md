@@ -160,12 +160,15 @@ curl -s http://127.0.0.1:3000/api/docs | grep "openapi"
 
 ## 5. Startup & Database Initialization Lifecycle
 
-When the container launches:
+When the production container launches:
 1. `/app/docker-entrypoint.sh` executes as non-root user `nextjs`.
-2. Verifies that `/app/data` is mounted and writable.
-3. Runs `scripts/init-db.ts` to idempotently push Prisma schema to `dev.db` and initialize direct SQLite tables in `settlemate.db`.
+2. Verifies that `DATABASE_URL` is configured safely without leaking credentials.
+3. Next.js standalone server starts and binds to `0.0.0.0:3000`.
 4. `src/instrumentation.ts` registers server shutdown hooks (`SIGTERM`/`SIGINT`).
-5. Next.js standalone server starts and binds to `0.0.0.0:3000`.
+5. Database connectivity is verified on demand via `/api/v1/health` with PostgreSQL via `@prisma/adapter-pg`.
+6. Production migrations are executed deliberately out-of-band via `npm run db:migrate:prod` (never destructively on startup).
+
+*(Note: Local development continues to use SQLite initialized via `npm run init-db`.)*
 
 ---
 

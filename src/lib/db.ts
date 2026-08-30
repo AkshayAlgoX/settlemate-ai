@@ -17,17 +17,36 @@ const globalForPrisma = globalThis as unknown as {
   pgPool: pg.Pool | undefined;
 };
 
-export function createPrismaAdapter() {
-  const databaseUrl = process.env.DATABASE_URL || "file:./dev.db";
+export function isPostgres(): boolean {
+  const url = process.env.DATABASE_URL || "";
+  return (
+    process.env.PRISMA_TARGET_PROVIDER === "postgresql" ||
+    (process.env.PRISMA_TARGET_PROVIDER !== "sqlite" &&
+      (url.startsWith("postgres://") || url.startsWith("postgresql://")))
+  );
+}
 
-  if (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://")) {
+export function createPrismaAdapter() {
+  const databaseUrl = process.env.DATABASE_URL || "";
+  const targetIsPostgres = isPostgres();
+
+  if (targetIsPostgres) {
+    const pgUrl =
+      (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://"))
+        ? databaseUrl
+        : "postgresql://placeholder:placeholder@localhost:5432/settlemate";
     const pool =
       globalForPrisma.pgPool ??
       new pg.Pool({
-        connectionString: databaseUrl,
+        connectionString: pgUrl,
         max: Number(process.env.PG_MAX_POOL_SIZE || 20),
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
+        ssl:
+          pgUrl.includes("sslmode=require") ||
+          pgUrl.includes("neon.tech")
+            ? { rejectUnauthorized: false }
+            : undefined,
       });
 
     if (process.env.NODE_ENV !== "production") {
@@ -39,7 +58,7 @@ export function createPrismaAdapter() {
 
   // Fallback to local SQLite adapter for deterministic local development
   return new PrismaBetterSqlite3({
-    url: databaseUrl,
+    url: databaseUrl || "file:./dev.db",
   });
 }
 
@@ -52,11 +71,6 @@ if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
-export function isPostgres(): boolean {
-  const url = process.env.DATABASE_URL || "";
-  return url.startsWith("postgres://") || url.startsWith("postgresql://");
-}
-
 export async function checkDatabaseConnection(): Promise<{
   provider: string;
   status: "up" | "down";
@@ -66,13 +80,16 @@ export async function checkDatabaseConnection(): Promise<{
   try {
     await prisma.$queryRaw`SELECT 1`;
     return {
-      provider: (adapter as { provider?: string }).provider || "database",
+      provider: isPostgres() ? "postgres" : "sqlite",
       status: "up",
       latencyMs: Date.now() - start,
     };
-  } catch {
+  } catch (err: unknown) {
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const sanitized = rawMessage.replace(/:[^:@\s]+@/, ":***@");
+    console.error("[Database Health] Connection check failed:", sanitized);
     return {
-      provider: (adapter as { provider?: string }).provider || "database",
+      provider: isPostgres() ? "postgres" : "sqlite",
       status: "down",
       latencyMs: Date.now() - start,
     };
