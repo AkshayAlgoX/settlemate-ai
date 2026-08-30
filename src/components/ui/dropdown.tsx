@@ -78,8 +78,8 @@ export function Dropdown({
               disabled={opt.disabled}
               className="cursor-pointer text-xs sm:text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus:bg-accent focus:text-foreground data-[selected]:bg-accent/70 data-[selected]:text-foreground data-[selected]:font-medium data-[checked=true]:bg-accent/70 data-[checked=true]:text-foreground data-[checked=true]:font-medium py-1.5 px-2.5 rounded-lg"
             >
-              <div className="flex items-center justify-between gap-2.5 w-full">
-                <span className="truncate">{opt.label}</span>
+              <div className="flex items-center justify-between gap-3 w-full min-w-0">
+                <span className="truncate sm:overflow-visible sm:whitespace-nowrap">{opt.label}</span>
                 {opt.badge && (
                   <span className="font-mono text-[10px] text-muted-foreground border border-border bg-card px-1.5 py-0.5 rounded shrink-0">
                     {opt.badge}

@@ -110,10 +110,21 @@ async function reconcileToRiskInputs(
   return inputs;
 }
 
-async function handlePost(req: NextRequest) {
+async function handleExposure(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as { batchId?: unknown };
-    const batchId = typeof body.batchId === "string" && body.batchId.trim() ? body.batchId.trim() : null;
+    let batchId: string | null = null;
+    if (req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { batchId?: unknown };
+      if (typeof body.batchId === "string" && body.batchId.trim()) {
+        batchId = body.batchId.trim();
+      }
+    }
+    if (!batchId) {
+      const qBatch = req.nextUrl.searchParams.get("batchId");
+      if (qBatch && qBatch.trim()) {
+        batchId = qBatch.trim();
+      }
+    }
 
     let source: "batch" | "combined-scenarios";
     let datasetLabel: string;
@@ -163,4 +174,5 @@ async function handlePost(req: NextRequest) {
   }
 }
 
-export const POST = instrument("risk.exposure", handlePost);
+export const GET = instrument("risk.exposure", handleExposure);
+export const POST = instrument("risk.exposure", handleExposure);

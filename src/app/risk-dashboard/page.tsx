@@ -1,15 +1,22 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, Suspense } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   RefreshCw,
   Download,
   BookOpen,
+  LogIn,
+  AlertTriangle,
+  RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeader } from "@/components/ui/section-header";
 import { Badge } from "@/components/ui/badge";
+import { Dropdown } from "@/components/ui/dropdown";
+import { apiErrorMessage } from "@/lib/api/error-message";
 
 type RiskCategory = "HIGH" | "MEDIUM" | "LOW";
 type RiskBand = "LOW" | "MODERATE" | "ELEVATED" | "CRITICAL";
@@ -80,52 +87,120 @@ function getBadgeVariant(risk: RiskCategory | RiskBand) {
   }
 }
 
-async function fetchExposure(): Promise<RiskResponse> {
+async function fetchExposure(batchId?: string | null): Promise<RiskResponse> {
+  const payload = batchId ? { batchId } : {};
   const res = await fetch("/api/risk/exposure", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify(payload),
   });
-  const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(json?.error?.message || `Request failed (${res.status})`);
+
+  const json = await res.json().catch(() => null);
+
+  if (!res.ok || !json?.success) {
+    if (res.status === 401) {
+      throw new Error("UNAUTHORIZED: Session expired or authentication required. Please sign in to access the Risk & Exposure Command Center.");
+    }
+    throw new Error(apiErrorMessage(json, `Request failed (${res.status})`));
   }
+
   return json as RiskResponse;
 }
 
-export default function RiskDashboardPage() {
+function RiskDashboardContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialBatchId = searchParams.get("batchId");
+
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(initialBatchId || "COMBINED");
+  const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([]);
   const [data, setData] = useState<RiskResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthError, setIsAuthError] = useState(false);
 
-  const runAnalysis = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setData(await fetchExposure());
-    } catch (err) {
-      setError((err as Error).message || "Failed to compute risk exposure.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Fetch available batches for the dropdown
   useEffect(() => {
     let active = true;
-    fetchExposure()
-      .then((d) => {
-        if (active) setData(d);
+    fetch("/api/batches")
+      .then((res) => (res.ok ? res.json() : { batches: [] }))
+      .then((json) => {
+        if (active && Array.isArray(json.batches)) {
+          setAvailableBatches(
+            json.batches.map((b: { id: string; name?: string }) => ({
+              id: b.id,
+              name: b.name || b.id,
+            }))
+          );
+        }
       })
-      .catch((err) => {
-        if (active) setError((err as Error).message || "Failed to compute risk exposure.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
+
+  const runAnalysis = useCallback(async (batchIdToUse?: string) => {
+    setLoading(true);
+    setError(null);
+    setIsAuthError(false);
+    const target = batchIdToUse !== undefined ? batchIdToUse : selectedBatchId;
+    const batchIdParam = target === "COMBINED" ? null : target;
+
+    try {
+      const response = await fetchExposure(batchIdParam);
+      setData(response);
+    } catch (err) {
+      const msg = (err as Error).message || "Failed to compute risk exposure.";
+      setError(msg);
+      if (msg.includes("UNAUTHORIZED") || msg.includes("401")) {
+        setIsAuthError(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedBatchId]);
+
+  useEffect(() => {
+    let active = true;
+    const target = initialBatchId || "COMBINED";
+    const batchIdParam = target === "COMBINED" ? null : target;
+
+    fetchExposure(batchIdParam)
+      .then((d) => {
+        if (active) {
+          setData(d);
+          setError(null);
+          setIsAuthError(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          const msg = (err as Error).message || "Failed to compute risk exposure.";
+          setError(msg);
+          if (msg.includes("UNAUTHORIZED") || msg.includes("401")) {
+            setIsAuthError(true);
+          }
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [initialBatchId]);
+
+  const handleBatchChange = (newBatchId: string) => {
+    setSelectedBatchId(newBatchId);
+    if (newBatchId === "COMBINED") {
+      router.push("/risk-dashboard");
+    } else {
+      router.push(`/risk-dashboard?batchId=${encodeURIComponent(newBatchId)}`);
+    }
+    void runAnalysis(newBatchId);
+  };
 
   const exportReport = useCallback(() => {
     if (!data) return;
@@ -143,6 +218,15 @@ export default function RiskDashboardPage() {
 
   const report = data?.report;
 
+  const datasetDropdownOptions = [
+    { value: "COMBINED", label: "Combined Scenario Lab Dataset (5 Scenarios)", badge: "Multi-Anomaly" },
+    ...availableBatches.map((b) => ({
+      value: b.id,
+      label: `Stored Batch: ${b.name}`,
+      badge: "Database",
+    })),
+  ];
+
   return (
     <div className="space-y-10 pb-12">
       {/* Header */}
@@ -152,7 +236,7 @@ export default function RiskDashboardPage() {
         description="Aggregated real-time exposure across unresolved exceptions, tolerance-stacking breaches, and severity tiers in exact integer paise."
         badge={data ? <Badge variant="outline">{data.datasetLabel}</Badge> : undefined}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={exportReport}
@@ -164,9 +248,9 @@ export default function RiskDashboardPage() {
             </button>
             <button
               type="button"
-              onClick={runAnalysis}
+              onClick={() => runAnalysis()}
               disabled={loading}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium hover:bg-[#ffffff] disabled:opacity-50 transition"
             >
               {loading ? (
                 <>
@@ -184,9 +268,75 @@ export default function RiskDashboardPage() {
         }
       />
 
-      {error && (
-        <div className="rounded-md border border-[#3b1818] bg-[#140a0a] p-4 text-xs font-mono text-[#ef4444]">
-          Risk analysis failed: {error}
+      {/* Dataset Selection Bar */}
+      <div className="rounded-lg border border-border bg-card p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+            Analysis Dataset:
+          </span>
+          <Dropdown
+            value={selectedBatchId}
+            onValueChange={handleBatchChange}
+            options={datasetDropdownOptions}
+            triggerClassName="min-w-[280px] text-xs font-mono"
+            data-testid="risk-dataset-dropdown"
+          />
+        </div>
+
+        {data && (
+          <div className="text-xs font-mono text-muted-foreground/80 flex items-center gap-3">
+            <span>Generated: {new Date(data.generatedAt).toLocaleTimeString()}</span>
+            <span>Source: {data.source}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Auth Error Banner */}
+      {isAuthError && (
+        <div className="rounded-lg border border-[#ef4444]/40 bg-[#1a0a0a] p-5 space-y-3">
+          <div className="flex items-center gap-2.5 text-[#ef4444]">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <div className="font-semibold text-sm">Authentication Required</div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Your session has expired or requires authentication. Please sign in to access the Risk & Exposure Command Center.
+          </p>
+          <div className="pt-1 flex items-center gap-3">
+            <Link
+              href="/login?next=/risk-dashboard"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium hover:bg-[#ffffff] transition"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              <span>Sign in to SettleMate</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => runAnalysis()}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>Retry request</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* General Error Banner */}
+      {error && !isAuthError && (
+        <div className="rounded-lg border border-[#3b1818] bg-[#140a0a] p-4 flex items-start justify-between gap-3 text-xs font-mono text-[#ef4444]">
+          <div>
+            <span className="font-semibold">Risk analysis failed: </span>
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => runAnalysis()}
+            className="inline-flex items-center gap-1 shrink-0 text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            <RotateCcw className="h-3 w-3" />
+            <span>Retry</span>
+          </button>
         </div>
       )}
 
@@ -402,5 +552,20 @@ function ScoreBar({ label, value, max }: { label: string; value: number; max: nu
         {value}/{max}
       </span>
     </div>
+  );
+}
+
+export default function RiskDashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center gap-3 rounded-lg border border-border bg-card p-16 text-sm text-muted-foreground">
+          <RefreshCw className="h-4 w-4 animate-spin text-foreground" />
+          <span>Loading Risk Dashboard...</span>
+        </div>
+      }
+    >
+      <RiskDashboardContent />
+    </Suspense>
   );
 }

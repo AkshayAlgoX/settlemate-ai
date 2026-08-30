@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -30,6 +30,7 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeader } from "@/components/ui/section-header";
 import { Badge } from "@/components/ui/badge";
+import { Dropdown } from "@/components/ui/dropdown";
 
 interface DashboardBatch {
   id: string;
@@ -171,12 +172,14 @@ interface ScaleHistoryItem {
 }
 
 function DashboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const batchId = searchParams.get("batchId");
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [scaleHistory, setScaleHistory] = useState<ScaleHistoryItem[]>([]);
+  const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string; size: number }[]>([]);
 
   useEffect(() => {
     fetch("/api/scale/run")
@@ -202,12 +205,23 @@ function DashboardContent() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     const run = async () => {
       try {
-        if (!batchId) {
-          const response = await fetch("/api/batches");
-          const result = await response.json();
+        const response = await fetch("/api/batches");
+        const result = await response.json();
 
+        if (active && Array.isArray(result.batches)) {
+          setAvailableBatches(
+            result.batches.map((b: { id: string; name?: string; size?: number; totalRecords?: number }) => ({
+              id: b.id,
+              name: b.name || b.id,
+              size: b.totalRecords || b.size || 0,
+            }))
+          );
+        }
+
+        if (!batchId) {
           if (result.batches?.length > 0) {
             await loadDashboard(result.batches[0].id);
           } else {
@@ -222,6 +236,9 @@ function DashboardContent() {
     };
 
     void run();
+    return () => {
+      active = false;
+    };
   }, [batchId, loadDashboard]);
 
   if (loading) {
@@ -329,7 +346,23 @@ function DashboardContent() {
         description={`Batch ${batch.id?.slice(0, 14)}... · ${formatNumber(batch.size)} records · Settlement control`}
         badge={<Badge variant="success">{batch.status}</Badge>}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {availableBatches.length > 1 && (
+              <Dropdown
+                value={batch.id}
+                onValueChange={(newId) => {
+                  router.push(`/dashboard?batchId=${encodeURIComponent(newId)}`);
+                }}
+                options={availableBatches.map((b) => ({
+                  value: b.id,
+                  label: b.name,
+                  badge: `${b.size} recs`,
+                }))}
+                size="sm"
+                triggerClassName="min-w-[180px] text-xs font-mono"
+                data-testid="dashboard-batch-dropdown"
+              />
+            )}
             <Link
               href={`/exceptions?batchId=${batch.id}`}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent hover:border-foreground/30 transition"

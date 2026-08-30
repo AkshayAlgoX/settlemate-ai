@@ -1,15 +1,20 @@
 "use client";
 
 import { FinanceOpsVisualizer } from "@/components/demo/FinanceOpsVisualizer";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Brain,
   Check,
   CheckCircle2,
+  Clock,
+  ExternalLink,
+  History,
   Loader2,
   Play,
+  RefreshCw,
+  RotateCcw,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -151,13 +156,165 @@ export default function DemoPage() {
   const [steps, setSteps] = useState<ProgressStep[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Durable Active Job & Recent Batches State
+  const [activeJob, setActiveJob] = useState<{
+    jobId: string;
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+    batchSize: number;
+    createdAt: string;
+    elapsedSeconds: number;
+    pollUrl?: string;
+    error?: string;
+    result?: {
+      batchId: string;
+      batchName?: string;
+      stats?: Record<string, number>;
+    };
+  } | null>(null);
+
+  const [recentBatches, setRecentBatches] = useState<{
+    id: string;
+    name: string;
+    size: number;
+    status: string;
+    source: string;
+    totalRecords?: number | null;
+    autoMatched?: number | null;
+    exceptionsFound?: number | null;
+    accuracy?: number | null;
+    throughputRps?: number | null;
+    createdAt: string;
+  }[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+
+  // 1. Recover active jobs and recent batches on mount / page refresh
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadInitialData() {
+      setLoadingRecent(true);
+      try {
+        const [jobsRes, batchesRes] = await Promise.all([
+          fetch("/api/batches/jobs"),
+          fetch("/api/batches"),
+        ]);
+
+        if (jobsRes.ok) {
+          const jobsData = await jobsRes.json();
+          if (jobsData.activeJobs && jobsData.activeJobs.length > 0 && isMounted) {
+            const running = jobsData.activeJobs[0];
+            const elapsed = Math.max(
+              0,
+              Math.round((Date.now() - new Date(running.createdAt).getTime()) / 1000)
+            );
+            setActiveJob({
+              jobId: running.jobId,
+              status: running.status,
+              batchSize: running.batchSize,
+              createdAt: running.createdAt,
+              elapsedSeconds: elapsed,
+            });
+          }
+        }
+
+        if (batchesRes.ok && isMounted) {
+          const batchesData = await batchesRes.json();
+          if (Array.isArray(batchesData.batches)) {
+            setRecentBatches(batchesData.batches);
+          }
+        }
+      } catch (err) {
+        console.error("Initial data load error:", err);
+      } finally {
+        if (isMounted) setLoadingRecent(false);
+      }
+    }
+
+    loadInitialData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Poll active durable job until completion
+  const activeJobId = activeJob?.jobId;
+  const activeJobStatus = activeJob?.status;
+
+  useEffect(() => {
+    if (!activeJobId || (activeJobStatus !== "PENDING" && activeJobStatus !== "PROCESSING")) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setActiveJob((prev) => (prev ? { ...prev, elapsedSeconds: prev.elapsedSeconds + 1 } : null));
+    }, 1000);
+
+    let pollTimeout: NodeJS.Timeout;
+    let cancelled = false;
+
+    async function poll() {
+      if (cancelled || !activeJobId) return;
+      try {
+        const res = await fetch(`/api/batches/jobs/${activeJobId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.job) {
+            if (data.job.status === "COMPLETED") {
+              setActiveJob((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: "COMPLETED",
+                      result: data.job.result,
+                    }
+                  : null
+              );
+              // Auto-refresh recent batches
+              fetch("/api/batches")
+                .then((r) => r.json())
+                .then((b) => {
+                  if (Array.isArray(b.batches)) setRecentBatches(b.batches);
+                })
+                .catch(() => {});
+              return;
+            } else if (data.job.status === "FAILED") {
+              setActiveJob((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: "FAILED",
+                      error: data.job.error || "Background job failed",
+                    }
+                  : null
+              );
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Job poll error:", e);
+      }
+      if (!cancelled) {
+        pollTimeout = setTimeout(poll, 1000);
+      }
+    }
+
+    pollTimeout = setTimeout(poll, 600);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      clearTimeout(pollTimeout);
+    };
+  }, [activeJobId, activeJobStatus]);
+
   const selectedOption = SIZES.find((s) => s.size === size) || SIZES[0];
   const isStreamingScale = selectedOption.mode === "STREAMING";
 
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);
-    setResult(null);
     setScaleResult(null);
     setSteps([]);
 
@@ -184,32 +341,27 @@ export default function DemoPage() {
 
         const data = await response.json();
         if (data.accepted && data.jobId) {
-          // Poll real durable job status until completion
-          let completed = false;
-          let attempts = 0;
-          while (!completed && attempts < 60) {
-            await new Promise((r) => setTimeout(r, 1000));
-            attempts++;
-            const pollRes = await fetch(`/api/batches/jobs/${data.jobId}`);
-            if (pollRes.ok) {
-              const pollData = await pollRes.json();
-              if (pollData.job?.status === "COMPLETED" && pollData.job?.result) {
-                setResult(pollData.job.result);
-                completed = true;
-                break;
-              } else if (pollData.job?.status === "FAILED") {
-                throw new Error(pollData.job.error || "Background batch generation failed.");
-              }
-            }
-          }
-          if (!completed) {
-            throw new Error("Batch generation timed out.");
-          }
+          // Immediately show Active Background Generation Banner without blocking the UI
+          setActiveJob({
+            jobId: data.jobId,
+            status: "PROCESSING",
+            batchSize: size,
+            createdAt: new Date().toISOString(),
+            elapsedSeconds: 0,
+            pollUrl: data.pollUrl,
+          });
         } else {
           if (!response.ok || !data?.batchId) {
             throw new Error(data?.error || "Demo batch generation failed.");
           }
           setResult(data);
+          // Refresh recent batches list
+          fetch("/api/batches")
+            .then((r) => r.json())
+            .then((b) => {
+              if (Array.isArray(b.batches)) setRecentBatches(b.batches);
+            })
+            .catch(() => {});
         }
       }
     } catch (requestError) {
@@ -366,6 +518,107 @@ export default function DemoPage() {
             </div>
           ) : null}
 
+          {/* Active Durable Background Job Status Banner */}
+          {activeJob ? (
+            <div
+              className={`rounded-lg border p-4 text-xs space-y-3 transition ${
+                activeJob.status === "COMPLETED"
+                  ? "border-[#10b981]/40 bg-[#0a1a12]"
+                  : activeJob.status === "FAILED"
+                  ? "border-[#ef4444]/40 bg-[#1a0a0a]"
+                  : "border-border bg-card"
+              }`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2.5">
+                  {activeJob.status === "COMPLETED" ? (
+                    <CheckCircle2 className="h-4 w-4 text-[#10b981] shrink-0" />
+                  ) : activeJob.status === "FAILED" ? (
+                    <XCircle className="h-4 w-4 text-[#ef4444] shrink-0" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 text-foreground animate-spin shrink-0" />
+                  )}
+                  <div>
+                    <div className="font-semibold text-foreground flex items-center gap-2">
+                      <span>
+                        {activeJob.status === "COMPLETED"
+                          ? `Generation Complete · ${activeJob.batchSize.toLocaleString()} Records`
+                          : activeJob.status === "FAILED"
+                          ? "Generation Failed"
+                          : `Durable Background Generation in Progress · ${activeJob.batchSize.toLocaleString()} Records`}
+                      </span>
+                      <Badge
+                        variant={
+                          activeJob.status === "COMPLETED"
+                            ? "success"
+                            : activeJob.status === "FAILED"
+                            ? "destructive"
+                            : "outline"
+                        }
+                      >
+                        {activeJob.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-muted-foreground flex items-center gap-3">
+                      <span>Job ID: {activeJob.jobId}</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {activeJob.elapsedSeconds}s elapsed
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {activeJob.status === "COMPLETED" && activeJob.result ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResult(activeJob.result!);
+                        setActiveJob(null);
+                      }}
+                      className="inline-flex h-7 items-center gap-1.5 rounded bg-[#10b981] text-black px-3 text-xs font-medium hover:bg-[#10b981]/90 transition"
+                    >
+                      <span>Load & Reconcile Batch</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  ) : null}
+
+                  {activeJob.status === "FAILED" ? (
+                    <button
+                      type="button"
+                      onClick={handleGenerate}
+                      className="inline-flex h-7 items-center gap-1.5 rounded bg-secondary text-foreground px-3 text-xs font-medium hover:bg-secondary/80 transition"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>Retry</span>
+                    </button>
+                  ) : null}
+
+                  {activeJob.status === "COMPLETED" || activeJob.status === "FAILED" ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveJob(null)}
+                      className="inline-flex h-7 items-center px-2 text-[11px] text-muted-foreground hover:text-foreground transition"
+                    >
+                      Dismiss
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {activeJob.status === "PROCESSING" || activeJob.status === "PENDING" ? (
+                <p className="text-[11px] text-muted-foreground/80 border-t border-border/50 pt-2">
+                  ℹ️ This job is executing durably on the authoritative server. You can freely navigate to other pages or refresh the browser; progress and results will be automatically recovered.
+                </p>
+              ) : activeJob.status === "FAILED" ? (
+                <p className="text-[11px] text-[#ef4444] border-t border-[#ef4444]/20 pt-2 font-mono">
+                  Error: {activeJob.error || "Unknown generation failure"}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Configuration Grid */}
           <section className="rounded-lg border border-border bg-card p-6 space-y-6">
             <SectionHeader
@@ -390,8 +643,6 @@ export default function DemoPage() {
                         disabled={loading}
                         onClick={() => {
                           setSize(opt.size);
-                          setResult(null);
-                          setScaleResult(null);
                         }}
                         className={`flex flex-col items-start p-3 rounded border text-left transition ${
                           selected
@@ -628,7 +879,7 @@ export default function DemoPage() {
           ) : null}
 
           {/* Generated Result for Standard Runs */}
-          {result && !isStreamingScale ? (
+          {result ? (
             <section className="rounded-lg border border-border bg-card p-6 space-y-6">
               <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
                 <div>
@@ -747,6 +998,125 @@ export default function DemoPage() {
               ) : null}
             </section>
           ) : null}
+
+          {/* Authoritative Recent Batches & Audit History */}
+          <section className="rounded-lg border border-border bg-card p-6 space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-foreground" />
+                <div>
+                  <div className="text-xs font-semibold text-foreground">
+                    Authoritative Batch History ({recentBatches.length})
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Durable tenant batches stored in database. Previous batches remain accessible.
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={loadingRecent}
+                onClick={async () => {
+                  setLoadingRecent(true);
+                  try {
+                    const res = await fetch("/api/batches");
+                    const data = await res.json();
+                    if (Array.isArray(data.batches)) setRecentBatches(data.batches);
+                  } finally {
+                    setLoadingRecent(false);
+                  }
+                }}
+                className="inline-flex h-7 items-center gap-1.5 rounded border border-border bg-background px-2.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3 w-3 ${loadingRecent ? "animate-spin" : ""}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {recentBatches.length === 0 ? (
+              <div className="py-8 text-center text-xs text-muted-foreground">
+                No batches generated yet. Select a scale preset above and click Generate.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {recentBatches.slice(0, 10).map((b) => {
+                  const isCurrent = result?.batchId === b.id;
+                  return (
+                    <div
+                      key={b.id}
+                      className={`flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between text-xs transition ${
+                        isCurrent ? "bg-secondary/40 -mx-2 px-2 rounded" : ""
+                      }`}
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-medium text-foreground">
+                            {b.id}
+                          </span>
+                          <Badge variant="outline" className="font-mono text-[10px]">
+                            {b.size.toLocaleString()} recs
+                          </Badge>
+                          {isCurrent ? (
+                            <Badge variant="success" className="text-[10px]">
+                              Active in View
+                            </Badge>
+                          ) : null}
+                          <span className="text-[10px] text-muted-foreground uppercase font-mono">
+                            {b.source}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-3">
+                          <span>{new Date(b.createdAt).toLocaleString()}</span>
+                          {b.accuracy !== null && b.accuracy !== undefined ? (
+                            <span className="text-[#10b981] font-mono">
+                              Accuracy: {b.accuracy.toFixed(1)}%
+                            </span>
+                          ) : null}
+                          {b.throughputRps ? (
+                            <span className="font-mono">
+                              {b.throughputRps.toLocaleString()} rec/s
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!isCurrent ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResult({
+                                batchId: b.id,
+                                batchName: b.name,
+                                stats: {
+                                  records: b.totalRecords || b.size,
+                                  autoMatched: b.autoMatched || 0,
+                                  exceptions: b.exceptionsFound || 0,
+                                },
+                              });
+                            }}
+                            className="inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2.5 text-[11px] font-medium text-foreground hover:bg-secondary transition"
+                          >
+                            <span>Load Batch</span>
+                          </button>
+                        ) : null}
+
+                        <button
+                          type="button"
+                          onClick={() => router.push("/dashboard?batchId=" + b.id)}
+                          className="inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition"
+                        >
+                          <span>Dashboard</span>
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>

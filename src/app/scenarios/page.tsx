@@ -99,7 +99,7 @@ export default function ScenariosPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioId }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (data && data.success && data.scenario) {
         setResults((prev) => ({ ...prev, [scenarioId]: data.scenario }));
         setExpandedMap((prev) => ({ ...prev, [scenarioId]: true }));
@@ -119,7 +119,7 @@ export default function ScenariosPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioId: "all" }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (data && data.success && Array.isArray(data.scenarios)) {
         const map: Record<string, ScenarioResult> = {};
         const expand: Record<string, boolean> = {};

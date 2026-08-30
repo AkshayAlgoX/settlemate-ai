@@ -123,7 +123,7 @@ export default function VerificationHubPage() {
         body: JSON.stringify({ suites: selectedSuites, async: true }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (res.status === 202 && data.jobId) {
         setActiveJobId(data.jobId);
@@ -144,7 +144,7 @@ export default function VerificationHubPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ suites: selectedSuites, async: false }),
         });
-        const syncData = await syncRes.json();
+        const syncData = await syncRes.json().catch(() => ({}));
         if (syncData.success) {
           setFinalResponse(syncData);
           setLiveSuiteStates(syncData.results);
@@ -164,7 +164,7 @@ export default function VerificationHubPage() {
         const res = await fetch(`/api/verify/progress/${jobId}`);
         if (!res.ok) return;
 
-        const data: { success: boolean; job: VerifyJobState } = await res.json();
+        const data = (await res.json().catch(() => ({}))) as { success?: boolean; job?: VerifyJobState };
         if (data.success && data.job) {
           const job = data.job;
           setOverallProgress(job.overallProgressPct);

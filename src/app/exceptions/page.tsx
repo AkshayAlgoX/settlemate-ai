@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Loader2,
   Search,
@@ -102,69 +101,18 @@ function PremiumSelect({
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const close = () => setOpen(false);
-    window.addEventListener("click", close);
-
-    return () => window.removeEventListener("click", close);
-  }, [open]);
-
-  const selected =
-    options.find((option) => option.value === value)?.label || value;
-
   return (
-    <div
-      className="relative rounded-md border border-border bg-background p-3 text-xs"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <label className="text-muted-foreground block mb-1.5">
+    <div className="rounded-md border border-border bg-background p-3 space-y-1.5 text-xs">
+      <label className="text-muted-foreground block font-medium">
         {label}
       </label>
-
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="flex h-8 w-full items-center justify-between rounded border border-border bg-card px-2.5 text-left text-xs text-foreground hover:border-border transition"
-      >
-        <span className="truncate">{selected}</span>
-        <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-3 right-3 top-[68px] z-50 overflow-hidden rounded-md border border-border bg-card shadow-2xl">
-          <div className="max-h-56 overflow-y-auto py-1">
-            {options.map((option) => {
-              const active = option.value === value;
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition ${
-                    active
-                      ? "bg-secondary text-foreground font-medium"
-                      : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-                  }`}
-                >
-                  <span>{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <Dropdown
+        value={value}
+        onValueChange={onChange}
+        options={options}
+        size="sm"
+        triggerClassName="w-full text-xs"
+      />
     </div>
   );
 }

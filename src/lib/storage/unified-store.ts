@@ -23,6 +23,7 @@ interface PrismaDynamicClient {
     upsert: (args: Record<string, unknown>) => Promise<unknown>;
     updateMany: (args: Record<string, unknown>) => Promise<unknown>;
     findFirst?: (args: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+    findMany?: (args: Record<string, unknown>) => Promise<Record<string, unknown>[]>;
   };
   decisionReceipt?: {
     upsert: (args: Record<string, unknown>) => Promise<unknown>;
@@ -69,8 +70,14 @@ export interface UnifiedJob {
   error?: string;
 }
 
+// In-memory tenant mapping for local fallback / development
+const localTenantJobMap = new Map<string, string>();
+
 export const UnifiedJobRepository = {
   save(job: UnifiedJob): void {
+    if (job.tenantId) {
+      localTenantJobMap.set(job.jobId, job.tenantId);
+    }
     if (isPostgres()) {
       const tenantId = job.tenantId || getRequiredTenantId();
       withTenantContext(tenantId, async (tx) => {
@@ -185,7 +192,13 @@ export const UnifiedJobRepository = {
         console.error("[PostgresJobRepo] getAsync error:", err);
       }
     }
-    return this.get(jobId);
+    const local = this.get(jobId);
+    if (!local) return null;
+    if (tenantId) {
+      const jobTenant = localTenantJobMap.get(jobId) || local.tenantId;
+      if (jobTenant && jobTenant !== tenantId) return null;
+    }
+    return local;
   },
 
   get(jobId: string): UnifiedJob | null {
@@ -193,6 +206,7 @@ export const UnifiedJobRepository = {
     if (local) {
       return {
         jobId: local.jobId,
+        tenantId: localTenantJobMap.get(local.jobId),
         status: local.status,
         createdAt: local.createdAt,
         completedAt: local.completedAt,
@@ -207,9 +221,30 @@ export const UnifiedJobRepository = {
     return null;
   },
 
-  list(limit: number = 50): UnifiedJob[] {
-    return nativeSqlite.JobRepository.list(limit).map((j) => ({
+  list(limit: number = 50, tenantId?: string): UnifiedJob[] {
+    const items = nativeSqlite.JobRepository.list(limit * 2).map((j) => ({
       jobId: j.jobId,
+      tenantId: localTenantJobMap.get(j.jobId),
+      status: j.status,
+      createdAt: j.createdAt,
+      completedAt: j.completedAt,
+      webhookUrl: j.webhookUrl,
+      batchSize: j.batchSize,
+      summary: j.summary,
+      exceptions: j.exceptions,
+      receipt: j.receipt,
+      error: j.error,
+    }));
+    if (tenantId) {
+      return items.filter((j) => (j.tenantId || "tenant_default_sandbox") === tenantId).slice(0, limit);
+    }
+    return items.slice(0, limit);
+  },
+
+  getAll(): UnifiedJob[] {
+    return nativeSqlite.JobRepository.getAll().map((j) => ({
+      jobId: j.jobId,
+      tenantId: localTenantJobMap.get(j.jobId),
       status: j.status,
       createdAt: j.createdAt,
       completedAt: j.completedAt,
@@ -222,19 +257,109 @@ export const UnifiedJobRepository = {
     }));
   },
 
-  getAll(): UnifiedJob[] {
-    return nativeSqlite.JobRepository.getAll().map((j) => ({
-      jobId: j.jobId,
-      status: j.status,
-      createdAt: j.createdAt,
-      completedAt: j.completedAt,
-      webhookUrl: j.webhookUrl,
-      batchSize: j.batchSize,
-      summary: j.summary,
-      exceptions: j.exceptions,
-      receipt: j.receipt,
-      error: j.error,
-    }));
+  async listAsync(tenantId?: string, limit: number = 20): Promise<UnifiedJob[]> {
+    if (isPostgres()) {
+      const activeTenant = tenantId || getRequiredTenantId();
+      try {
+        const found = await withTenantContext(activeTenant, async (tx) => {
+          const client = tx as unknown as PrismaDynamicClient;
+          return client.asyncJob?.findMany
+            ? client.asyncJob.findMany({
+                where: { tenantId: activeTenant },
+                orderBy: { createdAt: "desc" },
+                take: limit,
+              })
+            : [];
+        });
+        if (Array.isArray(found) && found.length > 0) {
+          return found.map((item) => {
+            let summary: string | undefined;
+            let exceptions: string | undefined;
+            let receipt: string | undefined;
+            let webhookUrl: string | undefined;
+            const resultStr = typeof item.result === "string" ? item.result : undefined;
+            if (resultStr) {
+              try {
+                const parsed = JSON.parse(resultStr);
+                summary = parsed.summary;
+                exceptions = parsed.exceptions;
+                receipt = parsed.receipt;
+                webhookUrl = parsed.webhookUrl;
+              } catch {}
+            }
+            const payloadStr = typeof item.payload === "string" ? item.payload : undefined;
+            let batchSize = 0;
+            if (payloadStr) {
+              try {
+                const p = JSON.parse(payloadStr);
+                if (!webhookUrl) webhookUrl = p.webhookUrl;
+                batchSize = Number(p.batchSize || 0);
+              } catch {}
+            }
+            return {
+              jobId: String(item.id),
+              tenantId: item.tenantId ? String(item.tenantId) : undefined,
+              status: item.status as UnifiedJob["status"],
+              createdAt: item.createdAt ? new Date(item.createdAt as string | Date).toISOString() : new Date().toISOString(),
+              completedAt: item.completedAt ? new Date(item.completedAt as string | Date).toISOString() : undefined,
+              webhookUrl,
+              batchSize,
+              summary,
+              exceptions,
+              receipt,
+              error: item.error ? String(item.error) : undefined,
+            };
+          });
+        }
+      } catch (err) {
+        console.error("[PostgresJobRepo] listAsync error:", err);
+      }
+    }
+    return this.list(limit, tenantId);
+  },
+
+  async getActiveJobsAsync(tenantId?: string): Promise<UnifiedJob[]> {
+    if (isPostgres()) {
+      const activeTenant = tenantId || getRequiredTenantId();
+      try {
+        const found = await withTenantContext(activeTenant, async (tx) => {
+          const client = tx as unknown as PrismaDynamicClient;
+          return client.asyncJob?.findMany
+            ? client.asyncJob.findMany({
+                where: {
+                  tenantId: activeTenant,
+                  status: { in: ["PENDING", "PROCESSING"] },
+                },
+                orderBy: { createdAt: "desc" },
+                take: 10,
+              })
+            : [];
+        });
+        if (Array.isArray(found) && found.length > 0) {
+          return found.map((item) => {
+            const payloadStr = typeof item.payload === "string" ? item.payload : undefined;
+            let batchSize = 0;
+            if (payloadStr) {
+              try {
+                batchSize = Number(JSON.parse(payloadStr).batchSize || 0);
+              } catch {}
+            }
+            return {
+              jobId: String(item.id),
+              tenantId: item.tenantId ? String(item.tenantId) : undefined,
+              status: item.status as UnifiedJob["status"],
+              createdAt: item.createdAt ? new Date(item.createdAt as string | Date).toISOString() : new Date().toISOString(),
+              completedAt: item.completedAt ? new Date(item.completedAt as string | Date).toISOString() : undefined,
+              batchSize,
+              error: item.error ? String(item.error) : undefined,
+            };
+          });
+        }
+      } catch (err) {
+        console.error("[PostgresJobRepo] getActiveJobsAsync error:", err);
+      }
+    }
+    return this.list(50, tenantId).filter((j) => j.status === "PENDING" || j.status === "PROCESSING");
   },
 
   updateStatus(jobId: string, status: UnifiedJob["status"], error?: string): void {

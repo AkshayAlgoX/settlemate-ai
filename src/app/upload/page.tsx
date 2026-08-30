@@ -75,7 +75,7 @@ export default function UploadPage() {
         body: formData,
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(apiErrorMessage(data, "Failed to upload and validate CSV."));
       }
@@ -96,7 +96,7 @@ export default function UploadPage() {
       const res = await fetch(`/api/reconcile/${uploadResult.batchId}`, {
         method: "POST",
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(apiErrorMessage(data, "Reconciliation failed."));
       }

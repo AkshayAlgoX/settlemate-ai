@@ -185,105 +185,101 @@ async function executeBatchGeneration(size: number, batchName: string) {
     }
   }
 
-  await insertChunked(
-    prisma.order as unknown as CreateManyModel,
-    data.orders.map((o) => ({
-      orderId: o.orderId,
-      batchId: batch.id,
-      amount: o.amount,
-      currency: o.currency,
-      status: o.status,
-      customerEmail: o.customerEmail,
-      description: o.description,
-      createdAt: new Date(o.createdAt),
-    }))
-  );
-
-  await insertChunked(
-    prisma.payment as unknown as CreateManyModel,
-    data.payments.map((p) => ({
-      paymentId: p.paymentId,
-      batchId: batch.id,
-      orderId: p.orderId,
-      amount: p.amount,
-      currency: p.currency,
-      status: p.status,
-      method: p.method,
-      fee: p.fee,
-      tax: p.tax,
-      capturedAt: p.capturedAt ? new Date(p.capturedAt) : null,
-      createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
-    }))
-  );
-
-  await insertChunked(
-    prisma.settlement as unknown as CreateManyModel,
-    data.settlements.map((s) => ({
-      settlementId: s.settlementId,
-      batchId: batch.id,
-      paymentId: s.paymentId,
-      amount: s.amount,
-      fee: s.fee,
-      tax: s.tax,
-      utr: s.utr,
-      status: s.status,
-      settledAt: s.settledAt ? new Date(s.settledAt) : null,
-      createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
-    }))
-  );
-
-  await insertChunked(
-    prisma.bankTransaction as unknown as CreateManyModel,
-    data.bankTransactions.map((b) => ({
-      txnId: b.txnId,
-      batchId: batch.id,
-      utr: b.utr,
-      amount: b.amount,
-      type: b.type,
-      narration: b.narration,
-      balance: b.balance,
-      txnDate: b.txnDate ? new Date(b.txnDate) : new Date(),
-      valueDate: b.valueDate ? new Date(b.valueDate) : null,
-    }))
-  );
-
-  await insertChunked(
-    prisma.refund as unknown as CreateManyModel,
-    data.refunds.map((r) => ({
-      refundId: r.refundId,
-      batchId: batch.id,
-      paymentId: r.paymentId,
-      amount: r.amount,
-      status: r.status,
-      reason: r.reason,
-      createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
-      processedAt: r.processedAt ? new Date(r.processedAt) : null,
-    }))
-  );
-
-  await insertChunked(
-    prisma.chargeback as unknown as CreateManyModel,
-    data.chargebacks.map((c) => ({
-      chargebackId: c.chargebackId,
-      batchId: batch.id,
-      paymentId: c.paymentId,
-      amount: c.amount,
-      reason: c.reason,
-      status: c.status,
-      createdAt: new Date(c.createdAt),
-      resolvedAt: c.resolvedAt ? new Date(c.resolvedAt) : null,
-    }))
-  );
-
-  await insertChunked(
-    prisma.groundTruth as unknown as CreateManyModel,
-    data.groundTruths.map((g) => ({
-      paymentId: g.paymentId,
-      batchId: batch.id,
-      expectedLabel: g.expectedLabel,
-      scenario: g.scenario,
-    }))
-  );
+  await Promise.all([
+    insertChunked(
+      prisma.order as unknown as CreateManyModel,
+      data.orders.map((o) => ({
+        orderId: o.orderId,
+        batchId: batch.id,
+        amount: o.amount,
+        currency: o.currency,
+        status: o.status,
+        customerEmail: o.customerEmail,
+        description: o.description,
+        createdAt: new Date(o.createdAt),
+      }))
+    ),
+    insertChunked(
+      prisma.payment as unknown as CreateManyModel,
+      data.payments.map((p) => ({
+        paymentId: p.paymentId,
+        batchId: batch.id,
+        orderId: p.orderId,
+        amount: p.amount,
+        currency: p.currency,
+        status: p.status,
+        method: p.method,
+        fee: p.fee,
+        tax: p.tax,
+        capturedAt: p.capturedAt ? new Date(p.capturedAt) : null,
+        createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+      }))
+    ),
+    insertChunked(
+      prisma.settlement as unknown as CreateManyModel,
+      data.settlements.map((s) => ({
+        settlementId: s.settlementId,
+        batchId: batch.id,
+        paymentId: s.paymentId,
+        amount: s.amount,
+        fee: s.fee,
+        tax: s.tax,
+        utr: s.utr,
+        status: s.status,
+        settledAt: s.settledAt ? new Date(s.settledAt) : null,
+        createdAt: s.createdAt ? new Date(s.createdAt) : new Date(),
+      }))
+    ),
+    insertChunked(
+      prisma.bankTransaction as unknown as CreateManyModel,
+      data.bankTransactions.map((b) => ({
+        txnId: b.txnId,
+        batchId: batch.id,
+        utr: b.utr,
+        amount: b.amount,
+        type: b.type,
+        narration: b.narration,
+        balance: b.balance,
+        txnDate: b.txnDate ? new Date(b.txnDate) : new Date(),
+        valueDate: b.valueDate ? new Date(b.valueDate) : null,
+      }))
+    ),
+    insertChunked(
+      prisma.refund as unknown as CreateManyModel,
+      data.refunds.map((r) => ({
+        refundId: r.refundId,
+        batchId: batch.id,
+        paymentId: r.paymentId,
+        amount: r.amount,
+        status: r.status,
+        reason: r.reason,
+        createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
+        processedAt: r.processedAt ? new Date(r.processedAt) : null,
+      }))
+    ),
+    insertChunked(
+      prisma.chargeback as unknown as CreateManyModel,
+      data.chargebacks.map((c) => ({
+        chargebackId: c.chargebackId,
+        batchId: batch.id,
+        paymentId: c.paymentId,
+        amount: c.amount,
+        reason: c.reason,
+        status: c.status,
+        createdAt: new Date(c.createdAt),
+        resolvedAt: c.resolvedAt ? new Date(c.resolvedAt) : null,
+      }))
+    ),
+    insertChunked(
+      prisma.groundTruth as unknown as CreateManyModel,
+      data.groundTruths.map((g) => ({
+        paymentId: g.paymentId,
+        batchId: batch.id,
+        expectedLabel: g.expectedLabel,
+        scenario: g.scenario,
+      }))
+    ),
+  ]);
 
   const stats = {
     orders: data.orders.length,
