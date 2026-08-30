@@ -42,7 +42,10 @@
  *     migrations declare", not "the runner did not throw".
  */
 
-import "dotenv/config";
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("dotenv/config");
+} catch {}
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";

@@ -33,6 +33,9 @@ ENV PRISMA_TARGET_PROVIDER=postgresql
 RUN npx prisma generate --schema=prisma/schema.postgresql.prisma
 RUN npx next build
 
+# Compile production migration runner into pure Node.js JavaScript
+RUN npx esbuild scripts/init-postgres.ts --bundle --platform=node --target=node22 --outfile=scripts/init-postgres.js --external:pg --external:dotenv
+
 # --- STAGE 3: Production Runner ---
 FROM node:22-slim AS runner
 WORKDIR /app
@@ -57,7 +60,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
-# Copy and configure startup entrypoint
+# Copy compiled migration runner and startup entrypoint
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/init-postgres.js ./scripts/init-postgres.js
 COPY --chown=nextjs:nodejs scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
