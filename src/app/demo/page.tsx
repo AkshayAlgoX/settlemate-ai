@@ -183,11 +183,34 @@ export default function DemoPage() {
         });
 
         const data = await response.json();
-        if (!response.ok || !data?.batchId) {
-          throw new Error(data?.error || "Demo batch generation failed.");
+        if (data.accepted && data.jobId) {
+          // Poll real durable job status until completion
+          let completed = false;
+          let attempts = 0;
+          while (!completed && attempts < 60) {
+            await new Promise((r) => setTimeout(r, 1000));
+            attempts++;
+            const pollRes = await fetch(`/api/batches/jobs/${data.jobId}`);
+            if (pollRes.ok) {
+              const pollData = await pollRes.json();
+              if (pollData.job?.status === "COMPLETED" && pollData.job?.result) {
+                setResult(pollData.job.result);
+                completed = true;
+                break;
+              } else if (pollData.job?.status === "FAILED") {
+                throw new Error(pollData.job.error || "Background batch generation failed.");
+              }
+            }
+          }
+          if (!completed) {
+            throw new Error("Batch generation timed out.");
+          }
+        } else {
+          if (!response.ok || !data?.batchId) {
+            throw new Error(data?.error || "Demo batch generation failed.");
+          }
+          setResult(data);
         }
-
-        setResult(data);
       }
     } catch (requestError) {
       console.error("Execution failed:", requestError);

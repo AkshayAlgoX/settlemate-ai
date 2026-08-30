@@ -15,26 +15,40 @@ export async function POST(
       return NextResponse.json({ error: "batchId required" }, { status: 400 });
     }
 
-    // Verify batch exists before attempting reconciliation
-    const batch = await prisma.batch.findUnique({
-      where: { id: batchId },
-      select: { id: true },
+    // Atomic concurrency lock: flip status to PROCESSING only if in an executable state
+    const lockUpdate = await prisma.batch.updateMany({
+      where: {
+        id: batchId,
+        status: { in: ["CREATED", "FAILED", "CONTROL_FAILURE", "RECONCILED"] },
+      },
+      data: { status: "PROCESSING" },
     });
 
-    if (!batch) {
-      return NextResponse.json({ error: "Batch not found" }, { status: 404 });
+    if (lockUpdate.count === 0) {
+      const existing = await prisma.batch.findUnique({
+        where: { id: batchId },
+        select: { status: true },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: "Batch not found" }, { status: 404 });
+      }
+      if (existing.status === "PROCESSING") {
+        return NextResponse.json(
+          { error: "Batch is currently being reconciled by another process", code: "CONCURRENT_RECONCILIATION" },
+          { status: 409 }
+        );
+      }
     }
 
-    // Pre-validation: ensure all required record types are present in the batch
-    const paymentCount = await prisma.payment.count({ where: { batchId } });
-    const settlementCount = await prisma.settlement.count({ where: { batchId } });
-    const bankCreditCount = await prisma.bankTransaction.count({
-      where: { batchId, type: "CREDIT" },
-    });
-    const bankDebitCount = await prisma.bankTransaction.count({
-      where: { batchId, type: "DEBIT" },
-    });
-    const chargebackCount = await prisma.chargeback.count({ where: { batchId } });
+    // Parallel pre-validation: run count queries concurrently
+    const [paymentCount, settlementCount, bankCreditCount, bankDebitCount, chargebackCount] =
+      await Promise.all([
+        prisma.payment.count({ where: { batchId } }),
+        prisma.settlement.count({ where: { batchId } }),
+        prisma.bankTransaction.count({ where: { batchId, type: "CREDIT" } }),
+        prisma.bankTransaction.count({ where: { batchId, type: "DEBIT" } }),
+        prisma.chargeback.count({ where: { batchId } }),
+      ]);
 
     const missingRecords: string[] = [];
     if (paymentCount === 0) missingRecords.push("payments");
@@ -43,6 +57,8 @@ export async function POST(
     if (bankDebitCount === 0 && chargebackCount > 0) missingRecords.push("bankDebits");
 
     if (missingRecords.length > 0 && (paymentCount === 0 || bankCreditCount === 0 || settlementCount === 0)) {
+      // Release lock on validation failure
+      await prisma.batch.update({ where: { id: batchId }, data: { status: "CREATED" } }).catch(() => {});
       return NextResponse.json(buildIncompleteRecordsError(missingRecords), { status: 422 });
     }
 

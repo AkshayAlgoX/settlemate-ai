@@ -106,7 +106,10 @@ model Batch {
   pass2Accuracy     Float?
   pass3Accuracy     Float?
   adversarialScore  Float?
-  amountAtRisk      Int?
+  // Sum of exception amounts in paise. BigInt because the INT32 ceiling is only
+  // ₹2.14 crore, which a single 250-record batch can exceed; see migration
+  // 20260831_domain_event_and_amount_at_risk.
+  amountAtRisk      BigInt?
 
   orders            Order[]
   payments          Payment[]

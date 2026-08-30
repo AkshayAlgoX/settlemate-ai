@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         exceptionsFound: batch.exceptionsFound,
         unresolvedCount: batch.unresolvedCount,
         accuracy: batch.accuracy,
-        amountAtRiskRupees: (batch.amountAtRisk || 0) / 100,
+        amountAtRiskRupees: Number(batch.amountAtRisk ?? 0) / 100,
         throughputRps: batch.throughputRps,
       },
       financialTotalsRupees: {
@@ -151,13 +151,13 @@ Respond in JSON format:
       const q = message.toLowerCase();
 
       if (q.includes("pending") || q.includes("settlement")) {
-        replyText = `Based on batch ${batchId.slice(0, 10)}..., there are ${batch.unresolvedCount || 0} unresolved items requiring manual review. Total amount at risk is ₹${((batch.amountAtRisk || 0) / 100).toLocaleString("en-IN")}. Accuracy is currently at ${batch.accuracy}%.`;
+        replyText = `Based on batch ${batchId.slice(0, 10)}..., there are ${batch.unresolvedCount || 0} unresolved items requiring manual review. Total amount at risk is ₹${(Number(batch.amountAtRisk ?? 0) / 100).toLocaleString("en-IN")}. Accuracy is currently at ${batch.accuracy}%.`;
       } else if (q.includes("fee") || q.includes("tax") || q.includes("charge")) {
         replyText = `In this batch, total fees deducted are ₹${contextData.financialTotalsRupees.feeAmount.toLocaleString("en-IN")} with ₹${contextData.financialTotalsRupees.taxAmount.toLocaleString("en-IN")} in GST on fees across ${batch.totalRecords || 0} transactions.`;
       } else if (q.includes("exception") || q.includes("risk")) {
         replyText = `There are ${batch.exceptionsFound || 0} total exceptions found in batch ${batchId.slice(0, 10)}. Top exception type is ${exceptions[0]?.exceptionType || "NONE"} with ₹${((exceptions[0]?.amount || 0) / 100).toLocaleString("en-IN")} involved.`;
       } else {
-        replyText = `Batch ${batchId.slice(0, 10)}... Summary: ${batch.totalRecords} records processed, ${batch.autoMatched} auto-matched (${batch.accuracy}% accuracy), ${batch.exceptionsFound} exceptions identified. Total amount at risk: ₹${((batch.amountAtRisk || 0) / 100).toLocaleString("en-IN")}.`;
+        replyText = `Batch ${batchId.slice(0, 10)}... Summary: ${batch.totalRecords} records processed, ${batch.autoMatched} auto-matched (${batch.accuracy}% accuracy), ${batch.exceptionsFound} exceptions identified. Total amount at risk: ₹${(Number(batch.amountAtRisk ?? 0) / 100).toLocaleString("en-IN")}.`;
       }
 
       evidenceUsed = [];

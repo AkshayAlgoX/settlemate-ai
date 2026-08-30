@@ -62,7 +62,7 @@ export async function GET(
         autoMatched: batch.autoMatched,
         exceptionsFound: batch.exceptionsFound,
         unresolvedCount: batch.unresolvedCount,
-        amountAtRisk: batch.amountAtRisk,
+        amountAtRisk: Number(batch.amountAtRisk ?? 0),
         grossOrderAmount: batch.totalRecords,
         source: batch.source,
       },

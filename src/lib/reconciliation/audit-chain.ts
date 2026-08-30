@@ -164,38 +164,51 @@ export async function appendAuditEvent(
   const db = input.client ?? prisma;
   const occurredAt = input.occurredAt ?? new Date();
 
-  const last = await db.auditEvent.findFirst({
-    where: { batchId: input.batchId },
-    orderBy: { seq: "desc" },
-    select: { seq: true, currentHash: true },
-  });
+  const MAX_RETRIES = 5;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const last = await db.auditEvent.findFirst({
+        where: { batchId: input.batchId },
+        orderBy: { seq: "desc" },
+        select: { seq: true, currentHash: true },
+      });
 
-  const previousHash = last ? last.currentHash : GENESIS_HASH;
-  const seq = last ? last.seq + 1 : 0;
-  const canonicalPayload = canonicalize({
-    ...input.payload,
-    eventType: input.eventType,
-    actor: input.actor,
-    entityId: input.entityId ?? null,
-    occurredAt: occurredAt.toISOString(),
-  });
-  const currentHash = hashChainLink(previousHash, canonicalPayload);
+      const previousHash = last ? last.currentHash : GENESIS_HASH;
+      const seq = last ? last.seq + 1 : 0;
+      const canonicalPayload = canonicalize({
+        ...input.payload,
+        eventType: input.eventType,
+        actor: input.actor,
+        entityId: input.entityId ?? null,
+        occurredAt: occurredAt.toISOString(),
+      });
+      const currentHash = hashChainLink(previousHash, canonicalPayload);
 
-  await db.auditEvent.create({
-    data: {
-      batchId: input.batchId,
-      seq,
-      eventType: input.eventType,
-      actor: input.actor,
-      entityId: input.entityId ?? null,
-      occurredAt,
-      canonicalPayload,
-      previousHash,
-      currentHash,
-    },
-  });
+      await db.auditEvent.create({
+        data: {
+          batchId: input.batchId,
+          seq,
+          eventType: input.eventType,
+          actor: input.actor,
+          entityId: input.entityId ?? null,
+          occurredAt,
+          canonicalPayload,
+          previousHash,
+          currentHash,
+        },
+      });
 
-  return { seq, previousHash, currentHash };
+      return { seq, previousHash, currentHash };
+    } catch (err: unknown) {
+      if (attempt < MAX_RETRIES - 1) {
+        const jitter = Math.floor(Math.random() * 40);
+        await new Promise((resolve) => setTimeout(resolve, 15 * Math.pow(2, attempt) + jitter));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`Failed to append audit event for batch ${input.batchId} after ${MAX_RETRIES} attempts`);
 }
 
 /**

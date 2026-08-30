@@ -12,6 +12,55 @@ let accountCircuitOpenedAt = 0;
 export const CIRCUIT_COOLDOWN_MS = 65_000;
 export const AI_TIMEOUT_MS = 15_000;
 
+class AsyncSemaphore {
+  private running = 0;
+  private queue: (() => void)[] = [];
+
+  constructor(private readonly maxConcurrency: number) {}
+
+  async acquire(): Promise<() => void> {
+    if (this.running < this.maxConcurrency) {
+      this.running++;
+      let released = false;
+      return () => {
+        if (!released) {
+          released = true;
+          this.running--;
+          this.dispatchNext();
+        }
+      };
+    }
+
+    return new Promise<() => void>((resolve) => {
+      this.queue.push(() => {
+        this.running++;
+        let released = false;
+        resolve(() => {
+          if (!released) {
+            released = true;
+            this.running--;
+            this.dispatchNext();
+          }
+        });
+      });
+    });
+  }
+
+  private dispatchNext() {
+    if (this.queue.length > 0 && this.running < this.maxConcurrency) {
+      const next = this.queue.shift();
+      if (next) next();
+    }
+  }
+
+  get pendingCount(): number {
+    return this.queue.length;
+  }
+}
+
+// Bounded AI concurrency: max 4 concurrent in-flight calls to Google Gemini
+export const aiConcurrencyLimiter = new AsyncSemaphore(4);
+
 export interface AccountAIStatus {
   available: boolean;
   circuitOpen: boolean;
@@ -141,6 +190,7 @@ export async function callGenerativeJSON(
     return null;
   }
 
+  const release = await aiConcurrencyLimiter.acquire();
   const startTime = Date.now();
 
   try {
@@ -204,6 +254,8 @@ export async function callGenerativeJSON(
     );
 
     return null;
+  } finally {
+    release();
   }
 }
 
@@ -234,6 +286,7 @@ export async function callGenerativeText(
     return null;
   }
 
+  const release = await aiConcurrencyLimiter.acquire();
   const startTime = Date.now();
 
   try {
@@ -289,6 +342,8 @@ export async function callGenerativeText(
     );
 
     return null;
+  } finally {
+    release();
   }
 }
 

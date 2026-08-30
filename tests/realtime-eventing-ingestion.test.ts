@@ -19,6 +19,10 @@ import { eventBroker, type TelemetryEvent } from "../src/lib/events/event-broker
 import { POST as handleIngest } from "../src/app/api/v1/stream/ingest/route";
 import { NextRequest } from "next/server";
 
+// The streaming surface requires an authenticated caller (session cookie or API
+// key); see tests/stream-auth-tenant-isolation.test.ts for that boundary itself.
+const INGEST_API_KEY = "sk_test_realtime_ingestion_key_5566778899";
+
 async function test(name: string, fn: () => void | Promise<void>) {
   try {
     await fn();
@@ -153,7 +157,7 @@ async function main() {
 
     const request = new NextRequest("http://localhost:3000/api/v1/stream/ingest", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": INGEST_API_KEY },
       body: JSON.stringify({
         idempotencyKey: `idem_stream_${Date.now()}`,
         records: [
@@ -196,7 +200,7 @@ async function main() {
     // First attempt
     const req1 = new NextRequest("http://localhost:3000/api/v1/stream/ingest", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": INGEST_API_KEY },
       body: JSON.stringify(payload),
     });
     const res1 = await handleIngest(req1);
@@ -206,7 +210,7 @@ async function main() {
     // Second duplicate attempt
     const req2 = new NextRequest("http://localhost:3000/api/v1/stream/ingest", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": INGEST_API_KEY },
       body: JSON.stringify(payload),
     });
     const res2 = await handleIngest(req2);
@@ -219,7 +223,7 @@ async function main() {
   await test("TEST 7: Ingestion rejects empty record payloads with HTTP 400", async () => {
     const req = new NextRequest("http://localhost:3000/api/v1/stream/ingest", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": INGEST_API_KEY },
       body: JSON.stringify({ idempotencyKey: "k_bad", records: [] }),
     });
 

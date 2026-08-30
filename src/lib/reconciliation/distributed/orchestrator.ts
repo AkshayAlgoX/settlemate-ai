@@ -268,6 +268,13 @@ export class DistributedOrchestrator {
       }
 
       await this.queue.enqueueBatch(messages);
+
+      // Bounded-memory backpressure guard: prevents queue bloat when streaming millions of records
+      let qMetrics = await this.queue.getMetrics();
+      while (qMetrics.pendingCount > 5000) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        qMetrics = await this.queue.getMetrics();
+      }
     }
     producerDone = true;
 

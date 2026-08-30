@@ -8,6 +8,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 
+/**
+ * Tenant every unbound credential resolves to. Declared locally rather than
+ * imported from `@/lib/tenant/tenant-context` so this module stays free of the
+ * Prisma client — `proxy.ts` runs on the request path for every route.
+ */
+const DEFAULT_TENANT_ID = "tenant_default_sandbox";
+
 export interface RateLimiterConfig {
   maxTokens: number; // Max burst / capacity (e.g. 100)
   refillWindowMs: number; // Refill interval in ms (e.g. 60,000)
@@ -335,6 +342,95 @@ export function apiKeyGuard(
   }
 
   return { allowed: true, key: auth.key };
+}
+
+/**
+ * Authentication guard for the v1 streaming surface, which is reached by two
+ * different kinds of caller:
+ *
+ *   - the browser dashboard (`live-monitor`), which carries a session cookie and
+ *     no API key, because `EventSource` cannot set request headers;
+ *   - machine integrations, which carry `X-API-Key` / `Authorization: Bearer sk_…`.
+ *
+ * Either credential is accepted; an anonymous request is refused with 401.
+ *
+ * The tenant is resolved **server-side only** — from the session when there is
+ * one, otherwise the default sandbox tenant that an unbound API key maps to.
+ * A caller-supplied `x-tenant-id` is never used to select the tenant; if it is
+ * present and disagrees with the resolved tenant the request is refused with 403
+ * rather than silently ignored, so tampering is visible in logs.
+ */
+export function sessionOrApiKeyGuard(req: NextRequest): {
+  allowed: boolean;
+  response?: NextResponse;
+  tenantId: string;
+  role: string;
+  authMode: "session" | "api_key" | "none";
+} {
+  const session = getSession(req);
+
+  let tenantId: string;
+  let role: string;
+  let authMode: "session" | "api_key";
+
+  if (session) {
+    tenantId = session.tenantId || DEFAULT_TENANT_ID;
+    role = session.role;
+    authMode = "session";
+  } else {
+    const auth = validateApiKey(
+      req.headers.get("x-api-key") || req.headers.get("authorization")
+    );
+    if (!auth.valid) {
+      return {
+        allowed: false,
+        tenantId: DEFAULT_TENANT_ID,
+        role: "ANONYMOUS",
+        authMode: "none",
+        response: applySecurityHeaders(
+          NextResponse.json(
+            {
+              error: {
+                code: "UNAUTHORIZED",
+                message:
+                  auth.error ||
+                  "Authentication required: provide a session cookie or an API key starting with 'sk_' (length > 20)",
+              },
+            },
+            { status: 401 }
+          ),
+          { "WWW-Authenticate": 'Bearer realm="settlemate-api-v1"' }
+        ),
+      };
+    }
+    tenantId = DEFAULT_TENANT_ID;
+    role = "SERVICE";
+    authMode = "api_key";
+  }
+
+  const requestedTenantId = req.headers.get("x-tenant-id");
+  if (requestedTenantId && requestedTenantId !== tenantId) {
+    return {
+      allowed: false,
+      tenantId,
+      role,
+      authMode,
+      response: applySecurityHeaders(
+        NextResponse.json(
+          {
+            error: {
+              code: "FORBIDDEN_CROSS_TENANT_ACCESS",
+              message: `Access Denied: authenticated tenant '${tenantId}' cannot access or mutate records for tenant '${requestedTenantId}'.`,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { status: 403 }
+        )
+      ),
+    };
+  }
+
+  return { allowed: true, tenantId, role, authMode };
 }
 
 /**

@@ -15,20 +15,22 @@
  *   Seamlessly falls back to local SQLite tables when DATABASE_URL is 'file:'.
  */
 
-import { prisma } from "@/lib/db";
-import { getRequiredTenantId } from "@/lib/tenant/tenant-context";
+import { getRequiredTenantId, withTenantContext } from "@/lib/tenant/tenant-context";
 import * as nativeSqlite from "./sqlite-db";
 
 interface PrismaDynamicClient {
   asyncJob?: {
     upsert: (args: Record<string, unknown>) => Promise<unknown>;
     updateMany: (args: Record<string, unknown>) => Promise<unknown>;
+    findFirst?: (args: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
   };
   decisionReceipt?: {
     upsert: (args: Record<string, unknown>) => Promise<unknown>;
+    findFirst?: (args: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
   };
   webhookSubscription?: {
     upsert: (args: Record<string, unknown>) => Promise<unknown>;
+    findFirst?: (args: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
   };
   webhookOutbox?: {
     create: (args: Record<string, unknown>) => Promise<unknown>;
@@ -41,10 +43,9 @@ interface PrismaDynamicClient {
   };
   domainEvent?: {
     create: (args: Record<string, unknown>) => Promise<unknown>;
+    findMany?: (args: Record<string, unknown>) => Promise<Record<string, unknown>[]>;
   };
 }
-
-const dynamicPrisma = prisma as unknown as PrismaDynamicClient;
 
 function isPostgres(): boolean {
   const url = process.env.DATABASE_URL || "";
@@ -72,8 +73,8 @@ export const UnifiedJobRepository = {
   save(job: UnifiedJob): void {
     if (isPostgres()) {
       const tenantId = job.tenantId || getRequiredTenantId();
-      dynamicPrisma.asyncJob
-        ?.upsert({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).asyncJob?.upsert({
           where: {
             tenantId_idempotencyKey: {
               tenantId,
@@ -107,12 +108,11 @@ export const UnifiedJobRepository = {
             createdAt: new Date(job.createdAt),
             completedAt: job.completedAt ? new Date(job.completedAt) : undefined,
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresJobRepo] Save error:", err));
-      return;
+        });
+      }).catch((err: unknown) => console.error("[PostgresJobRepo] Save error:", err));
     }
 
-    // Local SQLite fallback
+    // Local SQLite cache & fallback
     nativeSqlite.JobRepository.save({
       jobId: job.jobId,
       status: job.status,
@@ -125,6 +125,67 @@ export const UnifiedJobRepository = {
       receipt: job.receipt,
       error: job.error,
     });
+  },
+
+  async getAsync(jobId: string, tenantId?: string): Promise<UnifiedJob | null> {
+    if (isPostgres()) {
+      const activeTenant = tenantId || getRequiredTenantId();
+      try {
+        const found = await withTenantContext(activeTenant, async (tx) => {
+          const client = tx as unknown as PrismaDynamicClient;
+          return client.asyncJob?.findFirst
+            ? client.asyncJob.findFirst({
+                where: { id: jobId, tenantId: activeTenant },
+              })
+            : null;
+        });
+        if (found) {
+          let summary: string | undefined;
+          let exceptions: string | undefined;
+          let receipt: string | undefined;
+          let webhookUrl: string | undefined;
+          const resultStr = typeof found.result === "string" ? found.result : undefined;
+          if (resultStr) {
+            try {
+              const parsed = JSON.parse(resultStr);
+              summary = parsed.summary;
+              exceptions = parsed.exceptions;
+              receipt = parsed.receipt;
+              webhookUrl = parsed.webhookUrl;
+            } catch {}
+          }
+          const payloadStr = typeof found.payload === "string" ? found.payload : undefined;
+          if (payloadStr && !webhookUrl) {
+            try {
+              const p = JSON.parse(payloadStr);
+              webhookUrl = p.webhookUrl;
+            } catch {}
+          }
+          let batchSize = 0;
+          if (payloadStr) {
+            try {
+              batchSize = Number(JSON.parse(payloadStr).batchSize || 0);
+            } catch {}
+          }
+          return {
+            jobId: String(found.id),
+            tenantId: found.tenantId ? String(found.tenantId) : undefined,
+            status: found.status as UnifiedJob["status"],
+            createdAt: found.createdAt ? new Date(found.createdAt as string | Date).toISOString() : new Date().toISOString(),
+            completedAt: found.completedAt ? new Date(found.completedAt as string | Date).toISOString() : undefined,
+            webhookUrl,
+            batchSize,
+            summary,
+            exceptions,
+            receipt,
+            error: found.error ? String(found.error) : undefined,
+          };
+        }
+      } catch (err) {
+        console.error("[PostgresJobRepo] getAsync error:", err);
+      }
+    }
+    return this.get(jobId);
   },
 
   get(jobId: string): UnifiedJob | null {
@@ -179,16 +240,16 @@ export const UnifiedJobRepository = {
   updateStatus(jobId: string, status: UnifiedJob["status"], error?: string): void {
     if (isPostgres()) {
       const tenantId = getRequiredTenantId();
-      dynamicPrisma.asyncJob
-        ?.updateMany({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).asyncJob?.updateMany({
           where: { id: jobId, tenantId },
           data: {
             status,
             error: error || null,
             completedAt: status === "COMPLETED" || status === "FAILED" ? new Date() : undefined,
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresJobRepo] Update status error:", err));
+        });
+      }).catch((err: unknown) => console.error("[PostgresJobRepo] Update status error:", err));
     }
     nativeSqlite.JobRepository.updateStatus(jobId, status, error);
   },
@@ -220,8 +281,8 @@ export const UnifiedReceiptRepository = {
   save(receipt: UnifiedDecisionReceipt): void {
     if (isPostgres()) {
       const tenantId = receipt.tenantId || getRequiredTenantId();
-      dynamicPrisma.decisionReceipt
-        ?.upsert({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).decisionReceipt?.upsert({
           where: { receiptId: receipt.receiptId },
           update: {
             rootHash: receipt.rootHash,
@@ -243,9 +304,8 @@ export const UnifiedReceiptRepository = {
             canonicalPayload: receipt.canonicalPayload,
             createdAt: new Date(receipt.createdAt),
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresReceiptRepo] Save error:", err));
-      return;
+        });
+      }).catch((err: unknown) => console.error("[PostgresReceiptRepo] Save error:", err));
     }
 
     nativeSqlite.DecisionReceiptRepository.save({
@@ -260,6 +320,76 @@ export const UnifiedReceiptRepository = {
       canonicalPayload: receipt.canonicalPayload,
       createdAt: receipt.createdAt,
     });
+  },
+
+  async getAsync(receiptId: string, tenantId?: string): Promise<UnifiedDecisionReceipt | null> {
+    if (isPostgres()) {
+      const activeTenant = tenantId || getRequiredTenantId();
+      try {
+        const found = await withTenantContext(activeTenant, async (tx) => {
+          const client = tx as unknown as PrismaDynamicClient;
+          return client.decisionReceipt?.findFirst
+            ? client.decisionReceipt.findFirst({
+                where: { receiptId, tenantId: activeTenant },
+              })
+            : null;
+        });
+        if (found) {
+          return {
+            receiptId: String(found.receiptId),
+            tenantId: found.tenantId ? String(found.tenantId) : undefined,
+            jobId: found.jobId ? String(found.jobId) : undefined,
+            batchId: found.batchId ? String(found.batchId) : undefined,
+            rootHash: String(found.rootHash),
+            leafCount: Number(found.leafCount),
+            algorithm: String(found.algorithm),
+            timestamp: found.timestamp ? new Date(found.timestamp as string | Date).toISOString() : new Date().toISOString(),
+            fingerprint: String(found.fingerprint),
+            signature: String(found.signature),
+            canonicalPayload: found.canonicalPayload ? String(found.canonicalPayload) : undefined,
+            createdAt: found.createdAt ? new Date(found.createdAt as string | Date).toISOString() : new Date().toISOString(),
+          };
+        }
+      } catch (err) {
+        console.error("[PostgresReceiptRepo] getAsync error:", err);
+      }
+    }
+    return this.get(receiptId);
+  },
+
+  async getByJobIdAsync(jobId: string, tenantId?: string): Promise<UnifiedDecisionReceipt | null> {
+    if (isPostgres()) {
+      const activeTenant = tenantId || getRequiredTenantId();
+      try {
+        const found = await withTenantContext(activeTenant, async (tx) => {
+          const client = tx as unknown as PrismaDynamicClient;
+          return client.decisionReceipt?.findFirst
+            ? client.decisionReceipt.findFirst({
+                where: { jobId, tenantId: activeTenant },
+              })
+            : null;
+        });
+        if (found) {
+          return {
+            receiptId: String(found.receiptId),
+            tenantId: found.tenantId ? String(found.tenantId) : undefined,
+            jobId: found.jobId ? String(found.jobId) : undefined,
+            batchId: found.batchId ? String(found.batchId) : undefined,
+            rootHash: String(found.rootHash),
+            leafCount: Number(found.leafCount),
+            algorithm: String(found.algorithm),
+            timestamp: found.timestamp ? new Date(found.timestamp as string | Date).toISOString() : new Date().toISOString(),
+            fingerprint: String(found.fingerprint),
+            signature: String(found.signature),
+            canonicalPayload: found.canonicalPayload ? String(found.canonicalPayload) : undefined,
+            createdAt: found.createdAt ? new Date(found.createdAt as string | Date).toISOString() : new Date().toISOString(),
+          };
+        }
+      } catch (err) {
+        console.error("[PostgresReceiptRepo] getByJobIdAsync error:", err);
+      }
+    }
+    return this.getByJobId(jobId);
   },
 
   get(receiptId: string): UnifiedDecisionReceipt | null {
@@ -354,8 +484,8 @@ export const UnifiedWebhookRepository = {
   saveRegistration(reg: UnifiedWebhookRegistration): void {
     if (isPostgres()) {
       const tenantId = reg.tenantId || getRequiredTenantId();
-      dynamicPrisma.webhookSubscription
-        ?.upsert({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).webhookSubscription?.upsert({
           where: { id: reg.id },
           update: {
             url: reg.url,
@@ -373,8 +503,8 @@ export const UnifiedWebhookRepository = {
             registeredAt: new Date(reg.registeredAt),
             updatedAt: new Date(reg.updatedAt),
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresWebhookRepo] Save reg error:", err));
+        });
+      }).catch((err: unknown) => console.error("[PostgresWebhookRepo] Save reg error:", err));
     }
     nativeSqlite.WebhookRepository.saveRegistration(reg);
   },
@@ -394,8 +524,8 @@ export const UnifiedWebhookRepository = {
   saveDeliveryLog(log: UnifiedWebhookDeliveryLog): void {
     if (isPostgres()) {
       const tenantId = log.tenantId || getRequiredTenantId();
-      dynamicPrisma.webhookOutbox
-        ?.create({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).webhookOutbox?.create({
           data: {
             id: log.id,
             tenantId,
@@ -410,8 +540,8 @@ export const UnifiedWebhookRepository = {
             createdAt: new Date(log.timestamp),
             deliveredAt: log.status === "DELIVERED" || log.success ? new Date(log.timestamp) : undefined,
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresWebhookRepo] Save log error:", err));
+        });
+      }).catch((err: unknown) => console.error("[PostgresWebhookRepo] Save log error:", err));
     }
     nativeSqlite.WebhookRepository.saveDeliveryLog({
       id: log.id,
@@ -476,8 +606,8 @@ export const UnifiedAiClaimLogRepository = {
   logAiCall(log: UnifiedAiClaimLog): void {
     if (isPostgres()) {
       const tenantId = log.tenantId || getRequiredTenantId();
-      dynamicPrisma.aiClaimLog
-        ?.create({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).aiClaimLog?.create({
           data: {
             id: log.id,
             tenantId,
@@ -491,8 +621,8 @@ export const UnifiedAiClaimLogRepository = {
             status: log.status,
             createdAt: new Date(log.createdAt),
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresAiLogRepo] Save error:", err));
+        });
+      }).catch((err: unknown) => console.error("[PostgresAiLogRepo] Save error:", err));
     }
     nativeSqlite.AiClaimLogRepository.logAiCall({
       id: log.id,
@@ -567,8 +697,8 @@ export const UnifiedAuditLedgerRepository = {
   log(entry: UnifiedAuditEntry): void {
     if (isPostgres()) {
       const tenantId = entry.tenantId || getRequiredTenantId();
-      dynamicPrisma.auditLog
-        ?.create({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).auditLog?.create({
           data: {
             id: entry.id,
             tenantId,
@@ -581,8 +711,8 @@ export const UnifiedAuditLedgerRepository = {
             metadata: entry.metadata,
             timestamp: new Date(entry.createdAt),
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresAuditRepo] Save error:", err));
+        });
+      }).catch((err: unknown) => console.error("[PostgresAuditRepo] Save error:", err));
     }
     nativeSqlite.AuditLedgerRepository.log({
       id: entry.id,
@@ -676,20 +806,19 @@ export const UnifiedDomainEventRepository = {
     };
 
     if (isPostgres()) {
-      dynamicPrisma.domainEvent
-        ?.create({
+      withTenantContext(tenantId, async (tx) => {
+        await (tx as unknown as PrismaDynamicClient).domainEvent?.create({
           data: {
             id: stored.id,
             tenantId,
             eventType: stored.eventType,
             entityId: stored.entityId,
-            seq: stored.seq,
             traceId: stored.traceId,
             payload: stored.payload,
             createdAt: new Date(createdAt),
           },
-        })
-        .catch((err: unknown) => console.error("[PostgresDomainEventRepo] Save error:", err));
+        });
+      }).catch((err: unknown) => console.error("[PostgresDomainEventRepo] Save error:", err));
     }
 
     localDomainEvents.push(stored);
@@ -701,13 +830,13 @@ export const UnifiedDomainEventRepository = {
 
   listSince(tenantId: string, afterSeq: number, limit: number = 100): UnifiedDomainEvent[] {
     return localDomainEvents
-      .filter((e) => (e.tenantId === tenantId || tenantId === "tenant_default_sandbox") && (e.seq ?? 0) > afterSeq)
+      .filter((e) => e.tenantId === tenantId && (e.seq ?? 0) > afterSeq)
       .slice(0, limit);
   },
 
   getByEntityId(tenantId: string, entityId: string): UnifiedDomainEvent[] {
     return localDomainEvents.filter(
-      (e) => (e.tenantId === tenantId || tenantId === "tenant_default_sandbox") && e.entityId === entityId
+      (e) => e.tenantId === tenantId && e.entityId === entityId
     );
   },
 

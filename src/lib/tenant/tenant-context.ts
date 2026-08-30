@@ -93,25 +93,12 @@ export async function withTenantContext<T>(
   });
 }
 
-interface RequestLike {
-  headers?: Headers | Record<string, string | null | undefined> | { get?(name: string): string | null };
-}
-
-/**
- * Resolves tenant identity from incoming HTTP request (API key, headers, or default sandbox).
+/*
+ * NOTE: this module deliberately does not expose a request-header-based tenant
+ * resolver. An earlier `extractTenantIdentity(req)` here returned the raw
+ * `x-tenant-id` header, which let any caller of the streaming routes select the
+ * tenant they read and wrote. Tenant identity must come from an authenticated
+ * credential: use `sessionOrApiKeyGuard` (v1 machine/stream surface) or
+ * `extractTenantIdentity` from `@/lib/security/api-security` (session surface),
+ * both of which reject a mismatching `x-tenant-id` with HTTP 403.
  */
-export function extractTenantIdentity(req?: Request | RequestLike): { tenantId: string } {
-  if (!req) return { tenantId: DEFAULT_TENANT_ID };
-  try {
-    const headers = req.headers as { get?(name: string): string | null; [key: string]: unknown } | undefined;
-    if (headers) {
-      if (typeof headers.get === "function") {
-        const val = headers.get("x-tenant-id");
-        if (val) return { tenantId: val };
-      } else if (typeof headers["x-tenant-id"] === "string") {
-        return { tenantId: headers["x-tenant-id"] };
-      }
-    }
-  } catch {}
-  return { tenantId: getRequiredTenantId() };
-}

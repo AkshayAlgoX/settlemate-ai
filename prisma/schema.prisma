@@ -27,7 +27,9 @@ model Batch {
   pass2Accuracy     Float?
   pass3Accuracy     Float?
   adversarialScore  Float?
-  amountAtRisk      Int?
+  // Sum of exception amounts in paise. BigInt to stay type-identical to
+  // schema.postgresql.prisma, where INT32 overflowed above ₹2.14 crore.
+  amountAtRisk      BigInt?
 
   orders            Order[]
   payments          Payment[]

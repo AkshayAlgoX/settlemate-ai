@@ -166,7 +166,7 @@ export async function GET() {
           workers: isScale ? 16 : 1,
           retries: b.scaleRuns[0]?.retryCount || 0,
           dlq: 0,
-          amountAtRisk: b.amountAtRisk || 0,
+          amountAtRisk: Number(b.amountAtRisk ?? 0),
           status: b.status,
           source: b.source,
           createdAt: b.createdAt,

@@ -12,8 +12,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { handleCorsPreflight } from "@/lib/security/api-security";
-import { extractTenantIdentity } from "@/lib/tenant/tenant-context";
+import { handleCorsPreflight, sessionOrApiKeyGuard } from "@/lib/security/api-security";
 import { eventBroker, type TelemetryEvent } from "@/lib/events/event-broker";
 import { metrics } from "@/lib/observability/metrics";
 
@@ -25,15 +24,14 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
-  // 1. Authenticate tenant context
-  let tenantId = "tenant_default_sandbox";
-  try {
-    const auth = extractTenantIdentity(req);
-    tenantId = auth.tenantId;
-  } catch {
-    // Fall back to sandbox baseline for interactive web browser users
-    tenantId = "tenant_default_sandbox";
+  // 1. Authenticate the subscriber and resolve its tenant server-side. The SSE
+  //    stream replays durable events, so an anonymous or tenant-spoofing caller
+  //    must never reach the broker.
+  const auth = sessionOrApiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    return auth.response;
   }
+  const tenantId = auth.tenantId;
 
   const lastEventId = req.headers.get("last-event-id") || req.nextUrl.searchParams.get("lastEventId");
   const encoder = new TextEncoder();

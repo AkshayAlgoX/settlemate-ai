@@ -18,8 +18,8 @@ import {
   handleCorsPreflight,
   rateLimitGuard,
   safeErrorResponse,
+  sessionOrApiKeyGuard,
 } from "@/lib/security/api-security";
-import { extractTenantIdentity } from "@/lib/tenant/tenant-context";
 import { eventBroker } from "@/lib/events/event-broker";
 import { metrics } from "@/lib/observability/metrics";
 import { buildIndexes } from "@/lib/reconciliation/indexer";
@@ -64,14 +64,14 @@ export async function POST(req: NextRequest) {
     return guard.response;
   }
 
-  // 1. Authenticate caller and extract tenant
-  let tenantId = "tenant_default_sandbox";
-  try {
-    const auth = extractTenantIdentity(req);
-    tenantId = auth.tenantId;
-  } catch {
-    tenantId = "tenant_default_sandbox";
+  // 1. Authenticate caller and resolve tenant server-side. A client-supplied
+  //    `x-tenant-id` is refused, never honoured — see sessionOrApiKeyGuard.
+  const auth = sessionOrApiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    metrics.ingestionEventsRejected?.inc({ reason: "unauthorized" });
+    return auth.response;
   }
+  const tenantId = auth.tenantId;
 
   try {
     const body = await req.json();
