@@ -91,9 +91,43 @@ ANTHROPIC_API_KEY=
 
 ---
 
-## 4. Production Deployment
+## 4. Production Deployment Architectures
 
-### 1-Command Production Start (Docker Compose)
+### Primary Cloud Production Deployment (GHCR → Render Existing Image)
+
+The official live cloud deployment runs the verified multi-stage Docker container published to GitHub Container Registry (GHCR) deployed as an **Existing Image** service on Render, backed by serverless Neon PostgreSQL:
+
+```
+GitHub Push (main) ──► GitHub Actions Gate ──► GHCR Container Push ──► Render Web Service (Existing Image)
+                        (Lint, Test, Build,     ghcr.io/akshayalgox/    ├── Neon PostgreSQL (DATABASE_URL)
+                         Evaluate, Receipt)      settlemate-ai:latest   ├── Google Gemini API (GEMINI_API_KEY)
+                                                                        └── Health Probe: /api/v1/health
+```
+
+#### 1. Container Image Registry (GHCR)
+- **Registry Endpoint**: `ghcr.io/akshayalgox/settlemate-ai`
+- **Tagging**:
+  - `ghcr.io/akshayalgox/settlemate-ai:sha-<commit-sha>` (Immutable release artifact)
+  - `ghcr.io/akshayalgox/settlemate-ai:latest` (Rolling production pointer)
+- **Security**: Built strictly with zero build-time secrets; all credentials are injected at runtime by Render.
+
+#### 2. Render Existing Image Web Service Setup
+1. In Render Dashboard, click **New +** → **Web Service** → **Deploy an existing image**.
+2. **Image URL**: `ghcr.io/akshayalgox/settlemate-ai:latest` (or specific immutable SHA tag).
+3. **Environment Variables**:
+   - `NODE_ENV`: `production`
+   - `DATABASE_URL`: `postgresql://<user>:<password>@<neon-host>/<database>?sslmode=require`
+   - `AUTH_SECRET`: `<32-character cryptographic secret>`
+   - `GEMINI_API_KEY`: `<google-gemini-key>`
+   - `WEBHOOK_SECRET`: `<webhook-signing-secret>`
+   - `WEBHOOK_SHARED_SECRET`: `<webhook-shared-key>`
+4. **Health Check Path**: `/api/v1/health`
+
+---
+
+### Alternative Self-Hosted / Local Production (Docker Compose)
+
+For offline, air-gapped, or dedicated single-VM deployments, SettleMate AI runs as a single-node container with persistent volume mounts:
 
 ```bash
 # 1. Clone repository on server
