@@ -1,10 +1,10 @@
 # =========================================================================
 # SettleMate AI — Production Container Dockerfile (Multi-Stage)
-# Base Image: Node.js 20 Alpine for minimal attack surface
+# Base Image: Node.js 22 Alpine for minimal attack surface
 # =========================================================================
 
 # --- STAGE 1: Dependency Installation ---
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
 
 # Install libc compatibility and native build toolchain for better-sqlite3
@@ -17,7 +17,7 @@ COPY prisma.config.ts ./
 RUN npm ci
 
 # --- STAGE 2: Build Application ---
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -31,7 +31,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # --- STAGE 3: Production Runner ---
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
