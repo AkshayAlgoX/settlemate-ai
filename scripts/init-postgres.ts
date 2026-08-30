@@ -88,7 +88,11 @@ async function main() {
     const rlsPath = path.join(process.cwd(), "prisma", "migrations", "20260829_tenant_rls", "migration.sql");
     await executeSqlFile(pool, rlsPath, "Tenant RLS & Operational Stores (20260829_tenant_rls)");
 
-    // 4. Verify Tables & Row-Level Security Status
+    // 4. Apply Migration 3: BankTransaction Balance BigInt
+    const balancePath = path.join(process.cwd(), "prisma", "migrations", "20260830_bank_transaction_balance_bigint", "migration.sql");
+    await executeSqlFile(pool, balancePath, "BankTransaction Balance BigInt (20260830_bank_transaction_balance_bigint)");
+
+    // 5. Verify Tables & Row-Level Security Status
     console.log("\n→ Verifying database table inventory & Row-Level Security (RLS)...");
     const tableQuery = await pool.query(`
       SELECT

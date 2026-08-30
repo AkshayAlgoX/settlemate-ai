@@ -15,6 +15,7 @@ import { POST as uploadPost } from "../upload/route";
 import { proxy } from "@/proxy";
 import { authRateLimiter } from "@/lib/auth/rate-limiter";
 import { SESSION_COOKIE, authenticateUser, createSessionToken } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 
 let passed = 0;
 let failed = 0;
@@ -356,6 +357,25 @@ async function run() {
     assert.equal(res.status, 400); // Reaches size validation
     const json = await res.json();
     assert.match(json.error, /Invalid batch size/);
+  });
+
+  await check("POST /api/batches/generate generates 250 records with BigInt balance (> 2^31 - 1)", async () => {
+    const req = new NextRequest(`${ORIGIN}/api/batches/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        cookie: `${SESSION_COOKIE}=${adminToken}`,
+      },
+      body: JSON.stringify({ size: 250 }),
+    });
+    const res = await generateBatchPost(req);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.ok(json.batchId);
+    assert.equal(json.stats.orders, 250);
+
+    // Clean up created batch to avoid polluting local test state
+    await prisma.batch.delete({ where: { id: json.batchId } });
   });
 
   await check("POST /api/upload rejects REVIEWER with 403 Forbidden", async () => {

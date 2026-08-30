@@ -114,7 +114,7 @@ model BankTransaction {
   amount    Int
   type      String
   narration String?
-  balance   Int?
+  balance   BigInt?
   txnDate   DateTime
   valueDate DateTime?
 

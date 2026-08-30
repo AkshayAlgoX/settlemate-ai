@@ -12,6 +12,18 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import pg from "pg";
 
+// Enable seamless JSON serialization for BigInt database values (e.g. BankTransaction.balance)
+if (typeof (BigInt.prototype as { toJSON?: unknown }).toJSON !== "function") {
+  Object.defineProperty(BigInt.prototype, "toJSON", {
+    value: function (this: bigint) {
+      const num = Number(this);
+      return Number.isSafeInteger(num) ? num : this.toString();
+    },
+    writable: true,
+    configurable: true,
+  });
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
   pgPool: pg.Pool | undefined;

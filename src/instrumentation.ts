@@ -20,6 +20,18 @@
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // Polyfill BigInt JSON serialization for APIs returning raw BigInt entities
+  if (typeof (BigInt.prototype as { toJSON?: unknown }).toJSON !== "function") {
+    Object.defineProperty(BigInt.prototype, "toJSON", {
+      value: function (this: bigint) {
+        const num = Number(this);
+        return Number.isSafeInteger(num) ? num : this.toString();
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+
   const { logger } = await import("@/lib/observability/logger");
   // Node-only POSIX signal + exit handling lives in a separate module so those
   // APIs never enter the Edge Instrumentation bundle Next compiles from here.
