@@ -35,7 +35,7 @@ jobs:
         run: npm ci
 
       - name: Initialize Database Schema
-        run: npx prisma db push --skip-generate
+        run: npm run init-db
 
       - name: Run Static Code Analysis & Linting
         run: npm run lint
