@@ -1,0 +1,73 @@
+{
+  "receipt": {
+    "receiptId": "rcpt_demo_1001",
+    "runId": "run_prod_882",
+    "recordId": "pay_1001",
+    "batchId": "batch_demo_2026",
+    "inputFingerprint": "dc5ca5744490469c908c444657fcb233055b737f72eb84e7e004b1b47914909b",
+    "engineVersion": "1.0.0",
+    "policyId": "standard_ecommerce",
+    "policyVersion": "1",
+    "policyHash": "a87339ef5a3bb103da85bd2d3587afaf5ad564cc0234f437e81b53559ec67ccd",
+    "cardinalityType": "1:1",
+    "matchedSourceIds": {
+      "paymentIds": [
+        "pay_1001"
+      ],
+      "settlementIds": [
+        "setl_882"
+      ],
+      "bankTxnIds": [
+        "bank_882"
+      ]
+    },
+    "financialAmounts": {
+      "grossPaise": 2000000,
+      "feePaise": 0,
+      "taxPaise": 0,
+      "refundPaise": 155000,
+      "chargebackPaise": 0,
+      "netPaise": 1845000,
+      "variancePaise": 155000
+    },
+    "invariantResults": [
+      {
+        "code": "MONEY_CONSERVATION",
+        "passed": true,
+        "message": "Gross (2000000) - Deductions (155000) == Net (1845000)"
+      },
+      {
+        "code": "TIMING_WINDOW_VALID",
+        "passed": true,
+        "message": "Settlement latency 12.0h <= 48h policy limit"
+      },
+      {
+        "code": "CARDINALITY_UNIQUE",
+        "passed": true,
+        "message": "Transaction record consumed in exactly 1 match"
+      }
+    ],
+    "riskDecision": "MATCHED_WITH_EVIDENCE_EXPLANATION",
+    "aiClaimReceipt": {
+      "receiptId": "claim_rcpt_demo",
+      "totalClaimsCount": 1,
+      "verifiedClaimsCount": 1,
+      "disputedClaimsCount": 0,
+      "unsupportedClaimsCount": 0,
+      "abstain": false,
+      "canonicalHash": "311fa25e8ec3ba86f4f434256f60160f68336564536d1d25db7da83fed846e9d"
+    },
+    "makerChecker": {
+      "approvedBy": "finance_controller_1",
+      "approvedAt": "2026-08-24T18:00:00.000Z",
+      "actionTaken": "VERIFIED_AND_LEDGER_SEALED"
+    },
+    "ledgerEntryId": "ledger_entry_9001",
+    "ledgerStateHash": "4da3bc7c795beb51d2fcd0dc3c14e44e1879e2e7ca42556b192bda0dbd0c7ca3",
+    "merkleRoot": "aa02ad62c9a9e9530d7206863879a041c0eeae1e339c8f0b896a179a93ffb247",
+    "timestamp": "2026-08-24T18:00:00.000Z",
+    "receiptVersion": "1.0.0"
+  },
+  "canonicalReceiptHash": "ddf8bc43cd5024d07bef7cb585881cc7c957ca4846e19f6b7f9c6013ae7ae54c",
+  "signatureScheme": "SHA256_CANONICAL_SEAL"
+}

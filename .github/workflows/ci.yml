@@ -50,7 +50,7 @@ jobs:
         run: npm run evaluate
 
       - name: Verify Decision Receipt Offline Verifier
-        run: npm run verify:receipt
+        run: npm run verify:receipt -- tests/fixtures/canonical-decision-receipt.json
 
       - name: Verify Live Demo Ingestion Script
         run: npm run verify:demo
