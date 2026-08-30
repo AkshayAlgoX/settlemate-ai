@@ -9,6 +9,14 @@ import { generateSampleMultiCurrencyBatch } from "@/lib/currency/multi-currency"
 
 let passed = 0;
 
+// POST /api/v1/multi-currency/reconcile is part of the sk_-authenticated machine
+// API surface (GET stays public — it returns only FX rates and usage docs).
+const VALID_API_KEY = "sk_test_multi_currency_key_99887766554433";
+const AUTH_HEADERS = {
+  "Content-Type": "application/json",
+  "X-API-Key": VALID_API_KEY,
+};
+
 function check(name: string, fn: () => void | Promise<void>) {
   try {
     const res = fn();
@@ -54,7 +62,7 @@ async function runAll() {
     const sample = generateSampleMultiCurrencyBatch(20);
     const req = new NextRequest("http://localhost:3000/api/v1/multi-currency/reconcile", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ transactions: sample }),
     });
 
@@ -73,7 +81,7 @@ async function runAll() {
   await check("POST route rejects empty payload with 400 Bad Request", async () => {
     const req = new NextRequest("http://localhost:3000/api/v1/multi-currency/reconcile", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ transactions: [] }),
     });
 
@@ -86,7 +94,7 @@ async function runAll() {
   await check("POST route rejects unsupported currency with 400 Bad Request", async () => {
     const req = new NextRequest("http://localhost:3000/api/v1/multi-currency/reconcile", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({
         transactions: [
           {

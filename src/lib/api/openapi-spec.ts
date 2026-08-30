@@ -196,6 +196,40 @@ export const OPENAPI_SPEC = {
         },
       },
     },
+    "/multi-currency/reconcile": {
+      post: {
+        summary: "Cross-Border Multi-Currency Reconcile",
+        description: "Executes multi-currency conversion with exact floor division paise arithmetic and isolated tax ledgers.",
+        security: [{ ApiKeyAuth: [] }],
+        responses: {
+          "200": {
+            description: "Multi-currency reconciliation successful",
+          },
+        },
+      },
+    },
+    "/forensics/{jobId}": {
+      get: {
+        summary: "Forensics 7-Phase Execution Timeline",
+        description: "Retrieves chronological 7-phase execution timeline with Merkle receipts and balance invariants.",
+        responses: {
+          "200": {
+            description: "Forensics timeline retrieved",
+          },
+        },
+      },
+    },
+    "/red-team/attack": {
+      post: {
+        summary: "Evaluate Red-Team Hostile Payload",
+        description: "Evaluates arbitrary hostile payloads across the 6-layer defense pipeline in real time.",
+        responses: {
+          "200": {
+            description: "Red-team telemetry and defense result",
+          },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {

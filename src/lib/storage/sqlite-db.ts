@@ -462,6 +462,43 @@ export const JobRepository = {
     }
   },
 
+  list(limit: number = 50): StoredReconciliationJob[] {
+    try {
+      const db = getDb();
+      const stmt = db.prepare("SELECT * FROM reconciliation_jobs ORDER BY created_at DESC LIMIT ?");
+      const rows = stmt.all(limit) as Record<string, unknown>[];
+      return rows.map((row) => ({
+        jobId: row.job_id as string,
+        status: row.status as StoredReconciliationJob["status"],
+        createdAt: row.created_at as string,
+        completedAt: (row.completed_at as string) || undefined,
+        webhookUrl: (row.webhook_url as string) || undefined,
+        batchSize: Number(row.batch_size),
+        summary: (row.summary as string) || undefined,
+        exceptions: (row.exceptions as string) || undefined,
+        receipt: (row.receipt as string) || undefined,
+        error: (row.error as string) || undefined,
+      }));
+    } catch (err) {
+      console.error("[JobRepository] Error listing jobs:", err);
+      return [];
+    }
+  },
+
+  updateStatus(jobId: string, status: StoredReconciliationJob["status"], error?: string): void {
+    try {
+      const db = getDb();
+      const stmt = db.prepare(`
+        UPDATE reconciliation_jobs
+        SET status = ?, error = ?, completed_at = CASE WHEN ? IN ('COMPLETED', 'FAILED') THEN datetime('now') ELSE completed_at END
+        WHERE job_id = ?
+      `);
+      withBusyRetry("job.updateStatus", () => stmt.run(status, error || null, status, jobId));
+    } catch (err) {
+      console.error("[JobRepository] Error updating job status:", err);
+    }
+  },
+
   delete(jobId: string): boolean {
     try {
       const db = getDb();
@@ -554,6 +591,29 @@ export const DecisionReceiptRepository = {
     } catch (err) {
       console.error("[DecisionReceiptRepository] Error fetching receipt by jobId:", err);
       return null;
+    }
+  },
+
+  list(limit: number = 50): StoredDecisionReceipt[] {
+    try {
+      const db = getDb();
+      const stmt = db.prepare("SELECT * FROM decision_receipts ORDER BY created_at DESC LIMIT ?");
+      const rows = stmt.all(limit) as Record<string, unknown>[];
+      return rows.map((row) => ({
+        receiptId: row.receipt_id as string,
+        jobId: (row.job_id as string) || undefined,
+        rootHash: row.root_hash as string,
+        leafCount: Number(row.leaf_count),
+        algorithm: row.algorithm as string,
+        timestamp: row.timestamp as string,
+        fingerprint: row.fingerprint as string,
+        signature: row.signature as string,
+        canonicalPayload: (row.canonical_payload as string) || undefined,
+        createdAt: row.created_at as string,
+      }));
+    } catch (err) {
+      console.error("[DecisionReceiptRepository] Error listing receipts:", err);
+      return [];
     }
   },
 };

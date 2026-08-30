@@ -142,8 +142,16 @@ export function validateMultiCurrencyInput(txns: MultiCurrencyTxnInput[]): {
     if (!t.referenceId) {
       errors.push(`Row ${i + 1} (${t.id || "unknown"}): Missing 'referenceId' for linking`);
     }
-    if (t.taxAmount !== undefined && (typeof t.taxAmount !== "number" || t.taxAmount < 0)) {
+    // isNaN is required, not redundant: `typeof NaN === "number"` is true and
+    // `NaN < 0` is false, so a NaN tax slipped through the type+range check.
+    if (t.taxAmount !== undefined && (typeof t.taxAmount !== "number" || isNaN(t.taxAmount) || t.taxAmount < 0)) {
       errors.push(`Row ${i + 1} (${t.id || "unknown"}): 'taxAmount' must be a non-negative integer`);
+    }
+    // feeAmount reaches conversion as Math.max(0, Math.floor(raw.feeAmount || 0)),
+    // which yields NaN for a non-numeric value and poisons every converted total
+    // downstream. Validated on the same terms as taxAmount.
+    if (t.feeAmount !== undefined && (typeof t.feeAmount !== "number" || isNaN(t.feeAmount) || t.feeAmount < 0)) {
+      errors.push(`Row ${i + 1} (${t.id || "unknown"}): 'feeAmount' must be a non-negative integer`);
     }
     if (t.taxCurrency && !SUPPORTED_CURRENCIES.includes(t.taxCurrency.toUpperCase())) {
       errors.push(`Row ${i + 1} (${t.id || "unknown"}): Unsupported taxCurrency '${t.taxCurrency}'`);

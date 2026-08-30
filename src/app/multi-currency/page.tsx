@@ -1,34 +1,17 @@
 "use client";
 
-/*
- * SettleMate AI — Multi-Currency & Tax-Aware Reconciliation Dashboard
- *
- * Provides real-time cross-border multi-currency conversion, tax isolation (GST/VAT),
- * exact integer arithmetic validation, and exception resolution for global settlements.
- */
-
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Globe,
-  Coins,
-  Receipt,
-  Scale,
-  ArrowRightLeft,
-  Percent,
-  Sparkles,
   RefreshCw,
   AlertTriangle,
-  CheckCircle2,
   ExternalLink,
-  Info,
-  DollarSign,
-  TrendingUp,
   Sliders,
   ChevronRight,
   Filter,
   Check,
   Copy,
+  X,
 } from "lucide-react";
 import {
   STATIC_FX_RATES,
@@ -40,6 +23,30 @@ import {
   type MultiCurrencyReconciliationResult,
   type ConvertedTxnDetail,
 } from "@/lib/currency/currency-types";
+import { Dropdown } from "@/components/ui/dropdown";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+
+const CURRENCY_OPTIONS = [
+  { value: "ALL", label: "All Currencies" },
+  ...SUPPORTED_CURRENCIES.map((c) => ({ value: c, label: `${c} (${STATIC_FX_RATES[c]?.symbol || ""})` })),
+];
+
+const TYPE_OPTIONS = [
+  { value: "ALL", label: "All Types" },
+  { value: "payment", label: "Payment" },
+  { value: "settlement", label: "Settlement" },
+  { value: "bank_transaction", label: "Bank Txn" },
+  { value: "refund", label: "Refund" },
+];
+
+const BATCH_SIZE_OPTIONS = [
+  { value: "20", label: "20 Txns" },
+  { value: "30", label: "30 Txns (Default)" },
+  { value: "45", label: "45 Txns" },
+  { value: "50", label: "50 Txns (Max)" },
+];
 
 export default function MultiCurrencyPage() {
   const [sampleCount, setSampleCount] = useState<number>(30);
@@ -67,14 +74,12 @@ export default function MultiCurrencyPage() {
           setReconResult(data);
         }
       })
-      .catch(() => {
-        // Ignore network failure on unmount
-      });
+      .catch(() => {});
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [transactions]);
 
   // Handler for regenerating sample batch
   const handleGenerateSample = (count: number = sampleCount) => {
@@ -117,162 +122,134 @@ export default function MultiCurrencyPage() {
   });
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 text-slate-100">
+    <div className="space-y-10 pb-12">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-400">
-              <Globe className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
-                  Multi-Currency & Tax-Aware Reconciliation
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                  🌍 00S
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                  INTEGER-FLOOR MATH
-                </span>
-              </div>
-              <p className="text-sm text-slate-400 mt-1">
-                Cross-border multi-currency conversion, GST/VAT tax isolation, and zero-drift ledger integrity in base INR paise.
-              </p>
-            </div>
+      <PageHeader
+        tag="Cross-Border Finance"
+        title="Multi-currency reconciliation"
+        description="Cross-border multi-currency conversion, GST/VAT tax isolation, and zero-drift ledger integrity using exact integer floor division."
+        badge={<Badge variant="outline">FX Engine</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleGenerateSample(sampleCount)}
+              disabled={isReconciling}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition"
+            >
+              <RefreshCw className={`h-3 w-3 ${isReconciling ? "animate-spin" : ""}`} />
+              <span>Regenerate batch</span>
+            </button>
+
+            <Link
+              href="/sandbox"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
+            >
+              <span>Sandbox</span>
+              <ExternalLink className="h-3 w-3 text-primary-foreground" />
+            </Link>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => handleGenerateSample(sampleCount)}
-            disabled={isReconciling}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isReconciling ? "animate-spin" : ""}`} />
-            Regenerate Batch
-          </button>
-
-          <Link
-            href="/sandbox"
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-xs font-semibold text-emerald-300 transition"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            Upload CSV in Sandbox
-          </Link>
-        </div>
-      </div>
+        }
+      />
 
       {/* Top Level Summary Metrics Cards */}
       {reconResult && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-              <Coins className="w-3.5 h-3.5 text-emerald-400" />
-              Total Converted Gross
-            </div>
-            <div className="text-xl font-bold text-slate-100 font-mono">
+          <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+            <div className="text-xl font-semibold text-foreground font-mono">
               {reconResult.summary.formattedTotalGrossINR}
             </div>
-            <div className="text-[11px] text-slate-500 font-mono">
+            <div className="text-xs font-medium text-foreground">
+              Converted gross
+            </div>
+            <div className="text-[11px] text-muted-foreground/70 font-mono">
               {reconResult.summary.totalGrossConvertedPaise.toLocaleString()} paise
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-              <Receipt className="w-3.5 h-3.5 text-indigo-400" />
-              Isolated Tax (GST/VAT)
-            </div>
-            <div className="text-xl font-bold text-indigo-300 font-mono">
+          <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+            <div className="text-xl font-semibold text-foreground font-mono">
               {reconResult.summary.formattedTotalTaxINR}
             </div>
-            <div className="text-[11px] text-slate-500 font-mono">
+            <div className="text-xs font-medium text-foreground">
+              Isolated tax
+            </div>
+            <div className="text-[11px] text-muted-foreground/70 font-mono">
               {reconResult.summary.totalTaxConvertedPaise.toLocaleString()} paise
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-              <TrendingUp className="w-3.5 h-3.5 text-teal-400" />
-              Total Net Converted
-            </div>
-            <div className="text-xl font-bold text-teal-300 font-mono">
+          <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+            <div className="text-xl font-semibold text-foreground font-mono">
               {reconResult.summary.formattedTotalNetINR}
             </div>
-            <div className="text-[11px] text-slate-500 font-mono">
+            <div className="text-xs font-medium text-foreground">
+              Converted net
+            </div>
+            <div className="text-[11px] text-muted-foreground/70 font-mono">
               {reconResult.summary.totalNetConvertedPaise.toLocaleString()} paise
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              Auto-Match Rate
-            </div>
-            <div className="text-xl font-bold text-emerald-400 font-mono">
+          <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+            <div className="text-xl font-semibold text-foreground font-mono">
               {reconResult.summary.matchRatePct}%
             </div>
-            <div className="text-[11px] text-slate-500">
+            <div className="text-xs font-medium text-foreground">
+              Auto-match rate
+            </div>
+            <div className="text-[11px] text-muted-foreground/70">
               {reconResult.summary.matchedCount} of {reconResult.summary.totalInputTransactions} txns
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-            <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-              Exceptions / FX Drift
-            </div>
-            <div className="text-xl font-bold text-amber-400 font-mono">
+          <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+            <div className="text-xl font-semibold text-foreground font-mono">
               {reconResult.summary.exceptionCount}
             </div>
-            <div className="text-[11px] text-slate-500">
-              {reconResult.summary.manualReviewCount} manual reviews
+            <div className="text-xs font-medium text-foreground">
+              Exceptions
+            </div>
+            <div className="text-[11px] text-muted-foreground/70">
+              Discrepancies isolated
             </div>
           </div>
         </div>
       )}
 
       {/* Dataset Generator Controls */}
-      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-lg border border-border bg-card p-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-            <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Sliders className="h-3.5 w-3.5 text-muted-foreground" />
             Batch Size:
           </span>
-          {[20, 30, 45, 50].map((count) => (
-            <button
-              key={count}
-              onClick={() => {
-                setSampleCount(count);
-                handleGenerateSample(count);
-              }}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
-                sampleCount === count
-                  ? "bg-indigo-600 text-white shadow"
-                  : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-              }`}
-            >
-              {count} Txns
-            </button>
-          ))}
+          <Dropdown
+            value={String(sampleCount)}
+            onValueChange={(val) => {
+              const count = Number(val);
+              setSampleCount(count);
+              handleGenerateSample(count);
+            }}
+            options={BATCH_SIZE_OPTIONS}
+            triggerClassName="min-w-[140px]"
+            data-testid="multi-currency-batch-dropdown"
+          />
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopyPayloadJson}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 border border-slate-700 transition"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition"
           >
             {copiedJson ? (
               <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400">Copied JSON!</span>
+                <Check className="h-3.5 w-3.5 text-[#10b981]" />
+                <span className="text-[#10b981]">Copied</span>
               </>
             ) : (
               <>
-                <Copy className="w-3.5 h-3.5 text-slate-400" />
-                <span>Copy Ingestion JSON</span>
+                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Copy payload JSON</span>
               </>
             )}
           </button>
@@ -280,48 +257,34 @@ export default function MultiCurrencyPage() {
           <button
             onClick={() => handleRunReconciliation()}
             disabled={isReconciling}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            {isReconciling ? "Reconciling..." : "Run Engine"}
+            <span>{isReconciling ? "Reconciling..." : "Run engine"}</span>
           </button>
         </div>
       </div>
 
       {/* Main Tab Navigation */}
-      <div className="flex border-b border-slate-800 gap-2 overflow-x-auto pb-px">
+      <div className="inline-flex rounded-md border border-border bg-card p-0.5">
         {[
-          { id: "transactions", label: "Converted Transactions", icon: ArrowRightLeft, count: reconResult?.convertedTransactions.length },
-          { id: "exceptions", label: "Multi-Currency Exceptions", icon: AlertTriangle, count: reconResult?.exceptions.length, alert: (reconResult?.exceptions.length || 0) > 0 },
-          { id: "rates", label: "Static Sovereign FX Rates", icon: DollarSign, count: Object.keys(STATIC_FX_RATES).length },
-          { id: "tax", label: "Tax Jurisdictions & GST/VAT", icon: Percent, count: reconResult?.summary.taxBreakdown.length },
-          { id: "math", label: "Exact Integer Arithmetic Spec", icon: Scale },
+          { id: "transactions", label: "Converted transactions" },
+          { id: "exceptions", label: `Exceptions (${reconResult?.exceptions.length || 0})` },
+          { id: "rates", label: "FX Rates" },
+          { id: "tax", label: "Tax jurisdictions" },
+          { id: "math", label: "Integer arithmetic" },
         ].map((tab) => {
-          const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as "transactions" | "exceptions" | "rates" | "tax" | "math")}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-semibold transition border-b-2 whitespace-nowrap ${
+              className={`h-7 px-3 text-xs font-medium rounded transition ${
                 isActive
-                  ? "bg-slate-800/80 text-emerald-400 border-emerald-500"
-                  : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-900/40"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
-              {tab.count !== undefined && (
-                <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                    tab.alert
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                      : "bg-slate-800 text-slate-400"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              )}
+              {tab.label}
             </button>
           );
         })}
@@ -330,68 +293,56 @@ export default function MultiCurrencyPage() {
       {/* TAB 1: Converted Transactions Table */}
       {activeTab === "transactions" && (
         <div className="space-y-4">
-          {/* Filter Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs">
-            <div className="flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-slate-400 font-medium">Currency:</span>
-              <div className="flex gap-1">
-                {["ALL", ...SUPPORTED_CURRENCIES].map((cur) => (
-                  <button
-                    key={cur}
-                    onClick={() => setSelectedCurrencyFilter(cur)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
-                      selectedCurrencyFilter === cur
-                        ? "bg-emerald-600 text-white"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                    }`}
-                  >
-                    {cur}
-                  </button>
-                ))}
+          {/* Filter Bar with Dropdowns */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card text-xs">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Currency:</span>
               </div>
+              <Dropdown
+                value={selectedCurrencyFilter}
+                onValueChange={setSelectedCurrencyFilter}
+                options={CURRENCY_OPTIONS}
+                triggerClassName="min-w-[150px]"
+                data-testid="multi-currency-currency-dropdown"
+              />
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 font-medium">Type:</span>
-              <div className="flex gap-1">
-                {["ALL", "payment", "settlement", "bank_transaction", "refund"].map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setSelectedTypeFilter(type)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
-                      selectedTypeFilter === type
-                        ? "bg-indigo-600 text-white"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <span>Type:</span>
               </div>
+              <Dropdown
+                value={selectedTypeFilter}
+                onValueChange={setSelectedTypeFilter}
+                options={TYPE_OPTIONS}
+                triggerClassName="min-w-[140px]"
+                data-testid="multi-currency-type-dropdown"
+              />
             </div>
           </div>
 
           {/* Table */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-xl">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
-                    <th className="py-3 px-4">Txn ID & Ref</th>
-                    <th className="py-3 px-3">Type</th>
-                    <th className="py-3 px-3">Original Currency</th>
-                    <th className="py-3 px-3 text-right">Native Amount</th>
-                    <th className="py-3 px-3 text-right">Tax (GST/VAT)</th>
-                    <th className="py-3 px-3">FX Rate Applied</th>
-                    <th className="py-3 px-4 text-right font-bold text-emerald-400">Converted INR Base</th>
-                    <th className="py-3 px-3 text-center">Inspect</th>
+                  <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                    <th className="py-2.5 px-4 font-medium">Txn ID & Ref</th>
+                    <th className="py-2.5 px-3 font-medium">Type</th>
+                    <th className="py-2.5 px-3 font-medium">Currency</th>
+                    <th className="py-2.5 px-3 font-medium text-right">Native Amount</th>
+                    <th className="py-2.5 px-3 font-medium text-right">Tax (GST/VAT)</th>
+                    <th className="py-2.5 px-3 font-medium">FX Rate Applied</th>
+                    <th className="py-2.5 px-4 font-medium text-right">Converted INR</th>
+                    <th className="py-2.5 px-3 font-medium text-center">Inspect</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-border">
                   {filteredTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-500">
+                      <td colSpan={8} className="py-8 text-center text-muted-foreground/70 font-mono">
                         No transactions found for the selected filter.
                       </td>
                     </tr>
@@ -399,53 +350,43 @@ export default function MultiCurrencyPage() {
                     filteredTransactions.map((t) => (
                       <tr
                         key={t.id}
-                        className="hover:bg-slate-800/40 transition cursor-pointer"
+                        className="hover:bg-accent/40 transition cursor-pointer"
                         onClick={() => setSelectedTxn(t)}
                       >
                         <td className="py-3 px-4">
-                          <div className="font-mono font-semibold text-slate-200">{t.id}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">Ref: {t.referenceId}</div>
+                          <div className="font-mono font-medium text-foreground">{t.id}</div>
+                          <div className="text-[10px] text-muted-foreground/70 font-mono">Ref: {t.referenceId}</div>
                         </td>
                         <td className="py-3 px-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                              t.type === "payment"
-                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                : t.type === "settlement"
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                : t.type === "bank_transaction"
-                                ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                                : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            }`}
-                          >
+                          <Badge variant="outline">
                             {t.type}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="py-3 px-3">
-                          <span className="font-bold text-slate-300">{t.originalCurrency}</span>
+                          <span className="font-medium text-foreground font-mono">{t.originalCurrency}</span>
                         </td>
-                        <td className="py-3 px-3 text-right font-mono font-semibold text-slate-200">
+                        <td className="py-3 px-3 text-right font-mono font-medium text-foreground">
                           {t.formattedOriginal}
-                          <div className="text-[10px] text-slate-400 font-mono">
+                          <div className="text-[10px] text-muted-foreground/70">
                             {t.originalAmountMinor.toLocaleString()} minor
                           </div>
                         </td>
                         <td className="py-3 px-3 text-right font-mono">
                           {t.originalTaxMinor > 0 ? (
                             <div>
-                              <span className="text-indigo-300 font-medium">{t.formattedOriginalTax}</span>
-                              <div className="text-[10px] text-indigo-400/80">{t.taxType}</div>
+                              <span className="text-foreground">{t.formattedOriginalTax}</span>
+                              <div className="text-[10px] text-muted-foreground/70">{t.taxType}</div>
                             </div>
                           ) : (
-                            <span className="text-slate-600">—</span>
+                            <span className="text-[#444444]">—</span>
                           )}
                         </td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-slate-300">
+                        <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground">
                           1 {t.originalCurrency} = ₹{t.fxConversion.fxRateApplied.toFixed(2)}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">
+                        <td className="py-3 px-4 text-right font-mono font-semibold text-foreground">
                           {t.formattedBaseTotal}
-                          <div className="text-[10px] text-slate-400 font-mono">
+                          <div className="text-[10px] text-muted-foreground/70">
                             {t.baseTotalPaise.toLocaleString()} paise
                           </div>
                         </td>
@@ -455,9 +396,9 @@ export default function MultiCurrencyPage() {
                               e.stopPropagation();
                               setSelectedTxn(t);
                             }}
-                            className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
+                            className="p-1 rounded border border-border bg-card hover:bg-accent text-muted-foreground hover:text-foreground"
                           >
-                            <ChevronRight className="w-4 h-4" />
+                            <ChevronRight className="h-3.5 w-3.5" />
                           </button>
                         </td>
                       </tr>
@@ -473,59 +414,57 @@ export default function MultiCurrencyPage() {
       {/* TAB 2: Multi-Currency Exceptions */}
       {activeTab === "exceptions" && (
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <div className="p-4 rounded-lg border border-border bg-card text-xs text-muted-foreground flex items-center gap-3">
+            <AlertTriangle className="h-4 w-4 text-[#ef4444] shrink-0" />
             <div>
-              <span className="font-bold">Multi-Currency Discrepancies & Tax Isolation Alerts:</span> Engine isolates
-              currency mismatches, cross-border VAT withholding gaps, and penny rounding variances before ledger mutation.
+              <strong className="text-foreground">Multi-currency discrepancies & tax isolation:</strong> Engine isolates currency mismatches, cross-border VAT withholding gaps, and penny rounding variances before ledger mutation.
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-3">
             {reconResult?.exceptions.map((exc) => (
               <div
                 key={exc.id}
-                className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3 hover:border-slate-700 transition shadow-lg"
+                className="p-5 rounded-lg border border-border bg-card space-y-3"
               >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="px-2.5 py-1 rounded text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive">
                       {exc.status}
-                    </span>
-                    <span className="font-mono font-semibold text-slate-200 text-sm">{exc.paymentId}</span>
-                    <span className="text-xs text-slate-400 font-mono">Order: {exc.orderId}</span>
+                    </Badge>
+                    <span className="font-mono font-medium text-foreground text-xs">{exc.paymentId}</span>
+                    <span className="text-xs text-muted-foreground/70 font-mono">Order: {exc.orderId}</span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">Variance:</span>
-                    <span className="text-sm font-bold font-mono text-amber-400">{exc.formattedMismatchINR}</span>
-                    <span className="text-xs text-slate-500 font-mono">({exc.mismatchAmountPaise} paise)</span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground/70">Variance:</span>
+                    <span className="font-semibold font-mono text-[#ef4444]">{exc.formattedMismatchINR}</span>
+                    <span className="text-muted-foreground/70 font-mono">({exc.mismatchAmountPaise} paise)</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      Root Cause Analysis
+                  <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                    <div className="text-[10px] font-mono uppercase text-muted-foreground/70">
+                      Root cause analysis
                     </div>
-                    <p className="text-slate-200 leading-relaxed font-mono">{exc.rootCause}</p>
+                    <p className="text-muted-foreground font-mono">{exc.rootCause}</p>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                      Recommended Resolution
+                  <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                    <div className="text-[10px] font-mono uppercase text-muted-foreground/70">
+                      Recommended resolution
                     </div>
-                    <p className="text-emerald-300 leading-relaxed font-mono">{exc.recommendedAction}</p>
+                    <p className="text-foreground font-mono">{exc.recommendedAction}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground/70 pt-1 font-mono">
                   <div>
-                    Payment Currency: <span className="font-bold text-slate-200">{exc.paymentCurrency}</span> | Settlement
-                    Currency: <span className="font-bold text-slate-200">{exc.settlementCurrency}</span>
+                    Payment: <span className="text-foreground">{exc.paymentCurrency}</span> | Settlement: <span className="text-foreground">{exc.settlementCurrency}</span>
                   </div>
                   <div>
-                    Confidence Score: <span className="font-bold text-slate-200">{exc.confidenceScore}%</span>
+                    Confidence: <span className="text-foreground">{exc.confidenceScore}%</span>
                   </div>
                 </div>
               </div>
@@ -537,46 +476,35 @@ export default function MultiCurrencyPage() {
       {/* TAB 3: Static Sovereign FX Rates Table */}
       {activeTab === "rates" && (
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-2 text-slate-300">
-            <div className="font-bold text-slate-100 flex items-center gap-2">
-              <Info className="w-4 h-4 text-indigo-400" />
-              Scaled Integer FX Conversion Architecture
-            </div>
-            <p>
-              To prevent floating-point precision loss (0.1 + 0.2 &ne; 0.3), each exchange rate is stored as a rational
-              fraction ratio: &ldquo;Paise = floor((AmountMinor &times; Numerator) / Denominator)&rdquo;.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-xl">
-            <table className="w-full text-left text-xs">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <table className="w-full text-left text-xs font-mono">
               <thead>
-                <tr className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
-                  <th className="py-3 px-4">Currency Code</th>
-                  <th className="py-3 px-4">Name</th>
-                  <th className="py-3 px-4">Decimals</th>
-                  <th className="py-3 px-4">Minor Unit</th>
-                  <th className="py-3 px-4 font-mono">Integer Ratio (Num/Denom)</th>
-                  <th className="py-3 px-4 font-bold text-emerald-400">Effective INR Rate</th>
-                  <th className="py-3 px-4">Sovereign Source</th>
+                <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                  <th className="py-2.5 px-4 font-medium">Currency Code</th>
+                  <th className="py-2.5 px-4 font-medium">Name</th>
+                  <th className="py-2.5 px-4 font-medium">Decimals</th>
+                  <th className="py-2.5 px-4 font-medium">Minor Unit</th>
+                  <th className="py-2.5 px-4 font-medium">Integer Ratio (Num/Denom)</th>
+                  <th className="py-2.5 px-4 font-medium text-foreground">Effective INR Rate</th>
+                  <th className="py-2.5 px-4 font-medium">Source</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-border">
                 {Object.values(STATIC_FX_RATES).map((r) => (
-                  <tr key={r.code} className="hover:bg-slate-800/30 transition">
-                    <td className="py-3 px-4 font-bold text-slate-200">
+                  <tr key={r.code} className="hover:bg-accent/40 transition">
+                    <td className="py-3 px-4 font-semibold text-foreground">
                       {r.symbol} {r.code}
                     </td>
-                    <td className="py-3 px-4 text-slate-300">{r.name}</td>
-                    <td className="py-3 px-4 font-mono">{r.decimals}</td>
-                    <td className="py-3 px-4 text-slate-400">{r.minorUnitName}</td>
-                    <td className="py-3 px-4 font-mono text-indigo-400">
+                    <td className="py-3 px-4 text-muted-foreground font-sans">{r.name}</td>
+                    <td className="py-3 px-4 text-muted-foreground/70">{r.decimals}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{r.minorUnitName}</td>
+                    <td className="py-3 px-4 text-muted-foreground">
                       {r.rateNumerator} / {r.rateDenominator}
                     </td>
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-400">
+                    <td className="py-3 px-4 font-semibold text-foreground">
                       ₹{r.rateToINR.toFixed(4)}
                     </td>
-                    <td className="py-3 px-4 text-[11px] text-slate-400">{r.source}</td>
+                    <td className="py-3 px-4 text-xs text-muted-foreground/70 font-sans">{r.source}</td>
                   </tr>
                 ))}
               </tbody>
@@ -587,51 +515,44 @@ export default function MultiCurrencyPage() {
 
       {/* TAB 4: Tax Breakdown Matrix */}
       {activeTab === "tax" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
-              <div className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <Percent className="w-4 h-4 text-indigo-400" />
-                Cross-Border Tax Isolation Principles
-              </div>
-              <ul className="text-xs text-slate-300 space-y-2 list-disc list-inside leading-relaxed">
-                <li>
-                  <span className="font-semibold text-slate-200">Domestic GST (18% / 28%):</span> Handled natively in INR paise,
-                  matched directly against government GSTN e-invoices.
-                </li>
-                <li>
-                  <span className="font-semibold text-slate-200">International VAT (20% EU / UK):</span> Converted to base paise at
-                  exact integer floor and isolated into <code className="text-indigo-300">TAX_HOLDING_CLEARING_AC</code>.
-                </li>
-                <li>
-                  <span className="font-semibold text-slate-200">Zero Tax Drift Invariant:</span> Gross Settlement $\equiv$ Net
-                  Settlement $+$ Tax Component $+$ Gateway Processing Fee.
-                </li>
-              </ul>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-5 rounded-lg border border-border bg-card space-y-3">
+            <SectionHeader
+              title="Cross-border tax isolation principles"
+            />
+            <ul className="text-xs text-muted-foreground space-y-2 list-disc list-inside leading-relaxed">
+              <li>
+                <span className="font-medium text-foreground">Domestic GST (18% / 28%):</span> Handled natively in INR paise, matched directly against GSTN e-invoices.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">International VAT (20% EU / UK):</span> Converted to base paise at exact integer floor and isolated into clearing accounts.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">Zero Tax Drift Invariant:</span> Gross Settlement = Net Settlement + Tax Component + Gateway Processing Fee.
+              </li>
+            </ul>
+          </div>
 
-            <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-3">
-              <div className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-emerald-400" />
-                Tax Totals by Jurisdiction
-              </div>
-              <div className="space-y-2">
-                {reconResult?.summary.taxBreakdown.map((t) => (
-                  <div
-                    key={t.taxType}
-                    className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-200">{t.taxType} Jurisdiction</div>
-                      <div className="text-[10px] text-slate-400">{t.transactionCount} transactions</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono font-bold text-emerald-400">{t.formattedTaxINR}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{t.totalTaxPaise.toLocaleString()} paise</div>
-                    </div>
+          <div className="p-5 rounded-lg border border-border bg-card space-y-3">
+            <SectionHeader
+              title="Tax totals by jurisdiction"
+            />
+            <div className="space-y-2">
+              {reconResult?.summary.taxBreakdown.map((t) => (
+                <div
+                  key={t.taxType}
+                  className="p-3 rounded-md border border-border bg-background flex items-center justify-between text-xs font-mono"
+                >
+                  <div>
+                    <div className="font-semibold text-foreground">{t.taxType} Jurisdiction</div>
+                    <div className="text-[10px] text-muted-foreground/70">{t.transactionCount} transactions</div>
                   </div>
-                ))}
-              </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-foreground">{t.formattedTaxINR}</div>
+                    <div className="text-[10px] text-muted-foreground/70 font-mono">{t.totalTaxPaise.toLocaleString()} paise</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -639,133 +560,83 @@ export default function MultiCurrencyPage() {
 
       {/* TAB 5: Exact Integer Arithmetic Specification */}
       {activeTab === "math" && (
-        <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-6">
-          <div className="space-y-2">
-            <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <Scale className="w-5 h-5 text-emerald-400" />
-              Financial Engineering Specification: Multi-Currency Arithmetic Invariants
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Standard floating-point numbers (IEEE-754) accumulate binary rounding errors (e.g. $0.1 + 0.2 = 0.30000000000000004$),
-              which lead to ledger imbalances and non-reproducible financial audits. SettleMate AI enforces mathematical
-              conservation through integer floor division.
-            </p>
-          </div>
+        <div className="p-6 rounded-lg border border-border bg-card space-y-6">
+          <SectionHeader
+            title="Multi-currency integer arithmetic invariants"
+            description="Floating-point arithmetic (IEEE-754) introduces non-deterministic rounding errors. SettleMate enforces integer floor division."
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-              <div className="font-bold text-emerald-400">1. Integer Minor Units</div>
-              <p className="text-slate-300 leading-relaxed">
-                All amounts inside the core engine are stored as integer paise ($\frac{1}{100}$ of ₹1 INR) or native minor units
-                (cents/pence/fils).
+            <div className="p-4 rounded-md border border-border bg-background space-y-1.5">
+              <div className="font-semibold text-foreground">1. Integer minor units</div>
+              <p className="text-muted-foreground leading-relaxed">
+                All amounts inside the engine are stored as integer paise (1/100 of ₹1 INR) or native minor units.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-              <div className="font-bold text-indigo-400">2. Floor Rounding Guard</div>
-              <p className="text-slate-300 leading-relaxed">
-                Division rounds down (floor) during conversion to prevent over-crediting and phantom revenue creation.
+            <div className="p-4 rounded-md border border-border bg-background space-y-1.5">
+              <div className="font-semibold text-foreground">2. Floor rounding guard</div>
+              <p className="text-muted-foreground leading-relaxed">
+                Division rounds down (floor) during conversion to prevent phantom revenue creation.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-              <div className="font-bold text-teal-400">3. Sovereign Ratio Storage</div>
-              <p className="text-slate-300 leading-relaxed">
-                FX rates are stored as immutable scaled integer fractions (Numerator / Denominator) avoiding float precision loss.
+            <div className="p-4 rounded-md border border-border bg-background space-y-1.5">
+              <div className="font-semibold text-foreground">3. Sovereign ratio storage</div>
+              <p className="text-muted-foreground leading-relaxed">
+                FX rates are stored as immutable scaled integer fractions avoiding float precision loss.
               </p>
             </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs font-mono">
-            <div className="text-slate-400 font-bold uppercase tracking-wider text-[11px]">
-              Mathematical Conversion Formula
-            </div>
-            <pre className="text-emerald-300 overflow-x-auto p-3 rounded-lg bg-slate-900/90 border border-slate-800">
-{`// Exact Minor-Unit Conversion with BigInt Floor Division
-function convertToBaseMinor(amountMinor, fromDef):
-    let minorBig = BigInt(amountMinor)
-    let paiseBig = (minorBig * BigInt(fromDef.rateNumerator)) / BigInt(fromDef.rateDenominator)
-    return Number(paiseBig) // Guaranteed exact integer minor units`}
-            </pre>
           </div>
         </div>
       )}
 
-      {/* Transaction Inspection Modal/Drawer */}
+      {/* Transaction Inspection Drawer */}
       {selectedTxn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <Globe className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-slate-100 font-mono">{selectedTxn.id}</h3>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-card border border-border max-w-lg w-full p-6 rounded-lg space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-sm font-semibold text-foreground font-mono">{selectedTxn.id}</h3>
               <button
                 onClick={() => setSelectedTxn(null)}
-                className="text-slate-400 hover:text-slate-200 text-sm font-bold px-2 py-1 rounded bg-slate-800"
+                className="text-muted-foreground/70 hover:text-foreground"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                <div className="text-slate-400 font-medium">Original Foreign Amount</div>
-                <div className="text-base font-bold text-slate-100 font-mono mt-1">
+              <div className="p-3 rounded-md border border-border bg-background">
+                <div className="text-muted-foreground/70 text-[10px] uppercase">Original Amount</div>
+                <div className="text-sm font-semibold text-foreground font-mono mt-1">
                   {selectedTxn.formattedOriginal}
                 </div>
-                <div className="text-[10px] text-slate-500 font-mono">
-                  {selectedTxn.originalAmountMinor} {selectedTxn.originalCurrency} minor units
-                </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                <div className="text-slate-400 font-medium">Converted Base INR</div>
-                <div className="text-base font-bold text-emerald-400 font-mono mt-1">
+              <div className="p-3 rounded-md border border-border bg-background">
+                <div className="text-muted-foreground/70 text-[10px] uppercase">Converted Base INR</div>
+                <div className="text-sm font-semibold text-foreground font-mono mt-1">
                   {selectedTxn.formattedBaseTotal}
                 </div>
-                <div className="text-[10px] text-slate-500 font-mono">
-                  {selectedTxn.baseTotalPaise.toLocaleString()} paise
-                </div>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs">
-              <div className="font-bold text-slate-300">FX Conversion Audit Details:</div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                <div>
-                  <span className="text-slate-400">Exchange Rate:</span> 1 {selectedTxn.originalCurrency} = ₹{selectedTxn.fxConversion.fxRateApplied.toFixed(4)}
-                </div>
-                <div>
-                  <span className="text-slate-400">Integer Ratio:</span> {selectedTxn.fxConversion.rateNumerator} / {selectedTxn.fxConversion.rateDenominator}
-                </div>
-                <div>
-                  <span className="text-slate-400">Rounding Policy:</span> {selectedTxn.fxConversion.roundingMethod}
-                </div>
-                <div>
-                  <span className="text-slate-400">Effective Date:</span> {selectedTxn.fxConversion.effectiveDate}
-                </div>
+            <div className="p-3 rounded-md border border-border bg-background space-y-2 text-xs font-mono">
+              <div className="font-semibold text-foreground">FX Conversion Audit:</div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                <div>Rate: 1 {selectedTxn.originalCurrency} = ₹{selectedTxn.fxConversion.fxRateApplied.toFixed(4)}</div>
+                <div>Ratio: {selectedTxn.fxConversion.rateNumerator} / {selectedTxn.fxConversion.rateDenominator}</div>
+                <div>Rounding: {selectedTxn.fxConversion.roundingMethod}</div>
+                <div>Effective: {selectedTxn.fxConversion.effectiveDate}</div>
               </div>
             </div>
-
-            {selectedTxn.originalTaxMinor > 0 && (
-              <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-xs space-y-1">
-                <div className="font-bold text-indigo-400">Tax Component Isolated:</div>
-                <div className="flex justify-between font-mono text-[11px]">
-                  <span>
-                    Original: {selectedTxn.formattedOriginalTax} ({selectedTxn.taxType})
-                  </span>
-                  <span className="text-emerald-400">Converted: {selectedTxn.formattedBaseTax}</span>
-                </div>
-              </div>
-            )}
 
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setSelectedTxn(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition"
+                className="h-8 px-3 rounded-md border border-border bg-card text-xs font-medium text-foreground hover:bg-accent transition"
               >
-                Close Inspector
+                Close
               </button>
             </div>
           </div>

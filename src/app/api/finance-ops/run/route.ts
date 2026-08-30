@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeErrorResponse } from "@/lib/security/api-security";
 import { FinanceOpsLoopRunner, type FinanceOpsScenarioType, type HostileAttackMode } from "@/lib/reconciliation/finance-ops-loop";
 
 export async function POST(req: Request) {
@@ -18,9 +19,8 @@ export async function POST(req: Request) {
       data: result,
     });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, error: (error as Error).message },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail; the raw message leaked loop-runner
+    // internals to the caller.
+    return safeErrorResponse(error, 500, "FINANCE_OPS_ERROR");
   }
 }

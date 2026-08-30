@@ -25,6 +25,17 @@ export async function register(): Promise<void> {
   // APIs never enter the Edge Instrumentation bundle Next compiles from here.
   const { installShutdownHandlers } = await import("@/lib/observability/graceful-shutdown");
 
+  // Local SQLite tables initialization (only for non-PostgreSQL / local SQLite dev)
+  const isPg = process.env.DATABASE_URL?.startsWith("postgres://") || process.env.DATABASE_URL?.startsWith("postgresql://");
+  if (!isPg) {
+    try {
+      const { initDatabase } = await import("@/lib/storage/sqlite-db");
+      initDatabase();
+    } catch (err) {
+      logger.warn("Local SQLite initialization note", { err });
+    }
+  }
+
   installShutdownHandlers();
 
   logger.info("instrumentation registered", { runtime: process.env.NEXT_RUNTIME });

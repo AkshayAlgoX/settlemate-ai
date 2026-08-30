@@ -15,11 +15,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { formatCurrency } from "@/lib/format";
 import {
-  JobRepository,
-  AiClaimLogRepository,
-  AuditLedgerRepository,
-  type StoredReconciliationJob,
-} from "@/lib/storage/sqlite-db";
+  UnifiedJobRepository as JobRepository,
+  UnifiedAiClaimLogRepository as AiClaimLogRepository,
+  UnifiedAuditLedgerRepository as AuditLedgerRepository,
+  type UnifiedJob as StoredReconciliationJob,
+} from "@/lib/storage/unified-store";
 import { v1Store, type V1ExceptionItem } from "@/lib/api/v1-store";
 
 import {

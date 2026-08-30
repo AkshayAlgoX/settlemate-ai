@@ -1,207 +1,153 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Sparkles,
-  ShieldCheck,
-  Target,
-  FileCheck,
-  AlertCircle,
-  RefreshCw,
-  Play,
-  Award,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { GuidedTourModal } from "@/components/layout/guided-tour-modal";
-
-interface BatchMeta {
-  id: string;
-  name?: string | null;
-  size: number;
-  status: string;
-  createdAt: string;
-}
+import { BrandMark } from "@/components/layout/sidebar";
 
 const CORE_DIFFERENTIATORS = [
   {
     num: "01",
-    title: "Advisory-Only AI with Deterministic Validation",
-    icon: ShieldCheck,
-    badge: "AI SAFETY BOUNDARY",
-    desc: "AI assists operations but is mathematically barred from writing to the ledger. Structured claims are mechanically checked against raw feeds by non-LLM validators at 134,511 claims/s before ledger finalization.",
+    title: "Deterministic first",
+    tag: "Rule-Engine Core",
+    desc: "The financial source of truth is governed by deterministic rules, UTR matching, and exact integer-paise arithmetic. AI is mathematically barred from direct ledger mutation.",
   },
   {
     num: "02",
-    title: "98.1% Accuracy on Official Benchmark",
-    icon: Target,
-    badge: "REPRODUCIBLE TRUTH",
-    desc: "Bitwise deterministic 98.1% accuracy, 98% precision, 98% recall, and 90% adversarial detection (9/10) on the official 250-record dataset (Fingerprint: 81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b).",
+    title: "Safe AI",
+    tag: "Non-LLM Validation",
+    desc: "AI assists investigation instead of executing financial state changes. Every structured claim is mechanically verified against raw transaction feeds at 134,511 claims/s.",
   },
   {
     num: "03",
-    title: "Cryptographic Decision Receipts + Offline Verification",
-    icon: FileCheck,
-    badge: "TAMPER-EVIDENT DAG",
-    desc: "Every reconciliation decision emits a canonical SHA-256 Merkle DAG receipt that auditors can verify offline in <1ms with zero LLMs and zero external database dependencies.",
+    title: "Adversarial defense",
+    tag: "Hostile Input Lab",
+    desc: "The engine is tested against hostile prompt injections, fake voucher IDs, SSRF payloads, and corrupted bank narrations with 90% adversarial catch rate.",
   },
   {
     num: "04",
-    title: "Honest Exception List with Reason Codes",
-    icon: AlertCircle,
-    badge: "TRANSPARENT AUDIT",
-    desc: "Unresolved variances are isolated with exact integer paise shortfalls, transparent reason codes, Context Vault evidence citations, and dual-control Maker/Checker sign-off.",
+    title: "Auditable decisions",
+    tag: "Merkle DAG Receipts",
+    desc: "Every finalized reconciliation emits a canonical SHA-256 Merkle DAG receipt that external auditors can verify offline in <1ms without calling any LLM.",
   },
   {
     num: "05",
-    title: "Failure Recovery: 100K Chaos & 0 DLQ",
-    icon: RefreshCw,
-    badge: "EFFECTIVELY-ONCE RESULT",
-    desc: "Demonstrated 100% crash recovery across 10,000 injected worker failures in a 100,000-record streaming load with 0 dead-letter queue drops via atomic CAS locking and ledger idempotency.",
+    title: "Production controls",
+    tag: "Maker/Checker & Idempotency",
+    desc: "Dual-control separation of duties and atomic compare-and-swap (CAS) locking enforce human authorization before journal postings with zero paise balance drift.",
   },
 ];
 
 const COMPACT_METRICS = [
   {
     value: "98.1%",
-    label: "Official Accuracy",
-    detail: "98% Prec · 98% Rec · 90% Adv",
+    label: "Reconciliation accuracy",
+    detail: "Official benchmark · Exact match",
   },
   {
     value: "806.75",
     unit: "rec/s",
-    label: "Core Throughput",
-    detail: "Up to 1,246 rec/s on scale",
+    label: "Measured throughput",
+    detail: "Sub-millisecond latency per record",
   },
   {
     value: "100%",
-    label: "Chaos Crash Recovery",
-    detail: "10k crashes · 0 DLQ drops",
+    label: "Chaos recovery rate",
+    detail: "10,000 crashes · 0 DLQ drops",
   },
   {
     value: "0",
-    label: "False Ledger Writes",
-    detail: "Zero-LLM invariant gated",
+    label: "False financial writes",
+    detail: "Zero-LLM invariant enforcement",
   },
 ];
 
 export default function LandingPage() {
-  const [batch, setBatch] = useState<BatchMeta | null>(null);
   const [tourOpen, setTourOpen] = useState<boolean>(false);
 
-  useEffect(() => {
-    fetch("/api/batches")
-      .then((r) => r.json())
-      .then((data: { batches?: BatchMeta[] }) => {
-        if (data.batches && data.batches.length > 0) {
-          setBatch(data.batches[0]);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const dashboardHref = batch ? `/dashboard?batchId=${batch.id}` : "/dashboard";
-
   return (
-    <div className="space-y-10 pb-8 md:space-y-12">
-      {/* Product header */}
-      <header className="border-b border-[#20241f] pb-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center border border-[#3e4735] bg-[#10140f]">
-              <span className="text-[10px] font-semibold tracking-[-0.08em] text-[#e8e5da]">
-                SM
-              </span>
+    <div
+      className="w-full max-w-[1680px] mx-auto flex flex-col justify-between py-6 sm:py-8 space-y-12 sm:space-y-16 pb-16 font-sans min-h-screen"
+      style={{ paddingInline: "clamp(24px, 4.5vw, 80px)" }}
+    >
+      {/* Header — Spans full wide canvas */}
+      <header className="flex items-center justify-between border-b border-border pb-4 w-full">
+        <div className="flex items-center gap-3">
+          <BrandMark />
+          <div>
+            <div className="text-sm font-semibold tracking-tight text-foreground">
+              SettleMate AI
             </div>
-
-            <div>
-              <div className="text-[14px] font-semibold tracking-[-0.02em] text-[#eeece4]">
-                SettleMate AI
-              </div>
-
-              <div className="mt-0.5 text-[8px] font-medium uppercase tracking-[0.24em] text-[#656c62]">
-                Autonomous Finance Controller · Track 04
-              </div>
+            <div className="text-[11px] font-mono text-muted-foreground">
+              Autonomous Financial Control Plane
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-2.5">
-            <span className="border border-[#2e3b26] bg-[#11170d] px-2.5 py-1 font-mono text-[8px] font-bold uppercase tracking-[0.14em] text-[#a9ba8a]">
-              EFFECTIVELY-ONCE FINANCIAL RESULT
-            </span>
-            <div className="inline-flex items-center gap-2 border border-[#30372f] bg-[#0e110e] px-3 py-1.5 text-[8px] font-medium uppercase tracking-[0.16em] text-[#848b81]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#99aa7d]" />
-              System operational · SQLite WAL
-            </div>
-          </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/login"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-xs font-medium text-foreground hover:bg-accent hover:border-foreground/30 transition cursor-pointer"
+          >
+            <span>Sign in</span>
+            <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="space-y-5">
-        <div className="inline-flex items-center gap-2 border border-[#333d2a] bg-[#11150e] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.2em] text-[#a8b98b]">
-          <Sparkles className="h-3 w-3" />
-          Razorpay AI Buildathon · Track 4: AI Finance Controller
+      {/* Hero Section — Wide Canvas Layout without redundant pill */}
+      <section className="min-h-[340px] sm:min-h-[380px] lg:min-h-[420px] flex flex-col justify-center py-6 sm:py-8 lg:py-10 space-y-6 w-full">
+        <div className="space-y-4 max-w-4xl">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-[64px] 2xl:text-[70px] font-bold tracking-tight text-foreground leading-[1.06]">
+            Deterministic reconciliation.
+            <br />
+            <span className="text-muted-foreground font-semibold">Safe AI where it matters.</span>
+          </h1>
+
+          <p className="max-w-3xl text-base sm:text-lg lg:text-xl text-muted-foreground leading-relaxed pt-1">
+            Reconcile payments, settlements, bank records, refunds and chargebacks with deterministic controls and auditable AI-assisted investigation.
+          </p>
         </div>
 
-        <h1 className="max-w-3xl text-[34px] font-semibold leading-[1.08] tracking-[-0.055em] text-[#efede5] sm:text-[44px]">
-          Financial reconciliation with
-          <br />
-          cryptographic proof &amp; grounded AI.
-        </h1>
-
-        <p className="max-w-2xl text-[13px] leading-relaxed text-[#858c82]">
-          SettleMate AI reconciles multi-source financial streams through a deterministic invariant engine and grounded advisory council — where <strong className="text-[#d8d5c7]">AI assists operations, but never controls financial truth.</strong>
-        </p>
-
-        {/* Primary Call to Action */}
-        <div className="pt-2 flex flex-wrap items-center gap-3">
+        {/* Primary Actions — Clean hierarchy: Guided Demo (Primary), Judge Mode (Secondary) */}
+        <div className="pt-2 flex flex-wrap items-center gap-3.5">
           <button
             type="button"
             onClick={() => setTourOpen(true)}
-            className="inline-flex h-11 items-center gap-2.5 border border-[#5d6e46] bg-[#172012] hover:bg-[#1f2c18] px-6 text-[9px] font-bold uppercase tracking-[0.16em] text-[#c7d5a5] shadow-[0_0_20px_rgba(164,186,128,0.15)] transition"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs cursor-pointer"
           >
-            <Play className="h-3.5 w-3.5 fill-current" />
-            Watch Guided Demo
+            <span>Watch Guided Demo</span>
           </button>
 
           <Link
             href="/judge-mode"
-            className="inline-flex h-11 items-center gap-2 border border-[#3e5532] bg-[#142211] hover:bg-[#1a2b16] px-5 text-[9px] font-bold uppercase tracking-[0.15em] text-[#a4b58a] transition"
+            className="inline-flex h-10 items-center rounded-lg border border-border bg-card px-4 text-sm font-medium text-foreground hover:border-foreground/30 hover:bg-accent transition"
           >
-            <Award className="h-3.5 w-3.5" />
             Executive Judge Mode
-          </Link>
-
-          <Link
-            href={dashboardHref}
-            className="inline-flex h-11 items-center gap-2 border border-[#363c34] bg-[#0e110e] px-5 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#abaea5] transition hover:border-[#4a5341] hover:text-[#d3d2ca]"
-          >
-            Dashboard
-            <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </section>
 
-      {/* Compact Metrics Row */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="grid grid-cols-2 divide-y divide-[#252a24] sm:grid-cols-4 sm:divide-y-0 sm:divide-x divide-[#252a24]">
+      {/* Authoritative Metrics — Spans Full Wide Canvas */}
+      <section className="w-full rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
+        <div className="grid grid-cols-2 divide-y divide-border sm:grid-cols-4 sm:divide-y-0 sm:divide-x divide-border">
           {COMPACT_METRICS.map((m) => (
-            <div key={m.label} className="p-4 sm:p-5 bg-[#0a0d0a]">
-              <div className="flex items-baseline gap-1">
-                <span className="font-mono text-2xl sm:text-[28px] font-bold tracking-tight text-[#e8e5da]">
+            <div key={m.label} className="p-6 sm:p-7 lg:p-8 space-y-1.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-mono text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold tracking-tight text-foreground">
                   {m.value}
                 </span>
                 {m.unit && (
-                  <span className="font-mono text-[10px] font-medium text-[#7c8477]">
+                  <span className="font-mono text-xs sm:text-sm lg:text-base text-muted-foreground">
                     {m.unit}
                   </span>
                 )}
               </div>
-              <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#8f968b]">
+              <div className="text-xs sm:text-sm lg:text-base font-semibold text-foreground">
                 {m.label}
               </div>
-              <div className="mt-1 text-[8.5px] font-mono text-[#686f64]">
+              <div className="text-[11px] sm:text-xs text-muted-foreground">
                 {m.detail}
               </div>
             </div>
@@ -209,53 +155,44 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 5 Core Differentiators */}
-      <section className="space-y-4">
-        <div className="border-b border-[#20241f] pb-3">
-          <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-            Core Architectural Differentiators
+      {/* 5 Core Differentiators — Full Canvas Width */}
+      <section className="w-full space-y-6">
+        <div className="space-y-1 border-b border-border pb-4 w-full">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Why SettleMate
           </div>
-          <h2 className="text-[16px] font-semibold text-[#dddcd4]">
-            Why SettleMate AI Wins Track 04
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
+            Five architectural pillars of financial integrity
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-3">
-          {CORE_DIFFERENTIATORS.map((d) => {
-            const Icon = d.icon;
-            return (
-              <div
-                key={d.num}
-                className="border border-[#252a24] bg-[#0d100d] p-4 sm:p-5 transition-all hover:border-[#3e5532] hover:bg-[#10140f]"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="flex items-start gap-3.5">
-                    <div className="p-2 border border-[#252a24] bg-[#060806] text-[#a4b58a] shrink-0">
-                      <Icon className="h-4 w-4" />
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[9px] font-bold text-[#687063]">
-                          {d.num}
-                        </span>
-                        <h3 className="text-xs sm:text-sm font-bold text-[#e3e1d8]">
-                          {d.title}
-                        </h3>
-                      </div>
-                      <p className="text-[11.5px] leading-relaxed text-[#8c9288] max-w-3xl">
-                        {d.desc}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className="font-mono text-[8px] font-bold px-2 py-0.5 border border-[#252a24] bg-[#060806] text-[#a4b58a] shrink-0 self-start sm:self-auto">
-                    {d.badge}
+        <div className="divide-y divide-border w-full">
+          {CORE_DIFFERENTIATORS.map((d) => (
+            <div
+              key={d.num}
+              className="py-5 sm:py-6 lg:py-7 first:pt-0 last:pb-0 w-full"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2.5 sm:gap-8 w-full">
+                <div className="flex items-baseline gap-4 sm:gap-6 min-w-0">
+                  <span className="font-mono text-xs sm:text-sm font-semibold text-muted-foreground/70 shrink-0">
+                    {d.num}
                   </span>
+                  <div className="space-y-1.5 min-w-0">
+                    <h3 className="text-base sm:text-lg lg:text-xl font-semibold text-foreground">
+                      {d.title}
+                    </h3>
+                    <p className="text-xs sm:text-sm lg:text-base text-muted-foreground leading-relaxed max-w-4xl">
+                      {d.desc}
+                    </p>
+                  </div>
                 </div>
+
+                <span className="text-xs font-mono text-muted-foreground shrink-0 self-start sm:self-auto pl-8 sm:pl-0 border border-border/80 bg-muted/40 px-2 py-0.5 rounded-md">
+                  {d.tag}
+                </span>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </section>
 

@@ -7,6 +7,7 @@ import {
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
 } from "@/lib/security/api-security";
 import { getStoredJobsList } from "@/lib/forensics/forensics-engine";
 import { instrument } from "@/lib/observability/route";
@@ -33,16 +34,9 @@ async function handleGet(req: NextRequest) {
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        {
-          success: false,
-          error: (err as Error).message || "Failed to fetch stored jobs",
-          timestamp: new Date().toISOString(),
-        },
-        { status: 500 }
-      )
-    );
+    // safeErrorResponse masks 5xx detail; the raw message exposed SQLite paths
+    // and query text on a storage failure.
+    return safeErrorResponse(err, 500, "FORENSICS_JOBS_ERROR");
   }
 }
 

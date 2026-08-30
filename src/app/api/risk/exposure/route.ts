@@ -27,6 +27,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { instrument } from "@/lib/observability/route";
+import { safeErrorResponse } from "@/lib/security/api-security";
 import { buildIndexes } from "@/lib/reconciliation/indexer";
 import { matchAllRecords } from "@/lib/reconciliation/matcher";
 import { applyCardinalityMatching } from "@/lib/reconciliation/apply-cardinality";
@@ -157,10 +158,8 @@ async function handlePost(req: NextRequest) {
       report,
     });
   } catch (err) {
-    return NextResponse.json(
-      { success: false, error: { code: "RISK_EXPOSURE_ERROR", message: (err as Error).message || "Risk exposure computation failed" } },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail; the raw message leaked engine paths.
+    return safeErrorResponse(err, 500, "RISK_EXPOSURE_ERROR");
   }
 }
 

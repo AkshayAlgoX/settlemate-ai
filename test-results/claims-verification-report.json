@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-24T20:20:08.180Z",
+  "timestamp": "2026-08-28T07:33:07.013Z",
   "officialFingerprintVerified": true,
   "fingerprint": "81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b",
   "allSuitesPassed": true,
@@ -149,14 +149,14 @@
     }
   ],
   "executionDurations": {
-    "Official Benchmark": "16.74s",
-    "Cardinality Topologies": "2.66s",
-    "Finance-Ops Loop": "2.78s",
-    "Claim Verification": "2.80s",
-    "Cross-Partition Scale": "3.72s",
-    "Full Adversarial Suite": "3.46s",
-    "Offline Receipt Verifier": "2.39s",
-    "Golden Regression Gate": "63.26s",
-    "Unit & Contract Suites": "151.73s"
+    "Official Benchmark": "21.03s",
+    "Cardinality Topologies": "1.87s",
+    "Finance-Ops Loop": "1.86s",
+    "Claim Verification": "1.98s",
+    "Cross-Partition Scale": "2.73s",
+    "Full Adversarial Suite": "2.86s",
+    "Offline Receipt Verifier": "1.80s",
+    "Golden Regression Gate": "53.53s",
+    "Unit & Contract Suites": "198.49s"
   }
 }

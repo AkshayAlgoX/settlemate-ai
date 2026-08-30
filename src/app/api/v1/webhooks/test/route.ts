@@ -4,9 +4,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import {
+  apiKeyGuard,
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
   sanitizeObject,
 } from "@/lib/security/api-security";
 import { v1Store, dispatchWebhook } from "@/lib/api/v1-store";
@@ -20,6 +22,12 @@ async function handleGet(req: NextRequest) {
   const rateLimit = rateLimitGuard(req);
   if (!rateLimit.allowed && rateLimit.response) {
     return rateLimit.response;
+  }
+
+  // Registered webhook URLs and delivery logs are tenant data, not public docs.
+  const auth = apiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    return auth.response;
   }
 
   const registeredWebhooks = v1Store.getWebhooks();
@@ -48,6 +56,13 @@ async function handlePost(req: NextRequest) {
   const rateLimit = rateLimitGuard(req);
   if (!rateLimit.allowed && rateLimit.response) {
     return rateLimit.response;
+  }
+
+  // This endpoint makes an outbound request to a caller-supplied URL, so it must
+  // never be reachable anonymously even with the SSRF guard in place.
+  const auth = apiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    return auth.response;
   }
 
   try {
@@ -129,17 +144,10 @@ async function handlePost(req: NextRequest) {
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        {
-          error: {
-            code: "TEST_FAILED",
-            message: (err as Error).message || "Webhook test execution failed",
-          },
-        },
-        { status: 500 }
-      )
-    );
+    // safeErrorResponse masks 5xx detail. This route dispatches to a
+    // caller-supplied URL, so the raw message could echo back internal DNS
+    // failures and network topology.
+    return safeErrorResponse(err, 500, "TEST_FAILED");
   }
 }
 

@@ -52,93 +52,93 @@
 }
 
 :root {
-  --background: #080a09;
-  --foreground: #e9e7df;
+  --background: #ffffff;
+  --foreground: #111111;
 
-  --card: #0d100d;
-  --card-foreground: #e9e7df;
+  --card: #ffffff;
+  --card-foreground: #111111;
 
-  --popover: #0d100d;
-  --popover-foreground: #e9e7df;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
 
-  --primary: #d9d6c7;
-  --primary-foreground: #11130f;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
 
-  --secondary: #151912;
-  --secondary-foreground: #dddcd4;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
 
-  --muted: #151912;
-  --muted-foreground: #777d73;
+  --muted: #f4f4f5;
+  --muted-foreground: #666666;
 
-  --accent: #1a2016;
-  --accent-foreground: #e9e7df;
+  --accent: #f4f4f5;
+  --accent-foreground: #111111;
 
-  --destructive: #9d625b;
+  --destructive: #ef4444;
 
-  --border: #272c25;
-  --input: #2d322b;
-  --ring: #697658;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #000000;
 
-  --chart-1: #a8b88a;
-  --chart-2: #c7b67e;
-  --chart-3: #7fa99a;
-  --chart-4: #b38d6a;
-  --chart-5: #8794a0;
+  --chart-1: #0070f3;
+  --chart-2: #8e8e8e;
+  --chart-3: #10b981;
+  --chart-4: #ef4444;
+  --chart-5: #f59e0b;
 
-  --radius: 0.3rem;
+  --radius: 0.5rem;
 
-  --sidebar: #090b09;
-  --sidebar-foreground: #d8d7cf;
-  --sidebar-primary: #151a12;
-  --sidebar-primary-foreground: #f0eee5;
-  --sidebar-accent: #151a12;
-  --sidebar-accent-foreground: #eeece4;
-  --sidebar-border: #242820;
-  --sidebar-ring: #697658;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #111111;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #000000;
 }
 
 .dark {
-  --background: #080a09;
-  --foreground: #e9e7df;
+  --background: #000000;
+  --foreground: #ededed;
 
-  --card: #0d100d;
-  --card-foreground: #e9e7df;
+  --card: #080808;
+  --card-foreground: #ededed;
 
-  --popover: #0d100d;
-  --popover-foreground: #e9e7df;
+  --popover: #080808;
+  --popover-foreground: #ededed;
 
-  --primary: #d9d6c7;
-  --primary-foreground: #11130f;
+  --primary: #ededed;
+  --primary-foreground: #000000;
 
-  --secondary: #151912;
-  --secondary-foreground: #dddcd4;
+  --secondary: #111111;
+  --secondary-foreground: #ededed;
 
-  --muted: #151912;
-  --muted-foreground: #777d73;
+  --muted: #141414;
+  --muted-foreground: #888888;
 
-  --accent: #1a2016;
-  --accent-foreground: #e9e7df;
+  --accent: #161616;
+  --accent-foreground: #ededed;
 
-  --destructive: #9d625b;
+  --destructive: #ef4444;
 
-  --border: #272c25;
-  --input: #2d322b;
-  --ring: #697658;
+  --border: #1e1e1e;
+  --input: #1e1e1e;
+  --ring: #ededed;
 
-  --chart-1: #a8b88a;
-  --chart-2: #c7b67e;
-  --chart-3: #7fa99a;
-  --chart-4: #b38d6a;
-  --chart-5: #8794a0;
+  --chart-1: #0070f3;
+  --chart-2: #8e8e8e;
+  --chart-3: #10b981;
+  --chart-4: #ef4444;
+  --chart-5: #f59e0b;
 
-  --sidebar: #090b09;
-  --sidebar-foreground: #d8d7cf;
-  --sidebar-primary: #151a12;
-  --sidebar-primary-foreground: #f0eee5;
-  --sidebar-accent: #151a12;
-  --sidebar-accent-foreground: #eeece4;
-  --sidebar-border: #242820;
-  --sidebar-ring: #697658;
+  --sidebar: #000000;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #111111;
+  --sidebar-primary-foreground: #ededed;
+  --sidebar-accent: #141414;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #1e1e1e;
+  --sidebar-ring: #ededed;
 }
 
 @layer base {
@@ -147,15 +147,18 @@
   }
 
   html {
-    background: #080a09;
     color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
   }
 
   body {
     margin: 0;
     min-height: 100vh;
-    background: #080a09;
-    color: #e9e7df;
+    background-color: var(--background);
+    color: var(--foreground);
     @apply font-sans;
   }
 
@@ -168,25 +171,38 @@
   }
 
   ::selection {
-    background: rgba(174, 185, 143, 0.22);
-    color: #f2f0e8;
+    background: rgba(0, 112, 243, 0.25);
+    color: inherit;
+  }
+
+  .dark ::selection {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
   }
 
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #080a09;
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #30362e;
-    border-radius: 2px;
+    background: #d4d4d8;
+    border-radius: 3px;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: #262626;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #46503e;
+    background: #a1a1aa;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #404040;
   }
 }

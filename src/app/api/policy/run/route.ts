@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rateLimitGuard, applySecurityHeaders } from "@/lib/security/api-security";
+import { rateLimitGuard, applySecurityHeaders, safeErrorResponse } from "@/lib/security/api-security";
 import { evaluatePolicy } from "@/lib/policy/evaluator";
 import { computePolicyContentHash } from "@/lib/policy/hash";
 import type { ReconciliationPolicy, PolicyRules } from "@/lib/policy/types";
@@ -404,10 +404,8 @@ export async function POST(req: NextRequest) {
     const res = NextResponse.json(responsePayload, { status: 200 });
     return applySecurityHeaders(res);
   } catch (err) {
-    const errorRes = NextResponse.json(
-      { success: false, error: { message: (err as Error).message } },
-      { status: 500 }
-    );
-    return applySecurityHeaders(errorRes);
+    // safeErrorResponse masks 5xx detail; the raw message leaked policy-evaluator
+    // internals to the caller.
+    return safeErrorResponse(err, 500, "POLICY_RUN_ERROR");
   }
 }

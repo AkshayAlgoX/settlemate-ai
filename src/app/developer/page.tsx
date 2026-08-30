@@ -3,24 +3,20 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  Code2,
-  Terminal,
   Send,
   Copy,
-  Key,
-  Layers,
-  ShieldCheck,
   ExternalLink,
   Clock,
-  Sparkles,
-  Radio,
-  BookOpen,
   Play,
-  Plus,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+import { CodeBlock } from "@/components/ui/code-block";
+import { formatDateTime, formatAuditTime } from "@/lib/format";
 
 interface EndpointDoc {
   method: "GET" | "POST";
@@ -247,11 +243,9 @@ export default function DeveloperPortalPage() {
   const [activeSnippetTab, setActiveSnippetTab] = useState<"curl" | "js" | "python">("curl");
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [responseStatus, setResponseStatus] = useState<number | null>(null);
-  const [responseHeaders, setResponseHeaders] = useState<Record<string, string>>({});
   const [responseJson, setResponseJson] = useState<string | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
   const [copiedResponse, setCopiedResponse] = useState<boolean>(false);
-  const [copiedSnippet, setCopiedSnippet] = useState<boolean>(false);
 
   // Webhook Management & Live Dispatch State
   interface WebhookItem {
@@ -299,7 +293,7 @@ export default function DeveloperPortalPage() {
         if (logsData.logs) setDeliveryLogsList(logsData.logs.slice(0, 10));
       }
     } catch {
-      // Ignore network errors in dev/offline
+      // Ignore network errors
     } finally {
       setIsLoadingWebhooks(false);
     }
@@ -389,14 +383,12 @@ export default function DeveloperPortalPage() {
     setRequestBody(ep.defaultBody || "");
     setResponseJson(null);
     setResponseStatus(null);
-    setResponseHeaders({});
   };
 
   const handleExecuteRequest = async () => {
     setIsExecuting(true);
     setResponseJson(null);
     setResponseStatus(null);
-    setResponseHeaders({});
     const start = performance.now();
 
     try {
@@ -420,12 +412,6 @@ export default function DeveloperPortalPage() {
       const end = performance.now();
       setLatency(Math.round(end - start));
       setResponseStatus(res.status);
-
-      const hdrs: Record<string, string> = {};
-      res.headers.forEach((val, key) => {
-        hdrs[key] = val;
-      });
-      setResponseHeaders(hdrs);
 
       const json = await res.json().catch(() => ({ message: "Non-JSON response" }));
       setResponseJson(JSON.stringify(json, null, 2));
@@ -452,80 +438,54 @@ export default function DeveloperPortalPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 pb-12">
       {/* Top Header */}
-      <div className="flex flex-col justify-between gap-4 border-b border-[#242820] pb-6 sm:flex-row sm:items-center">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center border border-[#424738] bg-[#11140f] text-[#aab98b]">
-              <Code2 className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-[#f0eee5]">
-                Developer API Portal
-              </h1>
-              <p className="text-xs text-[#8a9184]">
-                Enterprise REST API reference, interactive sandbox console, client code generators & OpenAPI 3.0 spec
-              </p>
-            </div>
+      <PageHeader
+        tag="Developer Platform"
+        title="Developer API portal"
+        description="Enterprise REST API reference, interactive sandbox console, client code generators, and OpenAPI 3.0 specification."
+        badge={<Badge variant="outline">REST v1</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Link
+              href="/api/docs"
+              target="_blank"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-mono text-foreground hover:bg-accent transition"
+            >
+              <span>OpenAPI Spec</span>
+              <ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </Link>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            href="/api/docs"
-            target="_blank"
-            className="flex items-center gap-1.5 border border-[#30362e] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#aab98b] hover:bg-[#1a2116] transition"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            OpenAPI JSON Spec
-            <ExternalLink className="h-3 w-3 ml-0.5 opacity-60" />
-          </Link>
-          <span className="border border-[#3a4035] bg-[#1a1f17] px-2.5 py-1.5 text-[11px] font-mono text-[#dcd7cb]">
-            💻 00I
-          </span>
-        </div>
-      </div>
+        }
+      />
 
       {/* Feature Badges Bar */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="border border-[#242820] bg-[#0d100c] p-3.5">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#f0eee5]">
-            <Key className="h-4 w-4 text-[#aab98b]" />
-            sk_ API Key Auth
-          </div>
-          <p className="mt-1 text-[11px] text-[#7a8174]">
-            X-API-Key & Bearer headers with fail-closed validation
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-xs font-semibold text-foreground">API Key Auth</div>
+          <p className="text-[11px] text-muted-foreground">
+            X-API-Key with fail-closed validation
           </p>
         </div>
 
-        <div className="border border-[#242820] bg-[#0d100c] p-3.5">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#f0eee5]">
-            <Layers className="h-4 w-4 text-[#aab98b]" />
-            Token Bucket Limiter
-          </div>
-          <p className="mt-1 text-[11px] text-[#7a8174]">
-            100 requests / min burst with Retry-After header
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-xs font-semibold text-foreground">Rate Limiter</div>
+          <p className="text-[11px] text-muted-foreground">
+            100 req/min with Retry-After header
           </p>
         </div>
 
-        <div className="border border-[#242820] bg-[#0d100c] p-3.5">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#f0eee5]">
-            <Radio className="h-4 w-4 text-[#aab98b]" />
-            HMAC Webhooks
-          </div>
-          <p className="mt-1 text-[11px] text-[#7a8174]">
-            X-SettleMate-Signature SHA-256 signed event callbacks
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-xs font-semibold text-foreground">HMAC Webhooks</div>
+          <p className="text-[11px] text-muted-foreground">
+            SHA-256 signed event callbacks
           </p>
         </div>
 
-        <div className="border border-[#242820] bg-[#0d100c] p-3.5">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#f0eee5]">
-            <ShieldCheck className="h-4 w-4 text-[#aab98b]" />
-            Merkle DAG Receipts
-          </div>
-          <p className="mt-1 text-[11px] text-[#7a8174]">
-            Every reconciliation response includes cryptographic proof
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-xs font-semibold text-foreground">Merkle Receipts</div>
+          <p className="text-[11px] text-muted-foreground">
+            Cryptographic proof in responses
           </p>
         </div>
       </div>
@@ -534,136 +494,114 @@ export default function DeveloperPortalPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left: Endpoint Selector List */}
         <div className="space-y-4 lg:col-span-4">
-          <div className="border border-[#242820] bg-[#0d100c] p-4">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#8a9184]">
-              REST API Endpoints
-            </h2>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <SectionHeader
+              title="REST endpoints"
+              className="border-b-0 pb-0"
+            />
 
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {ENDPOINTS.map((ep, idx) => {
                 const isSelected = selectedEndpoint.path === ep.path && selectedEndpoint.method === ep.method;
                 return (
                   <button
                     key={idx}
+                    type="button"
                     onClick={() => handleSelectEndpoint(ep)}
-                    className={`w-full text-left p-2.5 border transition ${
+                    className={`w-full text-left p-2.5 rounded-md border transition ${
                       isSelected
-                        ? "border-[#505a42] bg-[#151a12] text-[#f0eee6]"
-                        : "border-transparent text-[#8b9187] hover:border-[#30362e] hover:bg-[#10130f] hover:text-[#d0d0c8]"
+                        ? "border-[#ededed] bg-accent text-foreground"
+                        : "border-transparent text-muted-foreground hover:border-border hover:bg-accent/40"
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span
-                        className={`text-[10px] font-mono font-bold px-1.5 py-0.5 border ${
-                          ep.method === "POST"
-                            ? "border-[#3e5532] text-[#aab98b] bg-[#11180f]"
-                            : "border-[#30455c] text-[#61afef] bg-[#0d141e]"
-                        }`}
-                      >
+                      <Badge variant={ep.method === "POST" ? "default" : "secondary"}>
                         {ep.method}
+                      </Badge>
+                      <span className="text-[10px] font-mono text-muted-foreground/70">
+                        {ep.authRequired ? "API Key" : "Public"}
                       </span>
-                      {ep.authRequired ? (
-                        <span className="text-[9px] font-mono text-[#7a8174]">API Key</span>
-                      ) : (
-                        <span className="text-[9px] font-mono text-[#555d4e]">Public</span>
-                      )}
                     </div>
-                    <div className="mt-1.5 font-mono text-xs text-[#dddcd4] truncate">{ep.path}</div>
-                    <p className="mt-0.5 text-[10px] text-[#7a8174] truncate">{ep.title}</p>
+                    <div className="mt-1 font-mono text-xs text-foreground truncate">{ep.path}</div>
+                    <p className="text-[11px] text-muted-foreground truncate">{ep.title}</p>
                   </button>
                 );
               })}
             </div>
-          </div>
-
-          {/* Quick Info Box */}
-          <div className="border border-[#242820] bg-[#0d100c] p-4 space-y-2">
-            <h3 className="text-xs font-semibold text-[#f0eee5] flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-[#aab98b]" />
-              Multi-Language SDK Readiness
-            </h3>
-            <p className="text-[11px] text-[#8a9184]">
-              All endpoints accept JSON and CSV payloads. Use the interactive console on the right to test requests live against the running backend.
-            </p>
           </div>
         </div>
 
         {/* Right: Interactive Console & Snippets */}
         <div className="space-y-6 lg:col-span-8">
           {/* Endpoint Details & Interactive Test Runner */}
-          <div className="border border-[#242820] bg-[#0d100c] p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1f241c] pb-3">
+          <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`text-[11px] font-mono font-bold px-2 py-0.5 border ${
-                      selectedEndpoint.method === "POST"
-                        ? "border-[#3e5532] text-[#aab98b] bg-[#11180f]"
-                        : "border-[#30455c] text-[#61afef] bg-[#0d141e]"
-                    }`}
-                  >
+                  <Badge variant={selectedEndpoint.method === "POST" ? "default" : "secondary"}>
                     {selectedEndpoint.method}
-                  </span>
-                  <span className="font-mono text-sm font-bold text-[#f0eee5]">
+                  </Badge>
+                  <span className="font-mono text-xs font-semibold text-foreground">
                     {selectedEndpoint.path}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-[#8a9184]">{selectedEndpoint.description}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{selectedEndpoint.description}</p>
               </div>
             </div>
 
             {/* Request Configuration Form */}
-            <div className="space-y-3">
+            <div className="space-y-3 text-xs">
               {selectedEndpoint.authRequired && (
                 <div>
-                  <label className="text-[11px] text-[#9a9f93]">
-                    Authentication API Key (X-API-Key)
+                  <label className="text-muted-foreground block mb-1">
+                    API Key (X-API-Key)
                   </label>
                   <input
                     type="text"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    className="mt-1 w-full border border-[#2b3127] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                    className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-[11px] text-[#9a9f93]">Request Path</label>
+                <label className="text-muted-foreground block mb-1">Request Path</label>
                 <input
                   type="text"
                   value={requestPath}
                   onChange={(e) => setRequestPath(e.target.value)}
-                  className="mt-1 w-full border border-[#2b3127] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
                 />
               </div>
 
               {selectedEndpoint.method === "POST" && (
                 <div>
-                  <label className="text-[11px] text-[#9a9f93]">JSON Request Payload</label>
+                  <label className="text-muted-foreground block mb-1">JSON Payload</label>
                   <textarea
                     rows={6}
                     value={requestBody}
                     onChange={(e) => setRequestBody(e.target.value)}
-                    className="mt-1 w-full border border-[#2b3127] bg-[#080a08] p-3 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                    className="w-full rounded-md border border-border bg-background p-3 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
                   />
                 </div>
               )}
 
               <button
+                type="button"
                 onClick={handleExecuteRequest}
                 disabled={isExecuting}
-                className="flex items-center gap-2 border border-[#505a42] bg-[#1a2215] px-4 py-2 text-xs font-semibold text-[#f0eee5] hover:bg-[#253020] hover:text-[#fff] disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
               >
                 {isExecuting ? (
                   <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border border-[#aab98b] border-t-transparent" />
-                    Sending Request...
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border border-[#000000] border-t-transparent" />
+                    <span>Sending request...</span>
                   </>
                 ) : (
                   <>
-                    <Send className="h-3.5 w-3.5 text-[#aab98b]" />
-                    Send Request to API
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Send request</span>
                   </>
                 )}
               </button>
@@ -671,20 +609,14 @@ export default function DeveloperPortalPage() {
 
             {/* Live Response Panel */}
             {responseJson && (
-              <div className="mt-4 border-t border-[#1f241c] pt-4 space-y-2">
+              <div className="mt-4 border-t border-border pt-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 border ${
-                        responseStatus === 200 || responseStatus === 201 || responseStatus === 202
-                          ? "border-[#4a5e38] bg-[#162112] text-[#aab98b]"
-                          : "border-[#603530] bg-[#211210] text-[#e06c75]"
-                      }`}
-                    >
+                    <Badge variant={responseStatus === 200 || responseStatus === 201 || responseStatus === 202 ? "success" : "destructive"}>
                       HTTP {responseStatus}
-                    </span>
+                    </Badge>
                     {latency !== null && (
-                      <span className="text-[10px] font-mono text-[#7a8174] flex items-center gap-1">
+                      <span className="text-xs font-mono text-muted-foreground/70 flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {latency}ms
                       </span>
@@ -692,162 +624,142 @@ export default function DeveloperPortalPage() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => handleCopyText(responseJson, setCopiedResponse)}
-                    className="text-[11px] font-mono text-[#aab98b] hover:underline flex items-center gap-1"
+                    className="text-xs font-mono text-muted-foreground hover:text-foreground flex items-center gap-1"
                   >
                     <Copy className="h-3 w-3" />
-                    {copiedResponse ? "Copied!" : "Copy JSON"}
+                    <span>{copiedResponse ? "Copied" : "Copy JSON"}</span>
                   </button>
                 </div>
 
-                {/* Security Headers Inspection Snippet */}
-                {responseHeaders["x-content-type-options"] && (
-                  <div className="text-[10px] font-mono text-[#6c7465] flex flex-wrap gap-2 py-1">
-                    <span>nosniff: OK</span>
-                    <span>CSP: default-src &apos;none&apos;</span>
-                    {responseHeaders["x-ratelimit-remaining"] && (
-                      <span>RateLimit Remaining: {responseHeaders["x-ratelimit-remaining"]}</span>
-                    )}
-                  </div>
-                )}
-
-                <pre className="border border-[#1e241a] bg-[#060806] p-3 text-xs font-mono text-[#aab98b] max-h-72 overflow-y-auto whitespace-pre-wrap">
-                  {responseJson}
-                </pre>
+                <CodeBlock
+                  code={responseJson}
+                  language="json"
+                  maxHeight="320px"
+                />
               </div>
             )}
           </div>
 
           {/* Code Snippets Panel */}
-          <div className="border border-[#242820] bg-[#0d100c] p-5 space-y-3">
-            <div className="flex items-center justify-between border-b border-[#1f241c] pb-3">
-              <div className="flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-[#aab98b]" />
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#e6e2d8]">
-                  Client Implementation Snippets
-                </h3>
-              </div>
+          <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <SectionHeader
+                title="Client code snippets"
+                className="border-b-0 pb-0"
+              />
 
-              <div className="flex items-center gap-2">
-                <div className="flex border border-[#2b3127] bg-[#121611]">
-                  {(["curl", "js", "python"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveSnippetTab(tab)}
-                      className={`px-2.5 py-1 text-[11px] font-mono uppercase transition ${
-                        activeSnippetTab === tab
-                          ? "bg-[#1f2619] text-[#aab98b] font-bold"
-                          : "text-[#7a8174] hover:text-[#bbb]"
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => handleCopyText(getCurrentSnippet(), setCopiedSnippet)}
-                  className="flex items-center gap-1 border border-[#30362e] bg-[#121611] px-2.5 py-1 text-[11px] text-[#cfcac0] hover:bg-[#1a2116]"
-                >
-                  <Copy className="h-3 w-3 text-[#aab98b]" />
-                  {copiedSnippet ? "Copied" : "Copy"}
-                </button>
+              <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+                {(["curl", "js", "python"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveSnippetTab(tab)}
+                    className={`h-7 px-3 text-xs font-mono uppercase rounded-md transition ${
+                      activeSnippetTab === tab
+                        ? "bg-secondary text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <pre className="border border-[#1e241a] bg-[#060806] p-3.5 text-xs font-mono text-[#cfcac0] overflow-x-auto whitespace-pre">
-              {getCurrentSnippet()}
-            </pre>
+            <CodeBlock
+              code={getCurrentSnippet()}
+              language={activeSnippetTab === "curl" ? "bash" : activeSnippetTab === "js" ? "javascript" : "python"}
+              filename={`request.${activeSnippetTab === "curl" ? "sh" : activeSnippetTab === "js" ? "ts" : "py"}`}
+              maxHeight="400px"
+            />
           </div>
         </div>
       </div>
 
       {/* Webhook Management & Live HMAC Dispatch Console */}
-      <div className="border border-[#242820] bg-[#0d100c] p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1f241c] pb-4">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <Radio className="h-5 w-5 text-[#aab98b]" />
-              <h2 className="text-sm font-semibold tracking-tight text-[#f0eee5]">
-                Registered Webhooks & HMAC-SHA256 Dispatch Console
-              </h2>
-            </div>
-            <p className="mt-1 text-xs text-[#8a9184]">
-              Manage registered ERP/CRM callback endpoints. Test live delivery with HMAC-SHA256 signature and exponential backoff retry.
-            </p>
-          </div>
+      <div className="rounded-lg border border-border bg-card p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+          <SectionHeader
+            title="Registered webhooks & dispatch console"
+            description="Manage registered ERP/CRM callback endpoints with HMAC-SHA256 signatures."
+            className="border-b-0 pb-0"
+          />
 
           <button
+            type="button"
             onClick={fetchWebhooksAndLogs}
             disabled={isLoadingWebhooks}
-            className="flex items-center gap-1.5 border border-[#30362e] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#aab98b] hover:bg-[#1a2116] transition"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-mono text-foreground hover:bg-accent transition"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWebhooks ? "animate-spin" : ""}`} />
-            Refresh Webhooks
+            <span>Refresh</span>
           </button>
         </div>
 
-        {/* Registered Webhooks Table / List */}
+        {/* Registered Webhooks List */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8a9184]">
-            Active Webhook Subscriptions ({webhooksList.length})
-          </h3>
+          <div className="text-xs font-semibold text-foreground">
+            Active Subscriptions ({webhooksList.length})
+          </div>
 
           {webhooksList.length === 0 ? (
-            <div className="border border-[#1f241c] bg-[#080a08] p-6 text-center text-xs text-[#7a8174]">
-              No webhooks registered yet. Use the form below or POST to <code className="text-[#aab98b]">/api/v1/webhooks/register</code>.
+            <div className="rounded-md border border-border bg-background p-6 text-center text-xs text-muted-foreground">
+              No webhooks registered yet. Use the form below to add an endpoint.
             </div>
           ) : (
-            <div className="overflow-x-auto border border-[#1f241c]">
+            <div className="overflow-x-auto rounded border border-border">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-[#1f241c] bg-[#121611] text-[#8a9184]">
-                    <th className="p-3 font-semibold">ID / Target URL</th>
-                    <th className="p-3 font-semibold">Subscribed Events</th>
-                    <th className="p-3 font-semibold">Status</th>
-                    <th className="p-3 font-semibold">Registered</th>
-                    <th className="p-3 text-right font-semibold">Actions</th>
+                  <tr className="border-b border-border text-[10px] uppercase text-muted-foreground/70">
+                    <th className="p-3 font-medium">Target URL</th>
+                    <th className="p-3 font-medium">Events</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Registered</th>
+                    <th className="p-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1f241c] bg-[#080a08]">
+                <tbody className="divide-y divide-border">
                   {webhooksList.map((wh) => (
-                    <tr key={wh.id} className="hover:bg-[#0f130e]">
+                    <tr key={wh.id} className="hover:bg-accent/40">
                       <td className="p-3 font-mono">
-                        <div className="text-[#f0eee5] font-semibold">{wh.id}</div>
-                        <div className="text-[11px] text-[#aab98b] truncate max-w-xs sm:max-w-md">{wh.url}</div>
+                        <div className="text-foreground font-semibold">{wh.id}</div>
+                        <div className="text-[11px] text-muted-foreground truncate max-w-xs">{wh.url}</div>
                       </td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">
                           {wh.events.map((evt) => (
-                            <span key={evt} className="border border-[#2e3b26] bg-[#141d10] px-1.5 py-0.5 text-[10px] font-mono text-[#aab98b]">
+                            <Badge key={evt} variant="secondary">
                               {evt}
-                            </span>
+                            </Badge>
                           ))}
                         </div>
                       </td>
                       <td className="p-3">
-                        <span className="border border-[#38522c] bg-[#121f0f] px-2 py-0.5 text-[10px] font-mono text-[#86efac]">
+                        <Badge variant="success">
                           {wh.status}
-                        </span>
+                        </Badge>
                       </td>
-                      <td className="p-3 text-[11px] text-[#7a8174] font-mono">
-                        {new Date(wh.registeredAt).toLocaleString()}
+                      <td className="p-3 text-[11px] text-muted-foreground/70 font-mono">
+                        {formatDateTime(wh.registeredAt)}
                       </td>
                       <td className="p-3 text-right">
                         <button
+                          type="button"
                           onClick={() => handleTestWebhook(wh)}
                           disabled={testingWebhookId === wh.id}
-                          className="inline-flex items-center gap-1.5 border border-[#505a42] bg-[#1a2215] px-3 py-1 text-xs font-mono text-[#f0eee5] hover:bg-[#253020] disabled:opacity-50"
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs text-foreground hover:bg-accent disabled:opacity-50 transition"
                         >
                           {testingWebhookId === wh.id ? (
                             <>
-                              <span className="h-3 w-3 animate-spin rounded-full border border-[#aab98b] border-t-transparent" />
-                              Testing...
+                              <span className="h-3 w-3 animate-spin rounded-full border border-[#ededed] border-t-transparent" />
+                              <span>Testing...</span>
                             </>
                           ) : (
                             <>
-                              <Play className="h-3 w-3 text-[#aab98b]" />
-                              Test Ping
+                              <Play className="h-3 w-3 fill-current" />
+                              <span>Test ping</span>
                             </>
                           )}
                         </button>
@@ -862,52 +774,51 @@ export default function DeveloperPortalPage() {
           {/* Test Status Banner */}
           {webhookTestMessage && (
             <div
-              className={`flex items-start gap-2 border p-3 text-xs font-mono ${
+              className={`flex items-start gap-2 rounded-md border p-3 text-xs font-mono ${
                 webhookTestMessage.success
-                  ? "border-[#4a5e38] bg-[#131d10] text-[#aab98b]"
-                  : "border-[#603530] bg-[#211210] text-[#e06c75]"
+                  ? "border-border bg-background text-foreground"
+                  : "border-[#3b1818] bg-[#140a0a] text-[#ef4444]"
               }`}
             >
               {webhookTestMessage.success ? (
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-[#86efac] mt-0.5" />
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-[#10b981] mt-0.5" />
               ) : (
-                <AlertCircle className="h-4 w-4 shrink-0 text-[#e06c75] mt-0.5" />
+                <AlertCircle className="h-4 w-4 shrink-0 text-[#ef4444] mt-0.5" />
               )}
               <div>
-                <span className="font-bold">[{webhookTestMessage.id}]</span> {webhookTestMessage.msg}
+                <span className="font-semibold">[{webhookTestMessage.id}]</span> {webhookTestMessage.msg}
               </div>
             </div>
           )}
         </div>
 
         {/* Quick Webhook Registration Form */}
-        <div className="border border-[#1f241c] bg-[#090c08] p-4 space-y-3">
-          <h3 className="text-xs font-semibold text-[#f0eee5] flex items-center gap-1.5">
-            <Plus className="h-3.5 w-3.5 text-[#aab98b]" />
-            Register New Webhook Endpoint
-          </h3>
+        <div className="rounded-md border border-border bg-background p-4 space-y-3">
+          <div className="text-xs font-semibold text-foreground">
+            Register New Endpoint
+          </div>
 
-          <form onSubmit={handleRegisterWebhook} className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+          <form onSubmit={handleRegisterWebhook} className="grid grid-cols-1 gap-3 sm:grid-cols-12 text-xs">
             <div className="sm:col-span-6">
-              <label className="text-[11px] text-[#8a9184]">Webhook Callback URL (http:// or https://)</label>
+              <label className="text-muted-foreground block mb-1">Webhook Callback URL</label>
               <input
                 type="url"
                 required
                 value={newWebhookUrl}
                 onChange={(e) => setNewWebhookUrl(e.target.value)}
                 placeholder="https://your-api.com/webhooks/reconciliation"
-                className="mt-1 w-full border border-[#2b3127] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
               />
             </div>
 
             <div className="sm:col-span-4">
-              <label className="text-[11px] text-[#8a9184]">Custom Secret (optional)</label>
+              <label className="text-muted-foreground block mb-1">Custom Secret (optional)</label>
               <input
                 type="text"
                 value={newWebhookSecret}
                 onChange={(e) => setNewWebhookSecret(e.target.value)}
                 placeholder="whsec_auto_generated_if_blank"
-                className="mt-1 w-full border border-[#2b3127] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                className="w-full rounded-md border border-border bg-card px-3 py-1.5 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
               />
             </div>
 
@@ -915,7 +826,7 @@ export default function DeveloperPortalPage() {
               <button
                 type="submit"
                 disabled={isRegisteringWebhook}
-                className="w-full flex items-center justify-center gap-1.5 border border-[#505a42] bg-[#1a2215] px-3 py-1.5 text-xs font-semibold text-[#f0eee5] hover:bg-[#253020] disabled:opacity-50"
+                className="w-full inline-flex h-8 items-center justify-center rounded-md bg-primary text-primary-foreground px-3 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
               >
                 {isRegisteringWebhook ? "Adding..." : "Register"}
               </button>
@@ -926,42 +837,32 @@ export default function DeveloperPortalPage() {
         {/* Recent Webhook Delivery History */}
         {deliveryLogsList.length > 0 && (
           <div className="space-y-3 pt-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[#8a9184]">
-              Recent Webhook Dispatches & Signature Verification
-            </h3>
-            <div className="overflow-x-auto border border-[#1f241c]">
+            <div className="text-xs font-semibold text-foreground">
+              Recent Webhook Dispatches
+            </div>
+            <div className="overflow-x-auto rounded border border-border">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-[#1f241c] bg-[#121611] text-[#8a9184]">
-                    <th className="p-2.5 font-semibold">Timestamp</th>
-                    <th className="p-2.5 font-semibold">Event</th>
-                    <th className="p-2.5 font-semibold">Target URL</th>
-                    <th className="p-2.5 font-semibold">Result</th>
-                    <th className="p-2.5 font-semibold">Attempts</th>
-                    <th className="p-2.5 font-semibold">HMAC Header</th>
+                  <tr className="border-b border-border text-[10px] uppercase text-muted-foreground/70">
+                    <th className="p-2.5 font-medium">Timestamp</th>
+                    <th className="p-2.5 font-medium">Event</th>
+                    <th className="p-2.5 font-medium">Target URL</th>
+                    <th className="p-2.5 font-medium">Result</th>
+                    <th className="p-2.5 font-medium">Attempts</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1f241c] bg-[#080a08] font-mono text-[11px]">
+                <tbody className="divide-y divide-border font-mono text-[11px]">
                   {deliveryLogsList.map((log) => (
-                    <tr key={log.id} className="hover:bg-[#0f130e]">
-                      <td className="p-2.5 text-[#7a8174]">{new Date(log.timestamp).toLocaleTimeString()}</td>
-                      <td className="p-2.5 text-[#f0eee5]">{log.event}</td>
-                      <td className="p-2.5 text-[#aab98b] truncate max-w-xs">{log.url}</td>
+                    <tr key={log.id} className="hover:bg-accent/40">
+                      <td className="p-2.5 text-muted-foreground/70">{formatAuditTime(log.timestamp)}</td>
+                      <td className="p-2.5 text-foreground">{log.event}</td>
+                      <td className="p-2.5 text-muted-foreground truncate max-w-xs">{log.url}</td>
                       <td className="p-2.5">
-                        <span
-                          className={`px-1.5 py-0.5 border text-[10px] ${
-                            log.status === "DELIVERED" || log.status === "SIMULATED"
-                              ? "border-[#4a5e38] bg-[#131d10] text-[#86efac]"
-                              : "border-[#603530] bg-[#211210] text-[#e06c75]"
-                          }`}
-                        >
+                        <Badge variant={log.status === "DELIVERED" || log.status === "SIMULATED" ? "success" : "destructive"}>
                           {log.status} ({log.statusCode})
-                        </span>
+                        </Badge>
                       </td>
-                      <td className="p-2.5 text-[#8a9184]">{log.attempts || 1}</td>
-                      <td className="p-2.5 text-[#6c7465] truncate max-w-xs" title={log.signature}>
-                        {log.signature || "X-SettleMate-Signature"}
-                      </td>
+                      <td className="p-2.5 text-muted-foreground/70">{log.attempts || 1}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -11,6 +11,7 @@ import {
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
   sanitizeObject,
 } from "@/lib/security/api-security";
 import { evaluateRedTeamAttack } from "@/lib/security/red-team";
@@ -50,16 +51,10 @@ async function handlePost(req: NextRequest) {
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        {
-          success: false,
-          error: (err as Error).message || "Red-team attack evaluation failed",
-          processedAt: new Date().toISOString(),
-        },
-        { status: 500 }
-      )
-    );
+    // safeErrorResponse masks 5xx detail. Leaking the raw message here was
+    // especially poor: this endpoint exists to be attacked, so its error text
+    // was a free reconnaissance channel into the evaluator's internals.
+    return safeErrorResponse(err, 500, "RED_TEAM_ERROR");
   }
 }
 

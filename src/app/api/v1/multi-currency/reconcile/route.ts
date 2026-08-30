@@ -15,11 +15,15 @@ import {
   SUPPORTED_CURRENCIES,
 } from "@/lib/currency/fx-rates";
 import {
+  apiKeyGuard,
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
   sanitizeObject,
+  validateBodySize,
 } from "@/lib/security/api-security";
+import { MAX_BODY_BYTES, MAX_TXN_ROWS } from "@/lib/api/v1-schemas";
 import { instrument } from "@/lib/observability/route";
 
 export async function OPTIONS() {
@@ -76,8 +80,31 @@ async function handlePost(req: NextRequest) {
     return rateLimit.response;
   }
 
+  // 2. API Key Authentication (handleGet stays public: it returns only FX rates
+  // and usage documentation, no tenant data.)
+  const auth = apiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    return auth.response;
+  }
+
   try {
-    const rawBody = await req.json().catch(() => null);
+    // Read as text first so the payload can be size-checked before it is parsed
+    // into memory — an unbounded JSON body is a trivial memory-exhaustion vector.
+    const rawText = await req.text();
+    const size = validateBodySize(rawText, MAX_BODY_BYTES);
+    if (!size.valid) {
+      return applySecurityHeaders(
+        NextResponse.json({ error: size.error }, { status: 413 })
+      );
+    }
+
+    let rawBody: unknown;
+    try {
+      rawBody = rawText.trim() ? JSON.parse(rawText) : null;
+    } catch {
+      rawBody = null;
+    }
+
     if (!rawBody) {
       const errRes = NextResponse.json(
         {
@@ -97,7 +124,17 @@ async function handlePost(req: NextRequest) {
       ? ((sanitized as Record<string, unknown>).transactions as MultiCurrencyTxnInput[])
       : [];
 
-    // 2. Input Validation
+    if (rawTxns.length > MAX_TXN_ROWS) {
+      const capRes = NextResponse.json(
+        {
+          error: `A single request accepts at most ${MAX_TXN_ROWS} transactions (received ${rawTxns.length})`,
+        },
+        { status: 400 }
+      );
+      return applySecurityHeaders(capRes);
+    }
+
+    // 3. Input Validation
     const validation = validateMultiCurrencyInput(rawTxns);
     if (!validation.valid) {
       const valRes = NextResponse.json(
@@ -111,7 +148,7 @@ async function handlePost(req: NextRequest) {
       return applySecurityHeaders(valRes);
     }
 
-    // 3. Execute Multi-Currency Reconciliation
+    // 4. Execute Multi-Currency Reconciliation
     const startTime = Date.now();
     const result = await reconcileMultiCurrencyBatch(rawTxns);
     const durationMs = Date.now() - startTime;
@@ -131,14 +168,9 @@ async function handlePost(req: NextRequest) {
     return applySecurityHeaders(response);
   } catch (error) {
     console.error("Multi-currency reconciliation error:", error);
-    const errRes = NextResponse.json(
-      {
-        error: "Internal error during multi-currency reconciliation",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
-    return applySecurityHeaders(errRes);
+    // safeErrorResponse masks the message for 5xx; returning error.message
+    // verbatim leaked engine internals and file paths to any caller.
+    return safeErrorResponse(error, 500, "MULTI_CURRENCY_ERROR");
   }
 }
 

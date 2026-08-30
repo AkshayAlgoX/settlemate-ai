@@ -6,17 +6,40 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { GlobalHeader } from "@/components/layout/global-header";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { GuidedTourModal } from "@/components/layout/guided-tour-modal";
+import { QuickActionsFab } from "@/components/layout/quick-actions-fab";
 import { ToastProvider } from "@/components/ui/toast";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      if (typeof window !== "undefined") {
+        return localStorage.getItem("settlemate-sidebar-collapsed") === "true";
+      }
+    } catch {
+      // Storage unavailable
+    }
+    return false;
+  });
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("settlemate-sidebar-collapsed", String(next));
+      } catch {
+        // Storage unavailable
+      }
+      return next;
+    });
+  };
 
   // Global Keyboard Shortcuts (Ctrl+K / Cmd+K and ?)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // Check if target is an input or textarea
     const target = e.target as HTMLElement | null;
     const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
 
@@ -36,10 +59,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [handleKeyDown]);
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/") {
     return (
       <ToastProvider>
-        <div className="min-h-screen bg-[#080a09] text-[#e9e7df]">
+        <div className="min-h-screen bg-background text-foreground">
           {children}
         </div>
       </ToastProvider>
@@ -48,21 +71,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ToastProvider>
-      <div className="flex h-screen overflow-hidden bg-[#080a09] text-[#e9e7df]">
+      <div className="flex h-screen overflow-hidden bg-background text-foreground">
         <Sidebar
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
+          showLogoutConfirm={logoutModalOpen}
+          setShowLogoutConfirm={setLogoutModalOpen}
         />
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <GlobalHeader
             onOpenSidebar={() => setMobileSidebarOpen(true)}
-            onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+            onOpenCommandPalette={() => setCommandPaletteOpen((prev) => !prev)}
             onOpenTour={() => setTourOpen(true)}
+            onOpenLogoutModal={() => setLogoutModalOpen(true)}
           />
 
-          <main className="min-w-0 flex-1 overflow-y-auto bg-[#080a09]">
-            <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 sm:py-7 lg:px-9 lg:py-8">
+          <main className="min-w-0 flex-1 overflow-y-auto bg-background transition-colors">
+            <div className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-8 xl:px-10">
               {children}
             </div>
           </main>
@@ -79,6 +107,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isOpen={tourOpen}
           onClose={() => setTourOpen(false)}
         />
+
+        <QuickActionsFab onOpenTour={() => setTourOpen(true)} />
       </div>
     </ToastProvider>
   );

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   SESSION_MAX_AGE_SECONDS,
+  authenticateUser,
   createSessionToken,
   verifySessionToken,
 } from "./session";
@@ -44,6 +45,49 @@ function demoUser() {
 }
 
 async function run() {
+  console.log("\nAuth Session — constant-time credential verification");
+
+  // authenticateUser compares credentials with timingSafeEqual over fixed-length
+  // HMAC digests, in an exhaustive loop that never short-circuits. These cases
+  // pin the behaviour that rewrite has to preserve.
+
+  await check("valid admin credentials authenticate with the ADMIN role", async () => {
+    const user = authenticateUser("admin", "admin123");
+    assert.ok(user, "admin authenticates");
+    assert.equal(user.sub, "admin");
+    assert.equal(user.role, "ADMIN");
+    assert.ok(user.exp > Math.floor(Date.now() / 1000), "session has a future expiry");
+  });
+
+  await check("valid reviewer credentials authenticate with the REVIEWER role", async () => {
+    const user = authenticateUser("reviewer", "review123");
+    assert.ok(user, "reviewer authenticates");
+    assert.equal(user.role, "REVIEWER");
+  });
+
+  await check("credentials crossed between two accounts are rejected", async () => {
+    // The loop keeps a mutable `match`; a bug that assigned on username-only or
+    // leaked state across iterations would accept these. Direct regression guard.
+    assert.equal(authenticateUser("admin", "review123"), null);
+    assert.equal(authenticateUser("reviewer", "admin123"), null);
+  });
+
+  await check("wrong password, unknown user, and empty input are all rejected", async () => {
+    assert.equal(authenticateUser("admin", "wrong-password"), null);
+    assert.equal(authenticateUser("nosuchuser", "admin123"), null);
+    assert.equal(authenticateUser("", ""), null);
+    assert.equal(authenticateUser("admin", ""), null);
+  });
+
+  await check("digest comparison rejects prefixes, suffixes and case variants", async () => {
+    // Hashing before comparison means no partial credit for a partly-correct
+    // secret, and no length-based early exit.
+    assert.equal(authenticateUser("admin", "admin12"), null, "prefix rejected");
+    assert.equal(authenticateUser("admin", "admin1234"), null, "suffix rejected");
+    assert.equal(authenticateUser("Admin", "admin123"), null, "username is case-sensitive");
+    assert.equal(authenticateUser("admin", "ADMIN123"), null, "password is case-sensitive");
+  });
+
   console.log("\nAuth Session — fail-closed AUTH_SECRET tests");
 
   await check("configured AUTH_SECRET mints and verifies a session", async () => {

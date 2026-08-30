@@ -2,18 +2,15 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  BellRing,
-  Play,
-  Square,
-  Zap,
-  Radio,
   Clock,
-  AlertTriangle,
   Copy,
   Check,
 } from "lucide-react";
-
 import { generateDeterministicAlert } from "@/lib/alerts/alert-types";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+import { formatAuditTime } from "@/lib/format";
 
 interface SmartAlertItem {
   id: string;
@@ -116,9 +113,7 @@ export default function AlertsPage() {
       setIsStreaming(false);
     } else {
       setIsStreaming(true);
-      // Immediately fire one
       triggerAlert(false);
-      // Stream every 3.5 seconds
       timerRef.current = setInterval(() => {
         triggerAlert(false);
       }, 3500);
@@ -156,148 +151,117 @@ export default function AlertsPage() {
   const totalAmountAtRiskPaise = alerts.reduce((acc, a) => acc + a.amountPaise, 0);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#a4b58a]">
-              <BellRing className="h-4 w-4 text-[#a4b58a]" />
-              Smart Alerting Simulator · 🔔 00V
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#e3e1d8]">
-              Live Exception Detection &amp; Signed Webhook Escalation
-            </h1>
-            <p className="mt-1 text-xs text-[#8c9288]">
-              Simulates a live automated telemetry stream detecting high-risk reconciliation exceptions. Dispatches HMAC-SHA256 cryptographically signed webhooks to Slack, PagerDuty, and CFO escalation queues.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
+      <PageHeader
+        tag="Smart Alerting"
+        title="Exception detection & webhook escalation"
+        description="Automated telemetry stream detecting reconciliation anomalies with HMAC-SHA256 cryptographically signed webhook dispatch."
+        badge={<Badge variant="outline">Webhook Delivery</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => triggerAlert(true)}
               disabled={isTriggering}
-              className="px-4 py-2 border border-[#592321] bg-[#1c0f0e] hover:bg-[#2d1211] text-[#e89088] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#3b1818] bg-[#140a0a] px-3 text-xs font-medium text-[#ef4444] hover:bg-[#1f0f0f] transition"
             >
-              <Zap className="h-3.5 w-3.5 fill-current" />
-              Trigger High-Risk Alert
+              <span>Trigger high-risk alert</span>
             </button>
 
             <button
               type="button"
               onClick={toggleStream}
-              className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all ${
+              className={`inline-flex h-8 items-center rounded-md px-3.5 text-xs font-medium transition ${
                 isStreaming
-                  ? "bg-[#592321] hover:bg-[#6e2c29] text-[#ffd6d3] border border-[#7a322f]"
-                  : "bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d]"
+                  ? "bg-[#ef4444] text-[#ffffff] hover:bg-[#dc2626]"
+                  : "bg-primary text-primary-foreground hover:bg-[#ffffff]"
               }`}
             >
-              {isStreaming ? (
-                <>
-                  <Square className="h-3.5 w-3.5 fill-current" />
-                  Stop Alert Stream
-                </>
-              ) : (
-                <>
-                  <Play className="h-3.5 w-3.5 fill-current" />
-                  Start Alert Stream (3.5s)
-                </>
-              )}
+              <span>{isStreaming ? "Stop stream" : "Start stream (3.5s)"}</span>
             </button>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* KPI Overview Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="border border-[#252a24] bg-[#090b09] p-4">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-            Total Streamed Alerts
-          </div>
-          <div className="mt-1 text-2xl font-mono font-bold text-[#e3e1d8]">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-2xl font-mono font-semibold tracking-tight text-foreground">
             {alerts.length}
           </div>
-          <div className="mt-1 text-[10px] text-[#8c9288] flex items-center gap-1.5">
-            {isStreaming ? (
-              <span className="flex items-center gap-1 text-[#a4b58a]">
-                <span className="h-2 w-2 rounded-full bg-[#a4b58a] animate-ping" />
-                Live streaming active
-              </span>
-            ) : (
-              <span>Stream paused</span>
-            )}
+          <div className="text-xs font-medium text-foreground">
+            Streamed alerts
+          </div>
+          <div className="text-[11px] text-muted-foreground/70">
+            {isStreaming ? "Streaming active" : "Paused"}
           </div>
         </div>
 
-        <div className="border border-[#252a24] bg-[#090b09] p-4">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-            High-Risk Critical Alerts
-          </div>
-          <div className="mt-1 text-2xl font-mono font-bold text-[#d9776f]">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-2xl font-mono font-semibold tracking-tight text-[#ef4444]">
             {highCount}
           </div>
-          <div className="mt-1 text-[10px] text-[#687063]">
+          <div className="text-xs font-medium text-foreground">
+            High-risk critical alerts
+          </div>
+          <div className="text-[11px] text-muted-foreground/70">
             {medCount} Medium · {lowCount} Low
           </div>
         </div>
 
-        <div className="border border-[#252a24] bg-[#090b09] p-4">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-            Total Amount At Risk
-          </div>
-          <div className="mt-1 text-2xl font-mono font-bold text-[#e3e1d8]">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-2xl font-mono font-semibold tracking-tight text-foreground">
             ₹{(totalAmountAtRiskPaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
           </div>
-          <div className="mt-1 text-[10px] text-[#8c9288]">
-            Exact integer paise accounting
+          <div className="text-xs font-medium text-foreground">
+            Amount at risk
+          </div>
+          <div className="text-[11px] text-muted-foreground/70">
+            Exact integer paise
           </div>
         </div>
 
-        <div className="border border-[#252a24] bg-[#090b09] p-4">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-            HMAC Delivery Status
-          </div>
-          <div className="mt-1 text-2xl font-mono font-bold text-[#a4b58a]">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="text-2xl font-mono font-semibold tracking-tight text-foreground">
             100%
           </div>
-          <div className="mt-1 text-[10px] text-[#8c9288]">
+          <div className="text-xs font-medium text-foreground">
+            HMAC delivery status
+          </div>
+          <div className="text-[11px] text-muted-foreground/70">
             SHA-256 signed payloads
           </div>
         </div>
       </div>
 
       {/* Webhook Destinations & Registered Channels Bar */}
-      <div className="border border-[#252a24] bg-[#090b09] p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-bold uppercase tracking-wider text-[#e3e1d8] flex items-center gap-2">
-            <Radio className="h-4 w-4 text-[#a4b58a]" />
-            Registered Escalation Webhook Channels
-          </div>
-          <span className="text-[10px] font-mono text-[#687063]">
-            All payloads signed with HMAC-SHA256
-          </span>
-        </div>
+      <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <SectionHeader
+          title="Registered escalation channels"
+          description="Payloads signed with HMAC-SHA256."
+          className="border-b-0 pb-0"
+        />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {channels.map((chan) => (
             <div
               key={chan.id}
-              className="p-3 border border-[#1f241d] bg-[#060806] space-y-1.5 font-mono text-xs"
+              className="p-3.5 rounded-md border border-border bg-background space-y-1 font-mono text-xs"
             >
               <div className="flex items-center justify-between">
-                <span className="font-bold text-[#e3e1d8] text-[11px] truncate">
+                <span className="font-semibold text-foreground text-xs truncate">
                   {chan.name}
                 </span>
-                <span className="px-1.5 py-0.2 text-[8px] bg-[#142211] border border-[#3e5532] text-[#a4b58a]">
+                <Badge variant="outline">
                   {chan.status}
-                </span>
+                </Badge>
               </div>
-              <div className="text-[9px] text-[#687063] truncate">
+              <div className="text-[11px] text-muted-foreground/70 truncate">
                 {chan.targetUrl}
               </div>
-              <div className="text-[9px] text-[#8c9288]">
-                Type: <strong className="text-[#a4b58a]">{chan.type}</strong>
+              <div className="text-[11px] text-muted-foreground">
+                Type: <strong className="text-foreground">{chan.type}</strong>
               </div>
             </div>
           ))}
@@ -308,62 +272,64 @@ export default function AlertsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-mono font-bold text-[#687063] uppercase">
+            <span className="text-xs text-muted-foreground">
               Severity:
             </span>
-            {["all", "HIGH", "MEDIUM", "LOW"].map((sev) => (
-              <button
-                key={sev}
-                type="button"
-                onClick={() => setSelectedSeverity(sev)}
-                className={`px-2.5 py-1 text-[10px] font-mono font-bold border transition-all ${
-                  selectedSeverity === sev
-                    ? "bg-[#151a12] border-[#505a42] text-[#f0eee6]"
-                    : "border-[#252a24] bg-[#090b09] text-[#8c9288] hover:text-[#e3e1d8]"
-                }`}
-              >
-                {sev.toUpperCase()}
-              </button>
-            ))}
+            <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+              {["all", "HIGH", "MEDIUM", "LOW"].map((sev) => (
+                <button
+                  key={sev}
+                  type="button"
+                  onClick={() => setSelectedSeverity(sev)}
+                  className={`h-6 px-2 text-[11px] font-medium rounded transition ${
+                    selectedSeverity === sev
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {sev}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-mono font-bold text-[#687063] uppercase">
+            <span className="text-xs text-muted-foreground">
               Channel:
             </span>
-            {[
-              { id: "all", label: "ALL" },
-              { id: "slack", label: "SLACK" },
-              { id: "pagerduty", label: "PAGERDUTY" },
-              { id: "email", label: "EMAIL" },
-            ].map((chan) => (
-              <button
-                key={chan.id}
-                type="button"
-                onClick={() => setSelectedChannel(chan.id)}
-                className={`px-2.5 py-1 text-[10px] font-mono font-bold border transition-all ${
-                  selectedChannel === chan.id
-                    ? "bg-[#151a12] border-[#505a42] text-[#f0eee6]"
-                    : "border-[#252a24] bg-[#090b09] text-[#8c9288] hover:text-[#e3e1d8]"
-                }`}
-              >
-                {chan.label}
-              </button>
-            ))}
+            <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+              {[
+                { id: "all", label: "All" },
+                { id: "slack", label: "Slack" },
+                { id: "pagerduty", label: "PagerDuty" },
+                { id: "email", label: "Email" },
+              ].map((chan) => (
+                <button
+                  key={chan.id}
+                  type="button"
+                  onClick={() => setSelectedChannel(chan.id)}
+                  className={`h-6 px-2 text-[11px] font-medium rounded transition ${
+                    selectedChannel === chan.id
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {chan.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {alerts.length > 0 && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="px-3 py-1 text-[10px] font-mono border border-[#252a24] bg-[#090b09] text-[#8c9288] hover:text-[#e3e1d8]"
-            >
-              Clear Feed ({alerts.length})
-            </button>
-          )}
-        </div>
+        {alerts.length > 0 && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="h-7 px-2.5 rounded border border-border bg-card text-xs text-muted-foreground hover:text-foreground transition"
+          >
+            Clear feed ({alerts.length})
+          </button>
+        )}
       </div>
 
       {/* Live Activity Feed */}
@@ -376,95 +342,76 @@ export default function AlertsPage() {
             return (
               <div
                 key={alert.id}
-                className={`border p-5 transition-all space-y-3 ${
-                  isHigh
-                    ? "border-[#592321] bg-[#0f0909]"
-                    : isMed
-                    ? "border-[#54411f] bg-[#0f0d08]"
-                    : "border-[#252a24] bg-[#090b09]"
-                }`}
+                className="rounded-lg border border-border bg-card p-5 space-y-3"
               >
                 {/* Alert Top Line */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`px-2 py-0.5 text-[9px] font-mono font-bold border flex items-center gap-1 ${
-                        isHigh
-                          ? "bg-[#22100f] border-[#592321] text-[#e89088]"
-                          : isMed
-                          ? "bg-[#241c0e] border-[#54411f] text-[#d9aa6f]"
-                          : "bg-[#142211] border-[#3e5532] text-[#a4b58a]"
-                      }`}
-                    >
-                      {isHigh ? <AlertTriangle className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
-                      {alert.severity} SEVERITY
-                    </span>
+                  <div className="flex items-center gap-2.5">
+                    <Badge variant={isHigh ? "destructive" : isMed ? "warning" : "secondary"}>
+                      {alert.severity}
+                    </Badge>
 
-                    <span className="text-[10px] font-mono font-bold text-[#687063]">
+                    <span className="text-xs font-mono text-muted-foreground/70">
                       {alert.id}
                     </span>
 
-                    <span className="px-2 py-0.2 text-[9px] font-mono bg-[#11140f] border border-[#252a24] text-[#a4b58a]">
+                    <span className="text-xs font-mono text-muted-foreground">
                       {alert.type}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 font-mono text-[10px] text-[#687063]">
+                  <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground/70">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {new Date(alert.timestamp).toLocaleTimeString()}
+                      {formatAuditTime(alert.timestamp)}
                     </span>
-                    <span className="px-2 py-0.5 bg-[#142211] border border-[#3e5532] text-[#a4b58a] font-bold">
+                    <Badge variant="outline">
                       {alert.deliveryStatus || "SIMULATED"}
-                    </span>
+                    </Badge>
                   </div>
                 </div>
 
                 {/* Alert Body */}
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-bold text-[#e3e1d8]">
+                    <h3 className="text-sm font-semibold text-foreground">
                       {alert.title}
                     </h3>
-                    <p className="text-xs text-[#8c9288] leading-relaxed">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
                       {alert.description}
                     </p>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <div className="text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-                      Amount At Risk
+                    <div className="text-xs text-muted-foreground">
+                      Amount at risk
                     </div>
-                    <div className="text-base font-mono font-bold text-[#e3e1d8] mt-0.5">
+                    <div className="text-base font-mono font-semibold text-foreground mt-0.5">
                       {alert.formattedAmount}
                     </div>
                   </div>
                 </div>
 
                 {/* Bottom Meta Strip */}
-                <div className="pt-3 border-t border-[#1f241d] flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                  <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono text-[#8c9288]">
-                    <span>
-                      Target: <strong className="text-[#e3e1d8]">{alert.channel}</strong>
-                    </span>
+                <div className="pt-3 border-t border-border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground">
+                    <span>Target: <strong className="text-foreground">{alert.channel}</strong></span>
                     <span>·</span>
-                    <span>
-                      Playbook: <strong className="text-[#a4b58a]">{alert.recommendedPlaybook}</strong>
-                    </span>
+                    <span>Playbook: <strong className="text-foreground">{alert.recommendedPlaybook}</strong></span>
                   </div>
 
                   {alert.signature && (
                     <div className="flex items-center gap-2">
-                      <span className="text-[9px] font-mono text-[#687063]">
+                      <span className="text-[11px] font-mono text-muted-foreground/70">
                         HMAC-SHA256: {alert.signature.slice(0, 24)}...
                       </span>
                       <button
                         type="button"
                         onClick={() => copySignature(alert.id, alert.signature)}
-                        className="px-2 py-0.5 border border-[#252a24] bg-[#060806] hover:bg-[#121611] text-[#8c9288] text-[9px] font-mono flex items-center gap-1"
+                        className="h-6 px-2 rounded border border-border bg-background text-muted-foreground hover:text-foreground text-[11px] font-mono flex items-center gap-1 transition"
                       >
-                        {copiedId === alert.id ? <Check className="h-2.5 w-2.5 text-[#a4b58a]" /> : <Copy className="h-2.5 w-2.5" />}
-                        {copiedId === alert.id ? "Copied" : "Copy Signature"}
+                        {copiedId === alert.id ? <Check className="h-3 w-3 text-[#10b981]" /> : <Copy className="h-3 w-3" />}
+                        <span>{copiedId === alert.id ? "Copied" : "Copy signature"}</span>
                       </button>
                     </div>
                   )}
@@ -473,15 +420,12 @@ export default function AlertsPage() {
             );
           })
         ) : (
-          <div className="border border-dashed border-[#252a24] bg-[#090b09] p-12 text-center space-y-3">
-            <div className="mx-auto w-12 h-12 border border-[#3e4d36] bg-[#11160f] flex items-center justify-center">
-              <BellRing className="h-6 w-6 text-[#a4b58a]" />
-            </div>
-            <h3 className="text-sm font-bold text-[#e3e1d8]">
-              Alert Activity Feed Is Clear
+          <div className="rounded-lg border border-dashed border-border bg-card p-12 text-center space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">
+              Alert activity feed is clear
             </h3>
-            <p className="text-xs text-[#8c9288] max-w-md mx-auto">
-              Click <strong>&quot;Start Alert Stream&quot;</strong> or <strong>&quot;Trigger High-Risk Alert&quot;</strong> above to simulate real-time exception detection and signed webhook delivery.
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Click <strong>&quot;Start stream&quot;</strong> or <strong>&quot;Trigger high-risk alert&quot;</strong> to simulate exception detection and signed webhook delivery.
             </p>
           </div>
         )}

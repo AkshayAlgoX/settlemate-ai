@@ -8,8 +8,11 @@ import {
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
   sanitizeObject,
 } from "@/lib/security/api-security";
+import { ControlFailureError } from "@/lib/reconciliation/invariants";
+import { buildControlFailureResponse } from "@/lib/reconciliation/control-error";
 import type {
   BatchData,
   NormalizedPayment,
@@ -298,11 +301,18 @@ export async function POST(req: NextRequest) {
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        { error: (err as Error).message || "Internal Reconciliation Error" },
-        { status: 500 }
-      )
-    );
+    if (
+      err instanceof ControlFailureError ||
+      (err as { name?: string })?.name === "ControlFailureError" ||
+      (err as { code?: string })?.code === "CONTROL_FAILURE"
+    ) {
+      const payload = buildControlFailureResponse(err as ControlFailureError);
+      return applySecurityHeaders(
+        NextResponse.json(payload, { status: 422 })
+      );
+    }
+    // safeErrorResponse masks 5xx detail. The sandbox accepts arbitrary CSV from
+    // the public demo, so its error path was the most probed in the app.
+    return safeErrorResponse(err, 500, "SANDBOX_RECONCILE_ERROR");
   }
 }

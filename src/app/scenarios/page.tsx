@@ -2,17 +2,14 @@
 
 import React, { useState } from "react";
 import {
-  FlaskConical,
   Play,
   RefreshCw,
-  Sparkles,
-  CreditCard,
-  Percent,
-  Clock,
-  Copy,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
 
 interface ScenarioClaim {
   type: string;
@@ -59,36 +56,31 @@ const PRESET_SCENARIOS = [
   {
     id: "partial-refund",
     name: "Partial Refund Variance",
-    tag: "REFUND_VARIANCE",
-    icon: Sparkles,
+    tag: "Refund Variance",
     desc: "A ₹20,000 payment settled for ₹18,450 because an un-notified ₹1,550 refund voucher was executed at the gateway.",
   },
   {
     id: "fee-discrepancy",
     name: "Gateway Fee Tier Overcharge",
-    tag: "FEE_MISMATCH",
-    icon: Percent,
+    tag: "Fee Mismatch",
     desc: "Processor billed 2.0% fee (₹200.00) instead of the negotiated contract rate 1.5% (₹150.00), leaving a ₹50.00 variance.",
   },
   {
     id: "chargeback",
     name: "Expired Chargeback Reversal Risk",
-    tag: "CHARGEBACK_RISK",
-    icon: CreditCard,
+    tag: "Chargeback Risk",
     desc: "Chargeback of ₹15,000 filed at T+120 days, exceeding the 90-day dispute SLA window defined by card networks.",
   },
   {
     id: "delayed-settlement",
     name: "Delayed Settlement SLA Breach",
-    tag: "SLA_BREACH",
-    icon: Clock,
+    tag: "SLA Breach",
     desc: "Payment captured 5 days ago settled today, breaching the contractual T+1 settlement SLA.",
   },
   {
     id: "duplicate-payment",
     name: "Duplicate Bank Credit Detection",
-    tag: "DUPLICATE_CREDIT",
-    icon: Copy,
+    tag: "Duplicate Credit",
     desc: "Bank statement contains two separate credit entries of ₹5,000 for a single ₹5,000 order settlement.",
   },
 ];
@@ -155,193 +147,177 @@ export default function ScenariosPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#a4b58a]">
-              <FlaskConical className="h-4 w-4 text-[#a4b58a]" />
-              Finance-Ops Scenario Lab
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#e3e1d8]">
-              Deterministic Exception Resolution & AI Grounding Testbed
-            </h1>
-            <p className="mt-1 text-xs text-[#8c9288]">
-              Test how SettleMate AI handles real-world financial anomalies: exception detection, advisory AI claim formulation, mechanical non-LLM verification, and Maker/Checker adjustment proposals.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
+      <PageHeader
+        tag="Scenario Laboratory"
+        title="Finance-ops anomaly testbed"
+        description="Deterministic exception resolution testbed: exception detection, advisory AI claim formulation, non-LLM verification, and Maker/Checker adjustment proposals."
+        badge={<Badge variant="outline">5 Scenarios</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
             {Object.keys(results).length > 0 && (
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-4 py-2 border border-[#252a24] bg-[#090b09] hover:bg-[#121611] text-[#8c9288] text-xs font-bold uppercase tracking-wider"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition"
               >
-                Reset Lab
+                <span>Reset</span>
               </button>
             )}
             <button
               type="button"
               onClick={runAllScenarios}
               disabled={isRunningAll}
-              className="px-6 py-2.5 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2 disabled:opacity-50"
+              className="inline-flex h-8 items-center rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
             >
               {isRunningAll ? (
                 <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Running All 5 Scenarios...
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  <span>Running all 5...</span>
                 </>
               ) : (
-                <>
-                  <Play className="h-4 w-4 fill-current" />
-                  Run All Scenarios (5)
-                </>
+                <span>Run all scenarios (5)</span>
               )}
             </button>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Scenario Cards Grid */}
       <div className="space-y-4">
-        {PRESET_SCENARIOS.map((scenario) => {
-          const res = results[scenario.id];
-          const isLoading = loadingMap[scenario.id] || isRunningAll;
-          const isExpanded = expandedMap[scenario.id];
-          const Icon = scenario.icon;
+        <SectionHeader
+          title="Pre-configured anomaly scenarios"
+          description="Test real-world financial mismatch patterns individually or collectively."
+        />
 
-          return (
-            <div
-              key={scenario.id}
-              className={`border transition-all ${
-                res
-                  ? "border-[#3e4d36] bg-[#0d100d]"
-                  : "border-[#252a24] bg-[#090b09] hover:border-[#3e4d36]"
-              }`}
-            >
-              <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-start gap-3.5">
-                  <div className="p-2 border border-[#3e4d36] bg-[#11160f] shrink-0 mt-0.5">
-                    <Icon className="h-5 w-5 text-[#a4b58a]" />
-                  </div>
-                  <div>
+        <div className="space-y-4">
+          {PRESET_SCENARIOS.map((scenario) => {
+            const res = results[scenario.id];
+            const isLoading = loadingMap[scenario.id] || isRunningAll;
+            const isExpanded = expandedMap[scenario.id];
+
+            return (
+              <div
+                key={scenario.id}
+                className="rounded-lg border border-border bg-card transition-all overflow-hidden"
+              >
+                <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-[#e3e1d8]">{scenario.name}</h3>
-                      <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-[#141b12] border border-[#2e3a29] text-[#a4b58a]">
+                      <h3 className="text-sm font-semibold text-foreground">{scenario.name}</h3>
+                      <Badge variant="outline">
                         {scenario.tag}
-                      </span>
+                      </Badge>
                     </div>
-                    <p className="text-xs text-[#8c9288] mt-1">{scenario.desc}</p>
+                    <p className="text-xs text-muted-foreground">{scenario.desc}</p>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 shrink-0">
-                  {res && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {res && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(scenario.id)}
+                        className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs text-muted-foreground hover:text-foreground transition"
+                      >
+                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        <span>{isExpanded ? "Collapse" : "Expand"}</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() => toggleExpand(scenario.id)}
-                      className="p-2 border border-[#252a24] bg-[#090b09] hover:bg-[#141812] text-[#8c9288] text-xs flex items-center gap-1"
+                      onClick={() => runScenario(scenario.id)}
+                      disabled={isLoading}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50 transition"
                     >
-                      {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      <span className="text-[10px] font-bold uppercase">{isExpanded ? "Collapse" : "Expand"}</span>
+                      {isLoading ? (
+                        <>
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          <span>Testing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3 w-3 fill-current" />
+                          <span>{res ? "Re-run" : "Run"}</span>
+                        </>
+                      )}
                     </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => runScenario(scenario.id)}
-                    disabled={isLoading}
-                    className="px-4 py-2 border border-[#3e4d36] bg-[#11160f] hover:bg-[#182313] text-[#a4b58a] text-xs font-bold uppercase tracking-wider flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {isLoading ? (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                        Testing...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-3.5 w-3.5 fill-current" />
-                        {res ? "Re-Run Scenario" : "Run Scenario"}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Expanded Detail Panel */}
-              {res && isExpanded && (
-                <div className="border-t border-[#252a24] bg-[#060806] p-5 space-y-5">
-                  {/* Summary & Metrics */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="p-3 border border-[#252a24] bg-[#0d100d]">
-                      <div className="text-[9px] uppercase text-[#687063] font-bold">Auto-Matched</div>
-                      <div className="text-xl font-mono font-bold text-[#a4b58a]">{res.summary.autoMatched}</div>
-                    </div>
-                    <div className="p-3 border border-[#6e2b26] bg-[#1a0f0e]">
-                      <div className="text-[9px] uppercase text-[#823a35] font-bold">Exceptions Detected</div>
-                      <div className="text-xl font-mono font-bold text-[#d9776f]">{res.summary.exception}</div>
-                    </div>
-                    <div className="p-3 border border-[#252a24] bg-[#0d100d]">
-                      <div className="text-[9px] uppercase text-[#687063] font-bold">Confidence Score</div>
-                      <div className="text-xl font-mono font-bold text-[#e3e1d8]">{(res.aiSuggestion.confidenceScore * 100).toFixed(0)}%</div>
-                    </div>
-                    <div className="p-3 border border-[#3e4d36] bg-[#11160f]">
-                      <div className="text-[9px] uppercase text-[#778264] font-bold">Maker / Checker Gate</div>
-                      <div className="text-xs font-mono font-bold text-[#a4b58a] mt-1">REQUIRED (Admin)</div>
-                    </div>
                   </div>
+                </div>
 
-                  {/* AI Hypothesis & Mechanical Claims */}
-                  <div className="border border-[#2e3a29] bg-[#090b09] p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-[#e3e1d8]">
-                      <Sparkles className="h-4 w-4 text-[#a4b58a]" />
-                      Advisory AI Investigation & Non-LLM Verified Claims
+                {/* Expanded Detail Panel */}
+                {res && isExpanded && (
+                  <div className="border-t border-border bg-background p-5 space-y-4">
+                    {/* Summary & Metrics */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="p-3 rounded-md border border-border bg-card space-y-0.5">
+                        <div className="text-xs text-muted-foreground">Auto-Matched</div>
+                        <div className="text-lg font-mono font-semibold text-foreground">{res.summary.autoMatched}</div>
+                      </div>
+                      <div className="p-3 rounded-md border border-border bg-card space-y-0.5">
+                        <div className="text-xs text-muted-foreground">Exceptions</div>
+                        <div className="text-lg font-mono font-semibold text-[#ef4444]">{res.summary.exception}</div>
+                      </div>
+                      <div className="p-3 rounded-md border border-border bg-card space-y-0.5">
+                        <div className="text-xs text-muted-foreground">Confidence</div>
+                        <div className="text-lg font-mono font-semibold text-foreground">{(res.aiSuggestion.confidenceScore * 100).toFixed(0)}%</div>
+                      </div>
+                      <div className="p-3 rounded-md border border-border bg-card space-y-0.5">
+                        <div className="text-xs text-muted-foreground">Maker / Checker</div>
+                        <div className="text-xs font-mono font-medium text-foreground mt-1">Required (Admin)</div>
+                      </div>
                     </div>
 
-                    <div className="text-xs text-[#a4b58a] font-mono bg-[#11160f] p-2.5 border border-[#252a24]">
-                      &ldquo;{res.aiSuggestion.hypothesis}&rdquo;
+                    {/* AI Hypothesis & Mechanical Claims */}
+                    <div className="rounded-md border border-border bg-card p-4 space-y-3">
+                      <div className="text-xs font-semibold text-foreground">
+                        Advisory AI Investigation & Non-LLM Verified Claims
+                      </div>
+
+                      <div className="text-xs text-foreground font-mono bg-background p-3 rounded border border-border">
+                        &ldquo;{res.aiSuggestion.hypothesis}&rdquo;
+                      </div>
+
+                      <div className="space-y-2 pt-1">
+                        {res.aiSuggestion.claims.map((claim, idx) => (
+                          <div key={idx} className="p-3 rounded border border-border bg-background flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
+                            <div>
+                              <div className="font-mono text-[10px] text-muted-foreground/70 uppercase">{claim.type}</div>
+                              <div className="text-foreground font-medium">{claim.claimText}</div>
+                              <div className="text-[11px] text-muted-foreground mt-0.5">{claim.details}</div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <Badge variant="success">
+                                {claim.status}
+                              </Badge>
+                              <div className="text-[10px] font-mono text-muted-foreground/70 mt-1">{claim.validationCheck}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
-                    <div className="space-y-2 pt-1">
-                      {res.aiSuggestion.claims.map((claim, idx) => (
-                        <div key={idx} className="p-2.5 border border-[#1f241d] bg-[#070907] flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
-                          <div>
-                            <div className="font-mono text-[10px] text-[#687063] font-bold">{claim.type}</div>
-                            <div className="text-[#e3e1d8]">{claim.claimText}</div>
-                            <div className="text-[10px] text-[#8c9288] mt-0.5">{claim.details}</div>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-[#182614] border border-[#3e5532] text-[#a4b58a]">
-                              [PASS] {claim.status}
-                            </span>
-                            <div className="text-[9px] font-mono text-[#687063] mt-1">{claim.validationCheck}</div>
-                          </div>
+                    {/* Proposed Double-Entry Correction */}
+                    <div className="rounded-md border border-border bg-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs text-muted-foreground">
+                          Recommended Double-Entry Journal Adjustment
                         </div>
-                      ))}
+                        <div className="text-xs font-mono font-semibold text-foreground mt-0.5">
+                          {res.aiSuggestion.proposedCorrection}
+                        </div>
+                      </div>
+                      <Badge variant="outline">
+                        Target: {res.aiSuggestion.targetAccount}
+                      </Badge>
                     </div>
                   </div>
-
-                  {/* Proposed Double-Entry Correction */}
-                  <div className="border border-[#3e4d36] bg-[#11160f] p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[9px] font-bold uppercase tracking-wider text-[#a4b58a]">
-                        Recommended Double-Entry Journal Adjustment
-                      </div>
-                      <div className="text-xs font-mono text-[#e3e1d8] mt-0.5">
-                        {res.aiSuggestion.proposedCorrection}
-                      </div>
-                    </div>
-                    <span className="px-3 py-1 bg-[#182614] border border-[#3e5532] text-[10px] font-mono font-bold text-[#a4b58a] shrink-0">
-                      Target: {res.aiSuggestion.targetAccount}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

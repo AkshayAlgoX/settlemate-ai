@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { safeErrorResponse } from "@/lib/security/api-security";
 import {
   getAllPlaybooks,
   generatePlaybook,
@@ -30,9 +31,8 @@ export async function GET(req: NextRequest) {
       playbooks,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message || "Playbooks API Failed" },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail; the raw message leaked generator
+    // internals to the caller.
+    return safeErrorResponse(err, 500, "PLAYBOOKS_ERROR");
   }
 }

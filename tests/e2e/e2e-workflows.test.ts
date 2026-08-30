@@ -234,7 +234,11 @@ async function main() {
     // 3. Wait for async webhook callback & check logs
     await new Promise((r) => setTimeout(r, 200));
 
-    const logsRes = await webhookLogsGet(new NextRequest("http://localhost:3000/api/v1/webhooks/logs"));
+    const logsRes = await webhookLogsGet(
+      new NextRequest("http://localhost:3000/api/v1/webhooks/logs", {
+        headers: { "X-API-Key": TEST_API_KEY },
+      })
+    );
     assert.equal(logsRes.status, 200);
     const logsJson = await logsRes.json();
     assert.ok(Array.isArray(logsJson.logs));

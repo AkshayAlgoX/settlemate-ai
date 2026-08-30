@@ -1,0 +1,723 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// 1. TENANTS & ACCESS CONTROL
+// -----------------------------------------------------------------------------
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  status      String   @default("ACTIVE") // ACTIVE, SUSPENDED, TERMINATED
+  settings    String   @default("{}") // JSON string for compatibility
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users                 User[]
+  apiKeys               ApiKey[]
+  batches               Batch[]
+  orders                Order[]
+  payments              Payment[]
+  settlements           Settlement[]
+  bankTransactions      BankTransaction[]
+  refunds               Refund[]
+  chargebacks           Chargeback[]
+  reconResults          ReconciliationResult[]
+  exceptions            Exception[]
+  groundTruths          GroundTruth[]
+  agentTraces           AgentTrace[]
+  auditLogs             AuditLog[]
+  chatMessages          ChatMessage[]
+  feedbackEntries       FeedbackEntry[]
+  cardinalityLinks      CardinalityLink[]
+  ledgerEntries         ReconciliationLedger[]
+  auditEvents           AuditEvent[]
+  runMetadata           RunMetadata[]
+  scaleRuns             ScaleRun[]
+  scalePartitions       ScalePartition[]
+  decisionReceipts      DecisionReceipt[]
+  aiClaimLogs           AiClaimLog[]
+  webhookSubscriptions  WebhookSubscription[]
+  webhookOutboxEntries  WebhookOutbox[]
+  asyncJobs             AsyncJob[]
+  domainEvents          DomainEvent[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email        String
+  passwordHash String
+  name         String
+  role         String   // ADMIN, CONTROLLER, REVIEWER, AUDITOR, SERVICE
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  keyPrefix   String
+  keyHash     String    @unique
+  role        String    @default("SERVICE")
+  revokedAt   DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, revokedAt])
+}
+
+// -----------------------------------------------------------------------------
+// 2. RECONCILIATION BATCHES & SOURCE RECORDS
+// -----------------------------------------------------------------------------
+model Batch {
+  id              String    @id @default(cuid())
+  tenantId        String    @default("tenant_default_sandbox")
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name            String
+  size            Int
+  status          String    @default("CREATED")
+  source          String    @default("GENERATED")
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  totalRecords      Int?
+  autoMatched       Int?
+  exceptionsFound   Int?
+  unresolvedCount   Int?
+  accuracy          Float?
+  precision         Float?
+  recall            Float?
+  throughputRps     Float?
+  processingTimeMs  Int?
+  pass1Accuracy     Float?
+  pass2Accuracy     Float?
+  pass3Accuracy     Float?
+  adversarialScore  Float?
+  amountAtRisk      Int?
+
+  orders            Order[]
+  payments          Payment[]
+  settlements       Settlement[]
+  bankTransactions  BankTransaction[]
+  refunds           Refund[]
+  chargebacks       Chargeback[]
+  reconResults      ReconciliationResult[]
+  cardinalityLinks  CardinalityLink[]
+  exceptions        Exception[]
+  auditLogs         AuditLog[]
+  chatMessages      ChatMessage[]
+  groundTruths      GroundTruth[]
+  agentTraces       AgentTrace[]
+  feedbackEntries   FeedbackEntry[]
+  ledgerEntries     ReconciliationLedger[]
+  auditEvents       AuditEvent[]
+  runMetadata       RunMetadata[]
+  scaleRuns         ScaleRun[]
+  decisionReceipts  DecisionReceipt[]
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  tenantId      String   @default("tenant_default_sandbox")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId       String
+  batch         Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orderId       String
+  amount        Int
+  currency      String   @default("INR")
+  status        String
+  customerEmail String?
+  description   String?
+  createdAt     DateTime
+
+  @@unique([tenantId, batchId, orderId])
+  @@index([tenantId, batchId])
+  @@index([tenantId, orderId])
+}
+
+model Payment {
+  id          String    @id @default(cuid())
+  tenantId    String    @default("tenant_default_sandbox")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId     String
+  batch       Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId   String
+  orderId     String
+  amount      Int
+  currency    String    @default("INR")
+  status      String
+  method      String
+  fee         Int       @default(0)
+  tax         Int       @default(0)
+  capturedAt  DateTime?
+  createdAt   DateTime
+
+  @@unique([tenantId, batchId, paymentId])
+  @@index([tenantId, batchId])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, orderId])
+}
+
+model Settlement {
+  id            String    @id @default(cuid())
+  tenantId      String    @default("tenant_default_sandbox")
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId       String
+  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  settlementId  String
+  paymentId     String
+  amount        Int
+  fee           Int       @default(0)
+  tax           Int       @default(0)
+  utr           String?
+  status        String
+  settledAt     DateTime?
+  createdAt     DateTime
+
+  @@unique([tenantId, batchId, settlementId])
+  @@index([tenantId, batchId])
+  @@index([tenantId, settlementId])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, utr])
+}
+
+model BankTransaction {
+  id        String    @id @default(cuid())
+  tenantId  String    @default("tenant_default_sandbox")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId   String
+  batch     Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  txnId     String
+  utr       String?
+  amount    Int
+  type      String
+  narration String?
+  balance   Int?
+  txnDate   DateTime
+  valueDate DateTime?
+
+  @@unique([tenantId, batchId, txnId])
+  @@index([tenantId, batchId])
+  @@index([tenantId, utr])
+  @@index([tenantId, txnId])
+}
+
+model Refund {
+  id          String    @id @default(cuid())
+  tenantId    String    @default("tenant_default_sandbox")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId     String
+  batch       Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  refundId    String
+  paymentId   String
+  amount      Int
+  status      String
+  reason      String?
+  createdAt   DateTime
+  processedAt DateTime?
+
+  @@unique([tenantId, batchId, refundId])
+  @@index([tenantId, batchId])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, refundId])
+}
+
+model Chargeback {
+  id            String    @id @default(cuid())
+  tenantId      String    @default("tenant_default_sandbox")
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId       String
+  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  chargebackId  String
+  paymentId     String
+  amount        Int
+  reason        String?
+  status        String
+  createdAt     DateTime
+  resolvedAt    DateTime?
+
+  @@unique([tenantId, batchId, chargebackId])
+  @@index([tenantId, batchId])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, chargebackId])
+}
+
+// -----------------------------------------------------------------------------
+// 3. RECONCILIATION RESULTS & EXCEPTIONS
+// -----------------------------------------------------------------------------
+model ReconciliationResult {
+  id                  String   @id @default(cuid())
+  tenantId            String   @default("tenant_default_sandbox")
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId             String
+  batch               Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId           String
+  orderId             String
+  settlementId        String?
+  bankTxnId           String?
+  refundIds           String?
+  chargebackIds       String?
+  orderAmount         Int
+  paymentAmount       Int
+  paymentFee          Int
+  paymentTax          Int
+  refundAmount        Int      @default(0)
+  chargebackAmount    Int      @default(0)
+  expectedNetAmount   Int
+  actualSettledAmount Int?
+  bankCreditedAmount  Int?
+  mismatchAmount      Int?
+  status              String
+  confidenceScore     Int
+  matchMethod         String?
+  matchDetails        String?
+  cardinalityType     String    @default("1:1")
+  cardinalityReason   String?
+  relationshipScore   Int?
+  passNumber          Int      @default(1)
+  createdAt           DateTime @default(now())
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, status])
+}
+
+model Exception {
+  id              String    @id @default(cuid())
+  tenantId        String    @default("tenant_default_sandbox")
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId         String
+  batch           Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  reconResultId   String?
+  exceptionType   String
+  paymentId       String?
+  orderId         String?
+  settlementId    String?
+  bankTxnId       String?
+  utr             String?
+  amount          Int
+  mismatchAmount  Int?
+  confidenceScore Int
+  riskLevel       String    @default("MEDIUM")
+  status          String    @default("OPEN")
+  suggestedAction String?
+  resolution      String?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  aiExplanation   AiExplanation?
+  agentTraces     AgentTrace[]
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, exceptionType])
+  @@index([tenantId, status])
+}
+
+model AiExplanation {
+  id                String    @id @default(cuid())
+  exceptionId       String    @unique
+  exception         Exception @relation(fields: [exceptionId], references: [id], onDelete: Cascade)
+  summary           String
+  reason            String
+  evidence          String
+  recommendedAction String
+  riskLevel         String
+  needsManualReview Boolean
+  model             String
+  tokensUsed        Int?
+  latencyMs         Int?
+  createdAt         DateTime  @default(now())
+}
+
+model GroundTruth {
+  id            String @id @default(cuid())
+  tenantId      String @default("tenant_default_sandbox")
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId       String
+  batch         Batch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId     String
+  expectedLabel String
+  scenario      String
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, paymentId])
+}
+
+model AgentTrace {
+  id               String     @id @default(cuid())
+  tenantId         String     @default("tenant_default_sandbox")
+  tenant           Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId          String
+  batch            Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  exceptionId      String?
+  exception        Exception? @relation(fields: [exceptionId], references: [id], onDelete: SetNull)
+  agentName        String
+  passNumber       Int
+  stepNumber       Int
+  stepLabel        String
+  stepDetail       String
+  input            String?
+  output           String?
+  confidenceBefore Int?
+  confidenceAfter  Int?
+  createdAt        DateTime   @default(now())
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, exceptionId])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  tenantId    String    @default("tenant_default_sandbox")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId     String?
+  batch       Batch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  timestamp   DateTime  @default(now())
+  actor       String
+  action      String
+  entityType  String?
+  entityId    String?
+  beforeState String?
+  afterState  String?
+  reason      String?
+  metadata    String?
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, timestamp])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  tenantId   String   @default("tenant_default_sandbox")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId    String
+  batch      Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  role       String
+  content    String
+  evidence   String?
+  model      String?
+  tokensUsed Int?
+  latencyMs  Int?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, batchId])
+}
+
+model FeedbackEntry {
+  id                String   @id @default(cuid())
+  tenantId          String   @default("tenant_default_sandbox")
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId           String
+  batch             Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  exceptionId       String?
+  originalStatus    String
+  newStatus         String
+  confidenceBefore  Int
+  confidenceAfter   Int
+  adjustedFactor    String?
+  adjustedDelta     Int?
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId, batchId])
+}
+
+model ReconciliationLock {
+  id        String   @id @default(cuid())
+  batchId   String   @unique
+  token     String
+  lockedAt  DateTime @default(now())
+}
+
+model CardinalityLink {
+  id                String   @id @default(cuid())
+  tenantId          String   @default("tenant_default_sandbox")
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId           String
+  batch             Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  relationshipType  String
+  sourceType        String
+  sourceIds         String
+  targetType        String
+  targetIds         String
+
+  amount            Int
+  differencePaise   Int      @default(0)
+  confidenceScore   Int
+  reasonCode        String
+  matchMethod       String?
+
+  runId             String?
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, relationshipType])
+}
+
+// -----------------------------------------------------------------------------
+// 4. IMMUTABLE FINANCIAL LEDGER & AUDIT CHAIN
+// -----------------------------------------------------------------------------
+model ReconciliationLedger {
+  id                 String   @id @default(cuid())
+  tenantId           String   @default("tenant_default_sandbox")
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  batchId            String
+  batch              Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId          String
+  orderId            String
+  runId              String?
+  version            Int      @default(1)
+  status             String   @default("ACTIVE")
+  outcome            String
+  riskLevel          String
+  reasonCode         String
+  matchStrategy      String
+  approvalState      String
+  sourceRecordIds    String
+  grossPaise         Int
+  feePaise           Int
+  taxPaise           Int
+  refundPaise        Int
+  chargebackPaise    Int
+  netPaise           Int
+  currency           String   @default("INR")
+  expectedNetPaise   Int
+  actualSettledPaise Int?
+  bankCreditedPaise  Int?
+  mismatchPaise      Int?
+  createdAt          DateTime @default(now())
+
+  @@unique([tenantId, batchId, paymentId, version])
+  @@index([tenantId, batchId])
+  @@index([tenantId, paymentId])
+  @@index([tenantId, status])
+}
+
+model AuditEvent {
+  id               String   @id @default(cuid())
+  tenantId         String   @default("tenant_default_sandbox")
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId          String
+  batch            Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  seq              Int
+  eventType        String
+  actor            String
+  entityId         String?
+  occurredAt       DateTime @default(now())
+  canonicalPayload String
+  previousHash     String
+  currentHash      String
+
+  @@unique([tenantId, batchId, seq])
+  @@index([tenantId, batchId])
+}
+
+model RunMetadata {
+  id                      String   @id @default(cuid())
+  tenantId                String   @default("tenant_default_sandbox")
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  runId                   String   @unique
+  batchId                 String
+  batch                   Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  inputFingerprint        String
+  outcomeFingerprint      String?
+  providerSchemaVersion   String
+  normalizerVersion       String
+  matcherVersion          String
+  cardinalityVersion      String
+  rulesetVersion          String
+  policyVersion           String
+  modelVersion            String
+  engineVersion           String
+  outcomeStatus           String?
+  createdAt               DateTime @default(now())
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, inputFingerprint])
+}
+
+// -----------------------------------------------------------------------------
+// 5. SCALE RUNS & PARTITIONS
+// -----------------------------------------------------------------------------
+model ScaleRun {
+  id                  String   @id @default(cuid())
+  tenantId            String   @default("tenant_default_sandbox")
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batchId             String
+  batch               Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  runId               String
+  idempotencyKey      String   @unique
+  status              String   @default("RUNNING")
+  attempt             Int      @default(0)
+  retryCount          Int      @default(0)
+  progressPct         Int      @default(0)
+  totalPartitions     Int      @default(0)
+  completedPartitions Int      @default(0)
+  checkpoint          String?
+  lastError           String?
+  nextRetryAt         DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  partitions          ScalePartition[]
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, status])
+}
+
+model ScalePartition {
+  id             String    @id @default(cuid())
+  tenantId       String    @default("tenant_default_sandbox")
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scaleRunId     String
+  scaleRun       ScaleRun  @relation(fields: [scaleRunId], references: [id], onDelete: Cascade)
+  partitionId    String
+  bucketKey      String
+  status         String    @default("PENDING")
+  attempt        Int       @default(0)
+  retryCount     Int       @default(0)
+  idempotencyKey String    @unique
+  matchedCount   Int       @default(0)
+  lastError      String?
+  nextRetryAt    DateTime?
+  checkpoint     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, scaleRunId, partitionId])
+  @@unique([scaleRunId, partitionId])
+  @@index([tenantId, status])
+}
+
+// -----------------------------------------------------------------------------
+// 6. DECISION RECEIPTS, AI LOGS, WEBHOOKS & ASYNC JOBS
+// -----------------------------------------------------------------------------
+model DecisionReceipt {
+  receiptId        String   @id
+  tenantId         String   @default("tenant_default_sandbox")
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  jobId            String?
+  batchId          String?
+  batch            Batch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  rootHash         String
+  leafCount        Int
+  algorithm        String   @default("SHA256-MERKLE-DAG")
+  timestamp        DateTime
+  fingerprint      String
+  signature        String
+  canonicalPayload String?
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, fingerprint])
+}
+
+model AiClaimLog {
+  id             String   @id @default(cuid())
+  tenantId       String   @default("tenant_default_sandbox")
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  exceptionId    String
+  timestamp      DateTime
+  model          String
+  inputHash      String
+  promptSnippet  String?
+  outputPayload  String?
+  latencyMs      Int
+  status         String
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, exceptionId])
+}
+
+model WebhookSubscription {
+  id              String   @id @default(cuid())
+  tenantId        String   @default("tenant_default_sandbox")
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  url             String
+  events          String   // JSON array
+  secretEncrypted String
+  status          String   @default("ACTIVE")
+  registeredAt    DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  outboxEntries   WebhookOutbox[]
+
+  @@index([tenantId, status])
+}
+
+model WebhookOutbox {
+  id             String               @id @default(cuid())
+  tenantId       String               @default("tenant_default_sandbox")
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   WebhookSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  event          String
+  payload        String               // JSON string
+  signature      String
+  status         String               @default("PENDING")
+  attempts       Int                  @default(0)
+  maxAttempts    Int                  @default(5)
+  nextAttemptAt  DateTime             @default(now())
+  lastStatusCode Int?
+  lastError      String?
+  createdAt      DateTime             @default(now())
+  deliveredAt    DateTime?
+
+  @@index([tenantId, status])
+  @@index([status, nextAttemptAt])
+}
+
+model AsyncJob {
+  id             String    @id @default(cuid())
+  tenantId       String    @default("tenant_default_sandbox")
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  idempotencyKey String
+  jobType        String
+  status         String    @default("PENDING")
+  payload        String    // JSON string
+  result         String?   // JSON string
+  error          String?
+  attempt        Int       @default(0)
+  maxRetries     Int       @default(3)
+  workerId       String?
+  leaseExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@index([status, leaseExpiresAt])
+}
+
+model DomainEvent {
+  id        String   @id @default(cuid())
+  tenantId  String   @default("tenant_default_sandbox")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  eventType String
+  entityId  String
+  seq       Int      @default(autoincrement())
+  traceId   String?
+  payload   String   // Sanitized JSON string
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, seq])
+  @@index([tenantId, entityId])
+  @@index([createdAt])
+}

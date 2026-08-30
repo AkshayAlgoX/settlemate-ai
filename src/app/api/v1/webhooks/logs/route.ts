@@ -3,7 +3,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { applySecurityHeaders, handleCorsPreflight, rateLimitGuard } from "@/lib/security/api-security";
+import {
+  apiKeyGuard,
+  applySecurityHeaders,
+  handleCorsPreflight,
+  rateLimitGuard,
+} from "@/lib/security/api-security";
 import { v1Store } from "@/lib/api/v1-store";
 import { instrument } from "@/lib/observability/route";
 
@@ -15,6 +20,11 @@ async function handleGet(req: NextRequest) {
   const rateLimit = rateLimitGuard(req);
   if (!rateLimit.allowed && rateLimit.response) {
     return rateLimit.response;
+  }
+
+  const auth = apiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    return auth.response;
   }
 
   const logs = v1Store.getWebhookLogs();
@@ -31,6 +41,11 @@ async function handleDelete(req: NextRequest) {
   const rateLimit = rateLimitGuard(req);
   if (!rateLimit.allowed && rateLimit.response) {
     return rateLimit.response;
+  }
+
+  const auth = apiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    return auth.response;
   }
 
   v1Store.clearLogs();

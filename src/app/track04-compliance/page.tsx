@@ -3,15 +3,13 @@
 import React from "react";
 import Link from "next/link";
 import {
-  Target,
-  ShieldCheck,
   ExternalLink,
   Printer,
   ArrowRight,
-  Info,
-  Scale,
-  TrendingUp,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
 
 interface ComplianceRow {
   requirement: string;
@@ -51,7 +49,7 @@ const COMPLIANCE_DATA: ComplianceRow[] = [
     evidence: "98.1% Accuracy, 98% Precision, 98% Recall, 90% Adversarial Catch (9/10) on official benchmark (Seed: 20260821, Fingerprint: 81d840cd8cf9...).",
     whereToSee: [
       { label: "Judge Mode Step 2 (/judge-mode)", href: "/judge-mode" },
-      { label: "Benchmark Suite (npm run evaluate)", href: "/verify" },
+      { label: "Benchmark Suite (/verify)", href: "/verify" },
     ],
   },
   {
@@ -101,8 +99,8 @@ const COMPLIANCE_DATA: ComplianceRow[] = [
     implementation: "100% TypeScript codebase, clean ESLint validation, GitHub Actions CI workflow (.github/workflows/ci.yml), 97.7% statement coverage, and bitwise identical SHA-256 metric payload determinism.",
     evidence: "51 / 51 Test Suites Passing (100%) | 97.7% Statement / 95.4% Branch Coverage | Automated CI/CD Actions Pipeline | Determinism Verdict: [PASS] (Bitwise Identical).",
     whereToSee: [
-      { label: "CLI Claims Audit (npm run verify-claims)", href: "/verify" },
-      { label: "Test Coverage Audit (npm run test:coverage)", href: "/verify" },
+      { label: "CLI Claims Audit (/verify)", href: "/verify" },
+      { label: "Test Coverage Audit (/verify)", href: "/verify" },
     ],
   },
 ];
@@ -113,7 +111,7 @@ export default function Track04CompliancePage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-8 pb-12 font-sans">
       {/* Print-specific style tag */}
       <style jsx global>{`
         @media print {
@@ -140,119 +138,114 @@ export default function Track04CompliancePage() {
       `}</style>
 
       {/* Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6 print-card">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#a4b58a]">
-              <Target className="h-4 w-4 text-[#a4b58a]" />
-              Razorpay Track 04 Compliance & Measured Impact
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#e3e1d8]">
-              Official Judging Criteria & Empirical Proof Matrix
-            </h1>
-            <p className="mt-1 text-xs text-[#8c9288]">
-              Bidirectional mapping from Razorpay Track 04 (AI Finance Controller) requirements to SettleMate AI&apos;s architectural implementation and reproducible evidence.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 no-print">
+      <PageHeader
+        tag="Judging & Compliance"
+        title="Track 04 compliance matrix"
+        description="Bidirectional mapping from Razorpay Track 04 (AI Finance Controller) criteria to SettleMate's architectural implementation and empirical proof."
+        badge={<Badge variant="outline">Track 04</Badge>}
+        actions={
+          <div className="flex flex-wrap items-center gap-2 no-print">
+            <Link
+              href="/api/compliance/report"
+              target="_blank"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent hover:border-foreground/30 transition shadow-2xs"
+            >
+              <span>Compliance binder</span>
+              <ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </Link>
             <Link
               href="/business-impact"
-              className="px-4 py-2 border border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent hover:border-foreground/30 transition shadow-2xs"
             >
-              <TrendingUp className="h-3.5 w-3.5" />
-              Business Impact & ROI
+              <span>Business impact</span>
             </Link>
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2 border border-[#3e4d36] bg-[#11160f] hover:bg-[#182313] text-[#a4b58a] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent hover:border-foreground/30 transition shadow-2xs"
             >
-              <Printer className="h-3.5 w-3.5" />
-              Download / Print PDF
+              <Printer className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>Print PDF</span>
             </button>
             <Link
               href="/verify"
-              className="px-5 py-2.5 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
             >
-              <ShieldCheck className="h-4 w-4" />
-              Run Full Verification Live
+              <span>Run verification live</span>
             </Link>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Top 4 KPI Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="border border-[#3e4d36] bg-[#11160f] p-5 print-card">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#687063]">
-            Official Accuracy
+        <div className="rounded-xl border border-border bg-card p-5 space-y-1 print-card shadow-2xs">
+          <div className="text-2xl sm:text-3xl font-mono font-bold tracking-tight text-foreground">98.1%</div>
+          <div className="text-xs font-semibold text-foreground">
+            Official accuracy
           </div>
-          <div className="text-3xl font-mono font-bold text-[#a4b58a] mt-1">98.1%</div>
-          <div className="text-[10px] text-[#8c9288] mt-1">98% Prec · 98% Rec · 90% Adv</div>
+          <div className="text-[11px] text-muted-foreground">98% Prec · 98% Rec · 90% Adv</div>
         </div>
 
-        <div className="border border-[#3e4d36] bg-[#11160f] p-5 print-card">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#687063]">
-            Deterministic AI Bypass
+        <div className="rounded-xl border border-border bg-card p-5 space-y-1 print-card shadow-2xs">
+          <div className="text-2xl sm:text-3xl font-mono font-bold tracking-tight text-foreground">96.4%</div>
+          <div className="text-xs font-semibold text-foreground">
+            Deterministic AI bypass
           </div>
-          <div className="text-3xl font-mono font-bold text-[#a4b58a] mt-1">96.4%</div>
-          <div className="text-[10px] text-[#8c9288] mt-1">AI Invoked Only on Exceptions</div>
+          <div className="text-[11px] text-muted-foreground">AI invoked on exceptions only</div>
         </div>
 
-        <div className="border border-[#3e4d36] bg-[#11160f] p-5 print-card">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#687063]">
-            Non-LLM Validation Rate
+        <div className="rounded-xl border border-border bg-card p-5 space-y-1 print-card shadow-2xs">
+          <div className="text-2xl sm:text-3xl font-mono font-bold tracking-tight text-foreground">134.5k</div>
+          <div className="text-xs font-semibold text-foreground">
+            Non-LLM validation rate
           </div>
-          <div className="text-3xl font-mono font-bold text-[#a4b58a] mt-1">134.5k</div>
-          <div className="text-[10px] text-[#8c9288] mt-1">Claims / Sec Mechanical Throughput</div>
+          <div className="text-[11px] text-muted-foreground">Claims / sec mechanical rate</div>
         </div>
 
-        <div className="border border-[#3e4d36] bg-[#11160f] p-5 print-card">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#687063]">
-            Ledger Safety Invariant
+        <div className="rounded-xl border border-border bg-card p-5 space-y-1 print-card shadow-2xs">
+          <div className="text-2xl sm:text-3xl font-mono font-bold tracking-tight text-foreground">0 Writes</div>
+          <div className="text-xs font-semibold text-foreground">
+            Ledger safety invariant
           </div>
-          <div className="text-3xl font-mono font-bold text-[#a4b58a] mt-1">0 Writes</div>
-          <div className="text-[10px] text-[#8c9288] mt-1">Zero False Mutations across 34/34 Tests</div>
+          <div className="text-[11px] text-muted-foreground">Zero false mutations across suites</div>
         </div>
       </div>
 
       {/* Compliance & Evidence Table */}
-      <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-4 print-card">
-        <div className="flex items-center justify-between border-b border-[#252a24] pb-3">
-          <div className="flex items-center gap-2">
-            <Scale className="h-4 w-4 text-[#a4b58a]" />
-            <h2 className="text-sm font-bold text-[#e3e1d8] uppercase tracking-wider">
-              Track 04 Judging Criteria & Measured Implementation
-            </h2>
-          </div>
-          <span className="text-[10px] font-mono text-[#a4b58a] bg-[#141b12] px-2 py-0.5 border border-[#2e3a29]">
-            8 / 8 CRITERIA SATISFIED
-          </span>
+      <div className="rounded-xl border border-border bg-card p-5 sm:p-6 space-y-4 print-card shadow-2xs">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <SectionHeader
+            title="Track 04 judging criteria & implementation"
+            className="border-b-0 pb-0"
+          />
+          <Badge variant="success">
+            8 / 8 Criteria Satisfied
+          </Badge>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-[#252a24] bg-[#11160f] text-[10px] font-bold uppercase tracking-wider text-[#a4b58a]">
+              <tr className="border-b border-border bg-muted/30 text-xs font-semibold text-muted-foreground">
                 <th className="p-3 w-1/6">Criterion & Requirement</th>
                 <th className="p-3 w-1/3">Our Implementation</th>
                 <th className="p-3 w-1/3">Measured Evidence</th>
                 <th className="p-3 w-1/6 no-print">Where to See It</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1f241d] font-sans">
+            <tbody className="divide-y divide-border">
               {COMPLIANCE_DATA.map((row, idx) => (
-                <tr key={idx} className="hover:bg-[#11160f] transition-colors">
+                <tr key={idx} className="hover:bg-accent/40 transition-colors">
                   <td className="p-3 align-top">
-                    <div className="font-bold text-[#e3e1d8]">{row.criterion}</div>
-                    <div className="text-[11px] text-[#8c9288] mt-1">{row.requirement}</div>
+                    <div className="font-semibold text-foreground">{row.criterion}</div>
+                    <div className="text-[11px] text-muted-foreground mt-1">{row.requirement}</div>
                   </td>
-                  <td className="p-3 align-top text-[#e3e1d8] text-[11px] leading-relaxed">
+                  <td className="p-3 align-top text-muted-foreground text-xs leading-relaxed">
                     {row.implementation}
                   </td>
                   <td className="p-3 align-top">
-                    <div className="font-mono text-[11px] text-[#a4b58a] bg-[#070907] p-2 border border-[#1f241d]">
+                    <div className="font-mono text-[11px] text-foreground bg-background p-2.5 rounded-lg border border-border">
                       {row.evidence}
                     </div>
                   </td>
@@ -261,10 +254,10 @@ export default function Track04CompliancePage() {
                       <Link
                         key={lIdx}
                         href={link.href}
-                        className="inline-flex items-center gap-1 text-[10px] font-mono text-[#a4b58a] hover:underline bg-[#141b12] px-2 py-1 border border-[#2e3a29] block w-fit"
+                        className="inline-flex items-center gap-1 text-[11px] font-mono text-foreground hover:underline bg-background px-2.5 py-1 rounded-md border border-border block w-fit"
                       >
                         <span>{link.label}</span>
-                        <ExternalLink className="h-2.5 w-2.5" />
+                        <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
                       </Link>
                     ))}
                   </td>
@@ -276,50 +269,52 @@ export default function Track04CompliancePage() {
       </div>
 
       {/* Honest Engineering Boundaries */}
-      <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-3 print-card">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#e3e1d8] uppercase tracking-wider">
-          <Info className="h-4 w-4 text-[#a4b58a]" />
-          Honest Engineering Boundaries & Explicit Trade-offs
+      <div className="rounded-xl border border-border bg-card p-5 sm:p-6 space-y-4 print-card shadow-2xs">
+        <SectionHeader
+          title="Honest engineering boundaries & explicit trade-offs"
+          description="SettleMate AI explicitly defines its operational boundaries to maintain financial fidelity."
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div className="p-4 rounded-lg border border-border bg-background space-y-1">
+            <div className="font-semibold text-foreground">AI Cannot Mutate Ledger</div>
+            <p className="text-muted-foreground leading-relaxed">All financial entries require double-entry balance confirmation following non-LLM mechanical verification.</p>
+          </div>
+          <div className="p-4 rounded-lg border border-border bg-background space-y-1">
+            <div className="font-semibold text-foreground">Adversarial 9/10 by Design</div>
+            <p className="text-muted-foreground leading-relaxed">The 10th adversarial vector injects a ₹0.47 rounding variance beneath ₹1.00 tolerance and is correctly bypassed without raising false alarms.</p>
+          </div>
+          <div className="p-4 rounded-lg border border-border bg-background space-y-1">
+            <div className="font-semibold text-foreground">Bounded N:M Combinatorics</div>
+            <p className="text-muted-foreground leading-relaxed">Arbitrary unlimited N:M is not promised; candidate subsets are bounded via Meet-in-the-Middle pruning to guarantee predictable response times.</p>
+          </div>
+          <div className="p-4 rounded-lg border border-border bg-background space-y-1">
+            <div className="font-semibold text-foreground">Zero False Cloud Scale Claims</div>
+            <p className="text-muted-foreground leading-relaxed">Local benchmarks run deterministically against in-memory partitioned queues and SQLite fixtures with clean reproducible fixtures.</p>
+          </div>
         </div>
-        <p className="text-xs text-[#8c9288]">
-          To maintain credibility and avoid unsupported claims, SettleMate AI explicitly defines its operational boundaries:
-        </p>
-        <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#e3e1d8] font-sans pt-2">
-          <li className="p-3 border border-[#252a24] bg-[#090b09]">
-            <strong className="text-[#a4b58a]">AI Cannot Mutate Ledger:</strong> All financial entries require double-entry journal balance confirmation following non-LLM mechanical verification.
-          </li>
-          <li className="p-3 border border-[#252a24] bg-[#090b09]">
-            <strong className="text-[#a4b58a]">Adversarial 9/10 by Design:</strong> The 10th adversarial vector injects a ₹0.47 rounding variance, which is intentionally beneath the ₹1.00 tolerance and correctly bypassed without raising false-positive alarms.
-          </li>
-          <li className="p-3 border border-[#252a24] bg-[#090b09]">
-            <strong className="text-[#a4b58a]">Bounded N:M Combinatorics:</strong> Arbitrary unlimited N:M is not promised; candidate subsets are strictly bounded via Meet-in-the-Middle pruning to guarantee $O(1)$ response times under high-density spikes.
-          </li>
-          <li className="p-3 border border-[#252a24] bg-[#090b09]">
-            <strong className="text-[#a4b58a]">No Fake Cloud Scale:</strong> Local benchmarks run deterministically against in-memory partitioned queues and SQLite fixtures; multi-region active-active replication is documented as an infrastructure contract.
-          </li>
-        </ul>
       </div>
 
       {/* Footer Navigation Action */}
-      <div className="border border-[#3e4d36] bg-[#11160f] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+      <div className="rounded-xl border border-border bg-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print shadow-2xs">
         <div>
-          <div className="text-xs font-bold uppercase tracking-wider text-[#a4b58a]">
-            Ready for Empirical Evaluation?
+          <div className="text-xs font-semibold text-foreground">
+            Ready for empirical evaluation?
           </div>
-          <div className="text-xs text-[#8c9288] mt-0.5">
-            Test all subsystems live in the interactive wizard or execute 1-command CLI verification.
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Test all subsystems live in the interactive wizard or execute 1-command verification.
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Link
             href="/judge-mode"
-            className="px-4 py-2 border border-[#3e4d36] bg-[#0d100d] hover:bg-[#151a11] text-[#e3e1d8] text-xs font-bold uppercase tracking-wider"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent hover:border-foreground/30 transition shadow-2xs"
           >
-            Launch Judge Mode
+            <span>Judge Mode</span>
           </Link>
           <Link
             href="/verify"
-            className="px-5 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
           >
             <span>Verification Hub</span>
             <ArrowRight className="h-3.5 w-3.5" />

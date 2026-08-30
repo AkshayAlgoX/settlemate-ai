@@ -14,9 +14,14 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
-      - AUTH_SECRET=settlemate_production_super_secret_key_8899776655443322
+      - AUTH_SECRET=${AUTH_SECRET}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-""}
-      - DATABASE_URL=file:./dev.db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-""}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-""}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-""}
+      - METRICS_TOKEN=${METRICS_TOKEN:-""}
+      - DATABASE_URL=file:/app/data/dev.db
+      - SETTLEMATE_DB_PATH=/app/data/settlemate.db
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/v1/health || exit 1"]
       interval: 30s
@@ -24,7 +29,7 @@ services:
       retries: 3
       start_period: 15s
     volumes:
-      - settlemate_data:/app/prisma
+      - settlemate_data:/app/data
     deploy:
       resources:
         limits:

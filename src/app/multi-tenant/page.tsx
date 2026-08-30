@@ -2,15 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Building2,
-  ShieldCheck,
   ShieldAlert,
   CheckCircle2,
   RotateCw,
-  Layers,
-  Database,
-  Lock,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
 
 interface TenantRecord {
   refId: string;
@@ -118,118 +116,109 @@ export default function MultiTenantSimPage() {
   const activeTenant = tenants.find((t) => t.tenantId === selectedTenantId) || tenants[0];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-10 pb-12">
       {/* Top Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6 sm:p-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#a4b58a]">
-              <Building2 className="h-4 w-4 text-[#a4b58a]" />
-              Enterprise Architecture & Data Segregation
-            </div>
-            <h1 className="mt-2 text-2xl sm:text-3xl font-bold tracking-tight text-[#e3e1d8]">
-              Multi-Tenant Ledger Simulation
-            </h1>
-            <p className="mt-2 max-w-3xl text-xs sm:text-sm text-[#8c9288]">
-              Demonstrates strict mathematical partition isolation across independent enterprise merchants. Verifies that zero cross-tenant contamination occurs and global balance conservation holds invariant.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+      <PageHeader
+        tag="Enterprise Architecture"
+        title="Multi-tenant ledger segregation"
+        description="Mathematical partition isolation across independent enterprise merchants with zero cross-tenant contamination and global balance conservation."
+        badge={<Badge variant="success">Partition Isolated</Badge>}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => runTenantReconciliation(simulateAttack)}
               disabled={isLoading}
-              className="px-4 py-2 border border-[#3e4d36] bg-[#11160f] hover:bg-[#182313] text-[#a4b58a] text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition"
             >
-              <RotateCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              Reconcile All Tenants
+              <RotateCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              <span>Reconcile all</span>
             </button>
             <button
               type="button"
               onClick={() => setSimulateAttack(!simulateAttack)}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition ${
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition ${
                 simulateAttack
-                  ? "border-[#a4b58a] bg-[#182313] text-[#a4b58a]"
-                  : "border-[#6e2b26] bg-[#291211] text-[#e06c75] hover:bg-[#381615]"
+                  ? "bg-primary text-primary-foreground hover:bg-[#ffffff]"
+                  : "border border-[#3b1818] bg-[#140a0a] text-[#ef4444] hover:bg-[#1f0f0f]"
               }`}
             >
               {simulateAttack ? (
                 <>
-                  <CheckCircle2 className="h-4 w-4" />
-                  Restore Clean Boundary Mode
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Restore clean boundary</span>
                 </>
               ) : (
                 <>
-                  <ShieldAlert className="h-4 w-4" />
-                  Simulate Cross-Tenant Fraud Infiltration
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  <span>Simulate cross-tenant attack</span>
                 </>
               )}
             </button>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Cross-Tenant Invariant Sentinel Card */}
       {report && (
-        <section className="border border-[#252a24] bg-[#0d100d] p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1f241e] pb-3">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#e3e1d8] flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-[#a4b58a]" />
-              Global Cross-Tenant Invariant Sentinel
-            </h2>
-            <span className="text-[10px] font-mono text-[#a4b58a] font-bold">
+        <section className="rounded-lg border border-border bg-card p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
+            <SectionHeader
+              title="Cross-tenant invariant sentinel"
+              description="Global partition isolation guarantees"
+              className="border-b-0 pb-0"
+            />
+            <Badge variant="success">
               {report.partitionIsolation}
-            </span>
+            </Badge>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="border border-[#1f241e] bg-[#080a08] p-4 space-y-1">
-              <span className="text-[10px] text-[#6c7465] font-mono uppercase">Cross-Talk Matches</span>
-              <div className="text-xl font-bold font-mono text-[#a4b58a] flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4" />
-                {report.crossTalkMatches} Matches (Strict 0)
+            <div className="rounded-md border border-border bg-background p-4 space-y-1">
+              <div className="text-xl font-semibold font-mono text-foreground flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-[#10b981]" />
+                {report.crossTalkMatches} (Zero Leaks)
               </div>
-              <div className="text-[10px] text-[#8c9288]">No cross-tenant leaks</div>
+              <div className="text-xs font-medium text-foreground">Cross-talk matches</div>
+              <div className="text-[11px] text-muted-foreground/70">Strict mathematical isolation</div>
             </div>
 
-            <div className="border border-[#1f241e] bg-[#080a08] p-4 space-y-1">
-              <span className="text-[10px] text-[#6c7465] font-mono uppercase">Global GMV Processed</span>
-              <div className="text-xl font-bold font-mono text-[#e3e1d8]">
+            <div className="rounded-md border border-border bg-background p-4 space-y-1">
+              <div className="text-xl font-semibold font-mono text-foreground">
                 {report.globalTotalGrossFormatted}
               </div>
-              <div className="text-[10px] text-[#8c9288]">{report.totalTenantsProcessed} Isolated Ledgers</div>
+              <div className="text-xs font-medium text-foreground">Global GMV processed</div>
+              <div className="text-[11px] text-muted-foreground/70">{report.totalTenantsProcessed} Isolated Ledgers</div>
             </div>
 
-            <div className="border border-[#1f241e] bg-[#080a08] p-4 space-y-1">
-              <span className="text-[10px] text-[#6c7465] font-mono uppercase">Global Match Rate</span>
-              <div className="text-xl font-bold font-mono text-[#a4b58a]">
+            <div className="rounded-md border border-border bg-background p-4 space-y-1">
+              <div className="text-xl font-semibold font-mono text-foreground">
                 {report.globalMatchRatePct}%
               </div>
-              <div className="text-[10px] text-[#8c9288]">Across all active tenants</div>
+              <div className="text-xs font-medium text-foreground">Global match rate</div>
+              <div className="text-[11px] text-muted-foreground/70">All active tenants</div>
             </div>
 
-            <div className="border border-[#1f241e] bg-[#080a08] p-4 space-y-1">
-              <span className="text-[10px] text-[#6c7465] font-mono uppercase">Balance Conservation</span>
-              <div className="text-xl font-bold font-mono text-[#a4b58a] flex items-center gap-1.5">
-                <Lock className="h-4 w-4" />
-                {report.balanceConservationVerified ? "CONSERVED" : "DRIFT_DETECTED"}
+            <div className="rounded-md border border-border bg-background p-4 space-y-1">
+              <div className="text-xl font-semibold font-mono text-[#10b981] flex items-center gap-1.5">
+                {report.balanceConservationVerified ? "CONSERVED" : "DRIFT"}
               </div>
-              <div className="text-[10px] text-[#8c9288]">Net ₹0.00 mathematical drift</div>
+              <div className="text-xs font-medium text-foreground">Balance conservation</div>
+              <div className="text-[11px] text-muted-foreground/70">0 paise drift</div>
             </div>
           </div>
 
           {/* Attack Interception Banner if Active */}
           {report.crossTenantAttackDefense.attackAttempted && (
-            <div className="p-4 border border-[#6e2b26] bg-[#220f0e] flex items-start gap-3">
-              <ShieldAlert className="h-5 w-5 text-[#e06c75] shrink-0 mt-0.5" />
+            <div className="p-4 rounded-md border border-[#3b1818] bg-[#140a0a] flex items-start gap-3">
+              <ShieldAlert className="h-5 w-5 text-[#ef4444] shrink-0 mt-0.5" />
               <div className="space-y-1 text-xs">
-                <div className="font-bold text-[#e06c75]">
-                  HOSTILE CROSS-TENANT EXPLOIT BLOCKED: {report.crossTenantAttackDefense.vector}
+                <div className="font-semibold text-[#ef4444]">
+                  Exploit Neutralized: {report.crossTenantAttackDefense.vector}
                 </div>
-                <div className="text-[#d48782]">{report.crossTenantAttackDefense.description}</div>
-                <div className="text-[10px] font-mono text-[#a4b58a] pt-1">
-                  Defense Mechanism: {report.crossTenantAttackDefense.interceptedBy}
+                <div className="text-muted-foreground">{report.crossTenantAttackDefense.description}</div>
+                <div className="text-[11px] font-mono text-foreground pt-1">
+                  Defense: {report.crossTenantAttackDefense.interceptedBy}
                 </div>
               </div>
             </div>
@@ -239,13 +228,10 @@ export default function MultiTenantSimPage() {
 
       {/* Tenant Partition Cards Grid */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between border-b border-[#242820] pb-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-[#a4b58a] flex items-center gap-2">
-            <Layers className="h-4 w-4" />
-            Independent Merchant Ledger Partitions
-          </h2>
-          <span className="text-[10px] font-mono text-[#6c7465]">4 Active Tenants</span>
-        </div>
+        <SectionHeader
+          title="Merchant ledger partitions"
+          description="Select any tenant to view its isolated ledger postings."
+        />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {tenants.map((t) => {
@@ -255,41 +241,36 @@ export default function MultiTenantSimPage() {
                 key={t.tenantId}
                 type="button"
                 onClick={() => setSelectedTenantId(t.tenantId)}
-                className={`text-left p-5 border transition space-y-3 ${
+                className={`p-4 rounded-lg border text-left space-y-2 transition ${
                   isSelected
-                    ? "border-[#a4b58a] bg-[#141b11]"
-                    : "border-[#252a24] bg-[#0d100d] hover:border-[#384530]"
+                    ? "bg-accent border-[#ededed] text-foreground"
+                    : "bg-card border-border hover:border-border text-muted-foreground"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#a4b58a]">
-                    {t.industry}
-                  </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 bg-[#1a2417] text-[#a4b58a] border border-[#2e3e29]">
-                    {t.matchRatePct}% Matched
-                  </span>
+                  <span className="font-semibold text-xs text-foreground">{t.name}</span>
+                  <Badge variant="outline">{t.industry}</Badge>
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-bold text-[#e3e1d8]">{t.name}</h3>
-                  <div className="text-[11px] font-mono text-[#6c7465]">{t.tenantId}</div>
-                </div>
-
-                <div className="border-t border-[#1f241e] pt-2 space-y-1 text-xs font-mono">
-                  <div className="flex justify-between">
-                    <span className="text-[#6c7465]">GMV:</span>
-                    <span className="text-[#e3e1d8] font-bold">{t.totalGrossFormatted}</span>
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+                  <div>
+                    <span className="text-muted-foreground/70">Records:</span>{" "}
+                    <span className="text-foreground">{t.totalRecords}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#6c7465]">Exceptions:</span>
-                    <span className={t.exceptionCount > 0 ? "text-[#e5c07b] font-bold" : "text-[#a4b58a]"}>
+                  <div>
+                    <span className="text-muted-foreground/70">Match:</span>{" "}
+                    <span className="text-[#10b981]">{t.matchRatePct}%</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground/70">Exceptions:</span>{" "}
+                    <span className={t.exceptionCount > 0 ? "text-[#ef4444] font-semibold" : "text-foreground"}>
                       {t.exceptionCount}
                     </span>
                   </div>
                 </div>
 
-                <div className="text-[9px] font-mono text-[#6c7465] truncate pt-1 border-t border-[#1f241e]">
-                  Merkle: {t.partitionMerkleRoot.slice(0, 16)}...
+                <div className="text-[11px] font-mono text-muted-foreground/70 truncate pt-1 border-t border-border">
+                  Root: {t.partitionMerkleRoot.slice(0, 16)}...
                 </div>
               </button>
             );
@@ -299,65 +280,55 @@ export default function MultiTenantSimPage() {
 
       {/* Selected Tenant Detailed Ledger Stream */}
       {activeTenant && (
-        <section className="border border-[#252a24] bg-[#0d100d] p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1f241e] pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-[#e3e1d8] flex items-center gap-2">
-                <Database className="h-4 w-4 text-[#a4b58a]" />
-                Partition Ledger: {activeTenant.name} ({activeTenant.tenantId})
-              </h3>
-              <p className="text-[11px] text-[#8c9288]">
-                Isolated transaction postings locked with SHA-256 Merkle root {activeTenant.partitionMerkleRoot.slice(0, 24)}...
-              </p>
-            </div>
-            <span className="text-[10px] font-mono px-2.5 py-1 border border-[#3e4d36] bg-[#11160f] text-[#a4b58a]">
+        <section className="rounded-lg border border-border bg-card p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
+            <SectionHeader
+              title={`Partition ledger: ${activeTenant.name}`}
+              description={`Isolated postings locked with SHA-256 Merkle root ${activeTenant.partitionMerkleRoot.slice(0, 20)}...`}
+              className="border-b-0 pb-0"
+            />
+            <Badge variant="success">
               Partition Sealed
-            </span>
+            </Badge>
           </div>
 
-          <div className="overflow-x-auto border border-[#252a24]">
-            <table className="w-full text-left text-xs text-[#e3e1d8]">
-              <thead className="bg-[#11140f] text-[10px] font-bold uppercase tracking-wider text-[#a4b58a] border-b border-[#252a24]">
-                <tr>
-                  <th className="py-3 px-4">Transaction Reference</th>
-                  <th className="py-3 px-4">Gross Amount</th>
-                  <th className="py-3 px-4">Settled Amount</th>
-                  <th className="py-3 px-4">Discrepancy</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Audit Note</th>
+          <div className="overflow-x-auto rounded border border-border">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                  <th className="py-2.5 px-4 font-medium">Reference</th>
+                  <th className="py-2.5 px-4 font-medium">Gross</th>
+                  <th className="py-2.5 px-4 font-medium">Settled</th>
+                  <th className="py-2.5 px-4 font-medium">Discrepancy</th>
+                  <th className="py-2.5 px-4 font-medium">Status</th>
+                  <th className="py-2.5 px-4 font-medium">Audit Note</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1e231c] bg-[#090b09]">
+              <tbody className="divide-y divide-border">
                 {activeTenant.records.map((r, i) => (
-                  <tr key={i} className="hover:bg-[#0f130e] transition font-mono">
-                    <td className="py-3 px-4 font-bold text-[#f0eee5] whitespace-nowrap">
+                  <tr key={i} className="hover:bg-accent/40 transition font-mono">
+                    <td className="py-3 px-4 font-semibold text-foreground whitespace-nowrap">
                       {r.refId}
                     </td>
-                    <td className="py-3 px-4 text-[#a0a69a] whitespace-nowrap">
+                    <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
                       ₹{(r.grossPaise / 100).toFixed(2)}
                     </td>
-                    <td className="py-3 px-4 text-[#a0a69a] whitespace-nowrap">
+                    <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
                       ₹{(r.settledPaise / 100).toFixed(2)}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       {r.discrepancyPaise === 0 ? (
-                        <span className="text-[#6c7465]">₹0.00</span>
+                        <span className="text-muted-foreground/70">₹0.00</span>
                       ) : (
-                        <span className="text-[#e5c07b] font-bold">₹{(r.discrepancyPaise / 100).toFixed(2)}</span>
+                        <span className="text-[#ef4444] font-semibold">₹{(r.discrepancyPaise / 100).toFixed(2)}</span>
                       )}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-0.5 border text-[10px] font-bold ${
-                          r.status === "AUTO_MATCHED"
-                            ? "border-[#2e4027] bg-[#0f170c] text-[#a4b58a]"
-                            : "border-[#4a2624] bg-[#180e0d] text-[#e06c75]"
-                        }`}
-                      >
+                      <Badge variant={r.status === "AUTO_MATCHED" ? "success" : "destructive"}>
                         {r.status}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="py-3 px-4 text-[11px] text-[#8c9288] whitespace-nowrap">
+                    <td className="py-3 px-4 text-xs font-sans text-muted-foreground whitespace-nowrap">
                       {r.reason || "Exact 1:1 auto-reconciled"}
                     </td>
                   </tr>

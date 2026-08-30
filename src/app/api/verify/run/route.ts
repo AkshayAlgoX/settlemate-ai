@@ -8,6 +8,7 @@ import {
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
   sanitizeObject,
 } from "@/lib/security/api-security";
 import { verifyProgressStore } from "@/lib/verify/progress-store";
@@ -58,6 +59,41 @@ function executeSuiteCommand(command: string): { output: string; durationMs: num
   }
 }
 
+/**
+ * Builds the browser-visible tail of a suite's console output.
+ *
+ * The snippet itself is the point of this endpoint — a judge should see the real
+ * output of a real run, not a summary we assert is true. What must not travel
+ * with it is the host's identity. On a FAILING suite the tail is stderr plus
+ * execSync's own message, which together carry the checkout path, the OS user's
+ * home directory, and Node stack frames naming internal module paths and line
+ * numbers. None of that describes the failure; all of it describes the machine.
+ *
+ * Redaction happens only here. Metric parsing upstream reads the unmodified
+ * output, so masking a path can never move a reported number.
+ */
+function outputSnippet(raw: string): string {
+  const cwd = process.cwd();
+  const redacted = raw
+    // The checkout root, in both separator conventions Windows produces.
+    .split(cwd)
+    .join(".")
+    .split(cwd.replace(/\\/g, "/"))
+    .join(".")
+    // Any absolute path still standing: Windows drive-letter or POSIX home.
+    .replace(/[A-Za-z]:[\\/][^\s"')]*/g, "<path>")
+    .replace(/\/(?:home|Users)\/[^\s"')]*/g, "<path>")
+    // Stack frames are pure host detail; the message above them is the signal.
+    .replace(/^\s*at\s+.*$/gm, "");
+
+  return redacted
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .slice(-8)
+    .join("\n")
+    .trim();
+}
+
 export function runSingleSuite(suiteId: string): SuiteResult {
   if (suiteId === "benchmark") {
     const res = executeSuiteCommand("npx tsx scripts/evaluate.ts");
@@ -91,7 +127,7 @@ export function runSingleSuite(suiteId: string): SuiteResult {
         adversarialScore: adversarial,
         fingerprint: fingerprint.slice(0, 16) + "...",
       },
-      rawOutputSnippet: res.output.split("\n").slice(-8).join("\n").trim(),
+      rawOutputSnippet: outputSnippet(res.output),
     };
   }
 
@@ -112,7 +148,7 @@ export function runSingleSuite(suiteId: string): SuiteResult {
         successScore: score + "%",
         combinatorialSafety: "VERIFIED",
       },
-      rawOutputSnippet: res.output.split("\n").slice(-8).join("\n").trim(),
+      rawOutputSnippet: outputSnippet(res.output),
     };
   }
 
@@ -133,7 +169,7 @@ export function runSingleSuite(suiteId: string): SuiteResult {
         fabricatedClaimsDisputed: "10/10 (100%)",
         directLedgerMutations: "0 writes",
       },
-      rawOutputSnippet: res.output.split("\n").slice(-8).join("\n").trim(),
+      rawOutputSnippet: outputSnippet(res.output),
     };
   }
 
@@ -152,7 +188,7 @@ export function runSingleSuite(suiteId: string): SuiteResult {
         throughput: "149,212 pairs/s",
         duplicateClaimsPrevented: "0 leaks",
       },
-      rawOutputSnippet: res.output.split("\n").slice(-8).join("\n").trim(),
+      rawOutputSnippet: outputSnippet(res.output),
     };
   }
 
@@ -172,7 +208,7 @@ export function runSingleSuite(suiteId: string): SuiteResult {
         deadLetterQueue: "0 dropped",
         throughput: "219,298 rec/s (queue micro-bench)",
       },
-      rawOutputSnippet: res.output.split("\n").slice(-8).join("\n").trim(),
+      rawOutputSnippet: outputSnippet(res.output),
     };
   }
 
@@ -193,7 +229,7 @@ export function runSingleSuite(suiteId: string): SuiteResult {
         cryptographicDAGLayers: "8 / 8 Checked",
         externalDependenciesRequired: "0 (Zero LLMs / DBs)",
       },
-      rawOutputSnippet: res.output.split("\n").slice(-8).join("\n").trim(),
+      rawOutputSnippet: outputSnippet(res.output),
     };
   }
 
@@ -215,7 +251,7 @@ export function runSingleSuite(suiteId: string): SuiteResult {
         claimsValidated: "2 / 2 (100%)",
         falseFinancialWrites: "0 writes",
       },
-      rawOutputSnippet: res.output.split("\n").slice(-8).join("\n").trim(),
+      rawOutputSnippet: outputSnippet(res.output),
     };
   }
 
@@ -319,11 +355,8 @@ export async function POST(req: NextRequest) {
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        { error: (err as Error).message || "Verification Run Error" },
-        { status: 500 }
-      )
-    );
+    // safeErrorResponse masks 5xx detail. This route shells out to npx, so the
+    // raw message was execSync's own text: the full command line and cwd.
+    return safeErrorResponse(err, 500, "VERIFY_RUN_ERROR");
   }
 }

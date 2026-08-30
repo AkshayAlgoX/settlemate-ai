@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { applySecurityHeaders, rateLimitGuard, sanitizeObject } from "@/lib/security/api-security";
+import { applySecurityHeaders, rateLimitGuard, safeErrorResponse, sanitizeObject } from "@/lib/security/api-security";
 import { buildScenarioData } from "@/app/api/scenarios/run/route";
 import { buildIndexes } from "@/lib/reconciliation/indexer";
 import { matchAllRecords } from "@/lib/reconciliation/matcher";
@@ -431,10 +431,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const res = NextResponse.json(responseData);
     return applySecurityHeaders(res);
   } catch (err) {
-    const errorRes = NextResponse.json(
-      { error: "Failed to execute comparison", details: (err as Error).message },
-      { status: 500 }
-    );
-    return applySecurityHeaders(errorRes);
+    // safeErrorResponse masks 5xx detail; `details: (err as Error).message`
+    // handed the caller matcher internals and stack-adjacent paths.
+    return safeErrorResponse(err, 500, "COMPARISON_ERROR");
   }
 }

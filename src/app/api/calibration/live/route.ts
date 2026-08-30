@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { safeErrorResponse } from "@/lib/security/api-security";
 import { runLiveCalibrationTest, BENCHMARK_CALIBRATION_DATA } from "@/lib/calibration/calibration-utils";
 
 export async function GET(req: NextRequest) {
@@ -19,10 +20,9 @@ export async function GET(req: NextRequest) {
       liveTest: result,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message || "Live Calibration Test Failed" },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail; the raw message leaked calibration
+    // internals to the caller.
+    return safeErrorResponse(err, 500, "CALIBRATION_ERROR");
   }
 }
 
@@ -40,9 +40,8 @@ export async function POST(req: NextRequest) {
       liveTest: result,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message || "Live Calibration Test Failed" },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail; the raw message leaked calibration
+    // internals to the caller.
+    return safeErrorResponse(err, 500, "CALIBRATION_ERROR");
   }
 }

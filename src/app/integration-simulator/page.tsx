@@ -2,25 +2,22 @@
 
 import { useState, useEffect, useTransition } from "react";
 import {
-  PlugZap,
-  Play,
   RotateCw,
   Dices,
   Send,
-  Radio,
   AlertTriangle,
-  FileCode,
-  Layers,
   Copy,
   Clock,
-  ShieldCheck,
-  Database,
 } from "lucide-react";
 import {
   generateSimulatorBatch,
   type SimulatorBatchResult,
   type AnomalyConfig,
 } from "@/lib/simulator/simulator-generator";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+import { formatAuditTime } from "@/lib/format";
 
 interface HistoryEntry {
   jobId: string;
@@ -212,7 +209,7 @@ export default function IntegrationSimulatorPage() {
 
       const newEntry: HistoryEntry = {
         jobId: String(json.jobId || "job_failed"),
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: formatAuditTime(new Date()),
         rowCount: batch.transactions.length,
         mode: asyncMode ? "ASYNC_WEBHOOK" : "SYNC",
         status: res.status === 200 ? "SUCCESS" : res.status === 202 ? "ACCEPTED" : "ERROR",
@@ -259,57 +256,32 @@ export default function IntegrationSimulatorPage() {
   }>;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 pb-12">
       {/* Page Header */}
-      <div className="flex flex-col justify-between gap-4 border-b border-[#242820] pb-6 sm:flex-row sm:items-center">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center border border-[#424738] bg-[#11140f] text-[#aab98b]">
-              <PlugZap className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-[#f0eee5]">
-                External Integration Simulator
-              </h1>
-              <p className="text-xs text-[#8a9184]">
-                Simulate external ERP / E-Commerce batch ingestion, webhook stream callbacks & REST API contract
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 border border-[#30362e] bg-[#121611] px-2.5 py-1 text-[11px] font-mono text-[#aab98b]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#aab98b] animate-pulse" />
-            API v1 Ready
-          </span>
-          <span className="border border-[#3a4035] bg-[#1a1f17] px-2.5 py-1 text-[11px] font-mono text-[#dcd7cb]">
-            🔌 00H
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        tag="Developer Integration"
+        title="Integration simulator"
+        description="Simulate external ERP / E-Commerce batch ingestion, webhook stream callbacks, and REST API contracts."
+        badge={<Badge variant="outline">API v1</Badge>}
+      />
 
       {/* Grid Layout: Controls & Ingestion */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left Column: Synthetic Generator Controls */}
         <div className="space-y-6 lg:col-span-5">
-          <div className="border border-[#242820] bg-[#0d100c] p-5">
-            <div className="mb-4 flex items-center justify-between border-b border-[#1f241c] pb-3">
-              <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 text-[#aab98b]" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-[#e6e2d8]">
-                  Batch Generator
-                </h2>
-              </div>
-              <span className="font-mono text-[10px] text-[#7a8174]">Deterministic PRNG</span>
-            </div>
+          <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+            <SectionHeader
+              title="Batch generator"
+              description="Deterministic PRNG synthetic test batch."
+              className="border-b-0 pb-0"
+            />
 
             <div className="space-y-4">
               {/* Row Count Slider */}
-              <div>
-                <div className="flex justify-between text-xs text-[#cfcac0]">
-                  <span>Batch Row Count (50 - 200)</span>
-                  <span className="font-mono font-bold text-[#aab98b]">{rowCount} txns</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Batch Rows (50 - 200)</span>
+                  <span className="font-mono font-semibold text-foreground">{rowCount} txns</span>
                 </div>
                 <input
                   type="range"
@@ -318,45 +290,46 @@ export default function IntegrationSimulatorPage() {
                   step={5}
                   value={rowCount}
                   onChange={(e) => setRowCount(Number(e.target.value))}
-                  className="mt-2 w-full accent-[#aab98b] cursor-pointer"
+                  className="w-full accent-[#ededed] cursor-pointer"
                 />
               </div>
 
               {/* PRNG Seed */}
-              <div>
-                <div className="flex justify-between text-xs text-[#cfcac0]">
-                  <span>PRNG Seed (Reproducibility)</span>
-                  <span className="font-mono text-[#8a9184]"># {seed}</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>PRNG Seed</span>
+                  <span className="font-mono text-muted-foreground/70"># {seed}</span>
                 </div>
-                <div className="mt-1.5 flex gap-2">
+                <div className="flex gap-2">
                   <input
                     type="number"
                     value={seed}
                     onChange={(e) => setSeed(Number(e.target.value))}
-                    className="w-full border border-[#2b3127] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                    className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
                   />
                   <button
+                    type="button"
                     onClick={handleRandomizeSeed}
                     title="Randomize Seed"
-                    className="flex items-center gap-1.5 border border-[#3a4035] bg-[#161b14] px-3 py-1.5 text-xs text-[#d0d0c8] hover:bg-[#20271d] hover:text-[#fff]"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground hover:bg-accent transition"
                   >
-                    <Dices className="h-3.5 w-3.5" />
-                    Dice
+                    <Dices className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Dice</span>
                   </button>
                 </div>
               </div>
 
               {/* Anomaly Distribution Sliders */}
-              <div className="border-t border-[#1f241c] pt-4 space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#8b9186]">
+              <div className="border-t border-border pt-4 space-y-3">
+                <div className="text-xs font-semibold text-foreground">
                   Anomaly Injection Rates
                 </div>
 
                 {/* Partial Refund */}
-                <div>
-                  <div className="flex justify-between text-[11px] text-[#aaa89f]">
-                    <span>Partial Refund Variance (15% gap)</span>
-                    <span className="font-mono text-[#d4af37]">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[11px] text-muted-foreground">
+                    <span>Partial Refund (15% gap)</span>
+                    <span className="font-mono text-foreground">
                       {Math.round(anomalyConfig.partialRefundRate * 100)}%
                     </span>
                   </div>
@@ -372,15 +345,15 @@ export default function IntegrationSimulatorPage() {
                         partialRefundRate: Number(e.target.value),
                       }))
                     }
-                    className="mt-1 w-full accent-[#d4af37] cursor-pointer"
+                    className="w-full accent-[#ededed] cursor-pointer"
                   />
                 </div>
 
                 {/* Fee Mismatch */}
-                <div>
-                  <div className="flex justify-between text-[11px] text-[#aaa89f]">
-                    <span>Gateway Fee Overcharge (150 vs 300 bps)</span>
-                    <span className="font-mono text-[#e06c75]">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[11px] text-muted-foreground">
+                    <span>Fee Overcharge (150 vs 300 bps)</span>
+                    <span className="font-mono text-foreground">
                       {Math.round(anomalyConfig.feeMismatchRate * 100)}%
                     </span>
                   </div>
@@ -396,15 +369,15 @@ export default function IntegrationSimulatorPage() {
                         feeMismatchRate: Number(e.target.value),
                       }))
                     }
-                    className="mt-1 w-full accent-[#e06c75] cursor-pointer"
+                    className="w-full accent-[#ededed] cursor-pointer"
                   />
                 </div>
 
                 {/* Duplicate Settlement */}
-                <div>
-                  <div className="flex justify-between text-[11px] text-[#aaa89f]">
-                    <span>Duplicate Settlement Collision</span>
-                    <span className="font-mono text-[#98c379]">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[11px] text-muted-foreground">
+                    <span>Duplicate Settlement</span>
+                    <span className="font-mono text-foreground">
                       {Math.round(anomalyConfig.duplicateRate * 100)}%
                     </span>
                   </div>
@@ -420,15 +393,15 @@ export default function IntegrationSimulatorPage() {
                         duplicateRate: Number(e.target.value),
                       }))
                     }
-                    className="mt-1 w-full accent-[#98c379] cursor-pointer"
+                    className="w-full accent-[#ededed] cursor-pointer"
                   />
                 </div>
 
                 {/* Orphan Bank Credit */}
-                <div>
-                  <div className="flex justify-between text-[11px] text-[#aaa89f]">
-                    <span>Orphan Bank Credit (No matching payment)</span>
-                    <span className="font-mono text-[#61afef]">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[11px] text-muted-foreground">
+                    <span>Orphan Bank Credit</span>
+                    <span className="font-mono text-foreground">
                       {Math.round(anomalyConfig.orphanCreditRate * 100)}%
                     </span>
                   </div>
@@ -444,57 +417,55 @@ export default function IntegrationSimulatorPage() {
                         orphanCreditRate: Number(e.target.value),
                       }))
                     }
-                    className="mt-1 w-full accent-[#61afef] cursor-pointer"
+                    className="w-full accent-[#ededed] cursor-pointer"
                   />
                 </div>
               </div>
 
               {/* Generate Button */}
               <button
+                type="button"
                 onClick={handleGenerate}
-                className="mt-4 flex w-full items-center justify-center gap-2 border border-[#4a553c] bg-[#1a2116] py-2.5 text-xs font-semibold text-[#f0eee5] transition hover:bg-[#253020] hover:text-[#fff]"
+                className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-card text-xs font-medium text-foreground hover:bg-accent transition"
               >
-                <RotateCw className="h-3.5 w-3.5 text-[#aab98b]" />
-                Regenerate Batch ({batch?.transactions.length || 0} Records)
+                <RotateCw className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Regenerate batch ({batch?.transactions.length || 0} records)</span>
               </button>
             </div>
           </div>
 
           {/* Webhook Configuration Panel */}
-          <div className="border border-[#242820] bg-[#0d100c] p-5">
-            <div className="mb-3 flex items-center justify-between border-b border-[#1f241c] pb-3">
-              <div className="flex items-center gap-2">
-                <Radio className="h-4 w-4 text-[#aab98b]" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-[#e6e2d8]">
-                  External Webhook Listener
-                </h2>
-              </div>
-              <span className="font-mono text-[10px] text-[#7a8174]">HMAC-SHA256 Signed</span>
-            </div>
+          <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+            <SectionHeader
+              title="External webhook listener"
+              description="HMAC-SHA256 signed callbacks."
+              className="border-b-0 pb-0"
+            />
 
-            <div className="space-y-3">
+            <div className="space-y-3 text-xs">
               <div>
-                <label className="text-[11px] text-[#9a9f93]">Destination ERP Webhook Endpoint</label>
+                <label className="text-muted-foreground block mb-1">Destination Webhook Endpoint</label>
                 <input
                   type="text"
                   value={webhookUrl}
                   onChange={(e) => setWebhookUrl(e.target.value)}
-                  className="mt-1 w-full border border-[#2b3127] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
                 />
               </div>
 
               <div className="flex items-center justify-between">
                 <button
+                  type="button"
                   onClick={handleRegisterWebhook}
                   disabled={isRegisteringWebhook}
-                  className="flex items-center gap-1.5 border border-[#30362e] bg-[#141912] px-3 py-1.5 text-xs text-[#cfcac0] hover:bg-[#1f251b] hover:text-[#fff] disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs text-foreground hover:bg-accent disabled:opacity-50 transition"
                 >
-                  <Send className="h-3 w-3 text-[#aab98b]" />
-                  {isRegisteringWebhook ? "Registering..." : "Register Webhook"}
+                  <Send className="h-3 w-3 text-muted-foreground" />
+                  <span>{isRegisteringWebhook ? "Registering..." : "Register webhook"}</span>
                 </button>
 
                 {registeredWebhookStatus && (
-                  <span className="font-mono text-[11px] text-[#aab98b]">
+                  <span className="font-mono text-xs text-foreground">
                     {registeredWebhookStatus}
                   </span>
                 )}
@@ -506,48 +477,49 @@ export default function IntegrationSimulatorPage() {
         {/* Right Column: Ingestion Dispatcher & Live Response */}
         <div className="space-y-6 lg:col-span-7">
           {/* Dispatcher Card */}
-          <div className="border border-[#242820] bg-[#0d100c] p-5">
-            <div className="mb-4 flex items-center justify-between border-b border-[#1f241c] pb-3">
-              <div className="flex items-center gap-2">
-                <Send className="h-4 w-4 text-[#aab98b]" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-[#e6e2d8]">
-                  REST API Ingestion Pipeline
-                </h2>
-              </div>
-              <span className="font-mono text-[11px] text-[#aab98b]">POST /api/v1/reconcile</span>
+          <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <SectionHeader
+                title="REST API pipeline"
+                description="Simulate HTTP ingestion requests."
+                className="border-b-0 pb-0"
+              />
+              <span className="font-mono text-xs text-muted-foreground">POST /api/v1/reconcile</span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 text-xs">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-[11px] text-[#9a9f93]">API Key Header (X-API-Key)</label>
+                  <label className="text-muted-foreground block mb-1">API Key Header (X-API-Key)</label>
                   <input
                     type="text"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    className="mt-1 w-full border border-[#2b3127] bg-[#121611] px-3 py-1.5 text-xs font-mono text-[#f0eee5] focus:border-[#aab98b] focus:outline-none"
+                    className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs font-mono text-foreground focus:border-foreground/40 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] text-[#9a9f93]">Execution Mode</label>
-                  <div className="mt-1 flex gap-2">
+                  <label className="text-muted-foreground block mb-1">Execution Mode</label>
+                  <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => setAsyncMode(false)}
-                      className={`flex-1 border px-2 py-1.5 text-xs font-medium transition ${
+                      className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition ${
                         !asyncMode
-                          ? "border-[#505a42] bg-[#1a2215] text-[#f0eee5]"
-                          : "border-[#2b3127] bg-[#121611] text-[#7a8174] hover:text-[#bbb]"
+                          ? "border-[#ededed] bg-accent text-foreground"
+                          : "border-border bg-background text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       Sync (200 OK)
                     </button>
                     <button
+                      type="button"
                       onClick={() => setAsyncMode(true)}
-                      className={`flex-1 border px-2 py-1.5 text-xs font-medium transition ${
+                      className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition ${
                         asyncMode
-                          ? "border-[#505a42] bg-[#1a2215] text-[#f0eee5]"
-                          : "border-[#2b3127] bg-[#121611] text-[#7a8174] hover:text-[#bbb]"
+                          ? "border-[#ededed] bg-accent text-foreground"
+                          : "border-border bg-background text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       Async Webhook (202)
@@ -558,28 +530,28 @@ export default function IntegrationSimulatorPage() {
 
               {/* Batch Summary Bar */}
               {batch && (
-                <div className="grid grid-cols-4 gap-2 border border-[#1e231b] bg-[#121611] p-3 text-center">
+                <div className="grid grid-cols-4 gap-2 rounded-md border border-border bg-background p-3 text-center">
                   <div>
-                    <div className="text-[10px] uppercase text-[#7a8174]">Total Rows</div>
-                    <div className="font-mono text-sm font-bold text-[#f0eee5]">
+                    <div className="text-xs text-muted-foreground">Total rows</div>
+                    <div className="font-mono text-sm font-semibold text-foreground">
                       {batch.transactions.length}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase text-[#7a8174]">Clean Matches</div>
-                    <div className="font-mono text-sm font-bold text-[#aab98b]">
+                    <div className="text-xs text-muted-foreground">Clean matches</div>
+                    <div className="font-mono text-sm font-semibold text-foreground">
                       {batch.stats.cleanTxnCount}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase text-[#7a8174]">Injected Variances</div>
-                    <div className="font-mono text-sm font-bold text-[#d4af37]">
+                    <div className="text-xs text-muted-foreground">Variances</div>
+                    <div className="font-mono text-sm font-semibold text-[#ef4444]">
                       {batch.stats.partialRefundCount + batch.stats.feeMismatchCount}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase text-[#7a8174]">Orphan / Dupes</div>
-                    <div className="font-mono text-sm font-bold text-[#e06c75]">
+                    <div className="text-xs text-muted-foreground">Orphans / dupes</div>
+                    <div className="font-mono text-sm font-semibold text-[#ef4444]">
                       {batch.stats.duplicateCount + batch.stats.orphanCount}
                     </div>
                   </div>
@@ -588,20 +560,18 @@ export default function IntegrationSimulatorPage() {
 
               {/* Submit Button */}
               <button
+                type="button"
                 onClick={handleSendToApi}
                 disabled={isSubmitting || !batch}
-                className="flex w-full items-center justify-center gap-2 border border-[#6b7b54] bg-[#222c1b] py-3 text-sm font-semibold text-[#f0eee5] shadow-lg transition hover:bg-[#2c3a23] hover:text-[#fff] disabled:opacity-50"
+                className="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
               >
                 {isSubmitting ? (
                   <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#aab98b] border-t-transparent" />
-                    Executing Multi-Pass Invariant Engine...
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#000000] border-t-transparent mr-2" />
+                    <span>Executing multi-pass engine...</span>
                   </>
                 ) : (
-                  <>
-                    <Play className="h-4 w-4 text-[#aab98b]" />
-                    Send Batch to REST API ({asyncMode ? "Async + Webhook" : "Sync Ingestion"})
-                  </>
+                  <span>Send batch to REST API ({asyncMode ? "Async + Webhook" : "Sync"})</span>
                 )}
               </button>
             </div>
@@ -609,28 +579,18 @@ export default function IntegrationSimulatorPage() {
 
           {/* Response & Decision Receipt Card */}
           {apiResponse && (
-            <div className="border border-[#242820] bg-[#0d100c] p-5">
-              <div className="mb-4 flex items-center justify-between border-b border-[#1f241c] pb-3">
+            <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <SectionHeader
+                  title="Response & decision receipt"
+                  className="border-b-0 pb-0"
+                />
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-[#aab98b]" />
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[#e6e2d8]">
-                    API Response & Cryptographic Receipt
-                  </h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`font-mono text-xs px-2 py-0.5 border ${
-                      responseStatus === 200
-                        ? "border-[#4a5e38] bg-[#162112] text-[#aab98b]"
-                        : responseStatus === 202
-                        ? "border-[#605530] bg-[#211d10] text-[#d4af37]"
-                        : "border-[#603530] bg-[#211210] text-[#e06c75]"
-                    }`}
-                  >
+                  <Badge variant={responseStatus === 200 ? "success" : responseStatus === 202 ? "secondary" : "destructive"}>
                     HTTP {responseStatus}
-                  </span>
+                  </Badge>
                   {latency !== null && (
-                    <span className="font-mono text-xs text-[#7a8174] flex items-center gap-1">
+                    <span className="font-mono text-xs text-muted-foreground/70 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {latency}ms
                     </span>
@@ -641,27 +601,27 @@ export default function IntegrationSimulatorPage() {
               {/* Summary Stats */}
               {summary && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="border border-[#1e231b] bg-[#121611] p-3 text-center">
-                    <div className="text-[10px] uppercase text-[#7a8174]">Auto-Matched</div>
-                    <div className="font-mono text-base font-bold text-[#aab98b]">
+                  <div className="rounded-md border border-border bg-background p-3 text-center space-y-0.5">
+                    <div className="text-xs text-muted-foreground">Auto-matched</div>
+                    <div className="font-mono text-base font-semibold text-foreground">
                       {summary.autoMatched}
                     </div>
                   </div>
-                  <div className="border border-[#1e231b] bg-[#121611] p-3 text-center">
-                    <div className="text-[10px] uppercase text-[#7a8174]">Suggested</div>
-                    <div className="font-mono text-base font-bold text-[#d4af37]">
+                  <div className="rounded-md border border-border bg-background p-3 text-center space-y-0.5">
+                    <div className="text-xs text-muted-foreground">Suggested</div>
+                    <div className="font-mono text-base font-semibold text-foreground">
                       {summary.suggested}
                     </div>
                   </div>
-                  <div className="border border-[#1e231b] bg-[#121611] p-3 text-center">
-                    <div className="text-[10px] uppercase text-[#7a8174]">Exceptions</div>
-                    <div className="font-mono text-base font-bold text-[#e06c75]">
+                  <div className="rounded-md border border-border bg-background p-3 text-center space-y-0.5">
+                    <div className="text-xs text-muted-foreground">Exceptions</div>
+                    <div className="font-mono text-base font-semibold text-[#ef4444]">
                       {summary.exception}
                     </div>
                   </div>
-                  <div className="border border-[#1e231b] bg-[#121611] p-3 text-center">
-                    <div className="text-[10px] uppercase text-[#7a8174]">Match Rate</div>
-                    <div className="font-mono text-base font-bold text-[#f0eee5]">
+                  <div className="rounded-md border border-border bg-background p-3 text-center space-y-0.5">
+                    <div className="text-xs text-muted-foreground">Match rate</div>
+                    <div className="font-mono text-base font-semibold text-foreground">
                       {summary.matchRatePct}%
                     </div>
                   </div>
@@ -670,24 +630,24 @@ export default function IntegrationSimulatorPage() {
 
               {/* Cryptographic DAG Receipt */}
               {receipt && (
-                <div className="mt-4 border border-[#2b3127] bg-[#121611] p-3.5 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[#cfcac0] flex items-center gap-1.5">
-                      <Layers className="h-3.5 w-3.5 text-[#aab98b]" />
+                <div className="rounded-md border border-border bg-background p-3.5 space-y-2 text-xs font-mono">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-foreground">
                       Merkle DAG Root Hash
                     </span>
                     <button
+                      type="button"
                       onClick={() => handleCopyReceipt(receipt.rootHash)}
-                      className="text-[11px] font-mono text-[#aab98b] hover:underline flex items-center gap-1"
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                     >
                       <Copy className="h-3 w-3" />
-                      {copiedReceipt ? "Copied!" : "Copy"}
+                      <span>{copiedReceipt ? "Copied" : "Copy"}</span>
                     </button>
                   </div>
-                  <div className="font-mono text-[11px] text-[#8a9184] break-all bg-[#090c08] p-2 border border-[#1e241a]">
+                  <div className="text-[11px] text-muted-foreground break-all bg-card p-2 rounded border border-border">
                     {receipt.rootHash}
                   </div>
-                  <div className="flex justify-between text-[10px] font-mono text-[#6c7465]">
+                  <div className="flex justify-between text-[10px] text-muted-foreground/70">
                     <span>Algorithm: {receipt.algorithm}</span>
                     <span>Leaves: {receipt.leafCount} items</span>
                   </div>
@@ -696,26 +656,26 @@ export default function IntegrationSimulatorPage() {
 
               {/* Exceptions Preview */}
               {exceptions.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-[#cfcac0]">
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-foreground">
                     Detected Discrepancies ({exceptions.length})
                   </div>
                   <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
                     {exceptions.map((exc) => (
                       <div
                         key={exc.id}
-                        className="flex items-center justify-between border border-[#2b221b] bg-[#161210] p-2 text-xs"
+                        className="flex items-center justify-between rounded border border-border bg-background p-2 text-xs"
                       >
                         <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-3.5 w-3.5 text-[#e06c75] shrink-0" />
-                          <span className="font-mono text-[11px] text-[#f0eee5]">
+                          <AlertTriangle className="h-3.5 w-3.5 text-[#ef4444] shrink-0" />
+                          <span className="font-mono text-[11px] text-foreground">
                             {exc.paymentId}
                           </span>
-                          <span className="text-[11px] text-[#8a9184] truncate max-w-[240px]">
+                          <span className="text-xs text-muted-foreground truncate max-w-[240px]">
                             {exc.description}
                           </span>
                         </div>
-                        <span className="font-mono font-bold text-[#e06c75]">
+                        <span className="font-mono font-semibold text-[#ef4444]">
                           {exc.formattedAmount}
                         </span>
                       </div>
@@ -731,37 +691,33 @@ export default function IntegrationSimulatorPage() {
       {/* Webhook Delivery Live Feed & API History */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Webhook Log Stream */}
-        <div className="border border-[#242820] bg-[#0d100c] p-5">
-          <div className="mb-3 flex items-center justify-between border-b border-[#1f241c] pb-3">
-            <div className="flex items-center gap-2">
-              <Radio className="h-4 w-4 text-[#aab98b]" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[#e6e2d8]">
-                Mock Webhook Listener Stream
-              </h2>
-            </div>
-            <span className="font-mono text-[10px] text-[#7a8174]">
-              {webhookLogs.length} events received
-            </span>
+        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <SectionHeader
+              title="Webhook stream"
+              description={`${webhookLogs.length} events logged`}
+              className="border-b-0 pb-0"
+            />
           </div>
 
           <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {webhookLogs.length === 0 ? (
-              <div className="py-8 text-center text-xs text-[#62695d]">
-                No webhook events dispatched yet. Trigger an async reconciliation batch to see live callbacks.
+              <div className="py-8 text-center text-xs text-muted-foreground/70">
+                No webhook events dispatched yet. Trigger an async reconciliation batch to view live callbacks.
               </div>
             ) : (
               webhookLogs.map((log) => (
                 <div
                   key={log.id}
-                  className="border border-[#1e241a] bg-[#11150f] p-3 text-xs space-y-1.5 font-mono"
+                  className="rounded border border-border bg-background p-3 text-xs space-y-1 font-mono"
                 >
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-[#aab98b] font-bold">{log.event}</span>
-                    <span className="text-[#62695d]">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-foreground font-medium">{log.event}</span>
+                    <span className="text-muted-foreground/70">{formatAuditTime(log.timestamp)}</span>
                   </div>
-                  <div className="text-[10px] text-[#82887b] truncate">URL: {log.url}</div>
-                  <div className="text-[10px] text-[#61afef] truncate">Signature: {log.signature}</div>
-                  <div className="bg-[#090b08] p-1.5 text-[10px] text-[#cfcac0] overflow-x-auto">
+                  <div className="text-[11px] text-muted-foreground truncate">URL: {log.url}</div>
+                  <div className="text-[11px] text-muted-foreground/70 truncate">Signature: {log.signature}</div>
+                  <div className="bg-card p-2 rounded text-[11px] text-muted-foreground overflow-x-auto border border-border">
                     {JSON.stringify(log.payload)}
                   </div>
                 </div>
@@ -771,47 +727,37 @@ export default function IntegrationSimulatorPage() {
         </div>
 
         {/* Previous API Call History */}
-        <div className="border border-[#242820] bg-[#0d100c] p-5">
-          <div className="mb-3 flex items-center justify-between border-b border-[#1f241c] pb-3">
-            <div className="flex items-center gap-2">
-              <FileCode className="h-4 w-4 text-[#aab98b]" />
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[#e6e2d8]">
-                Recent API Call History
-              </h2>
-            </div>
-            <span className="font-mono text-[10px] text-[#7a8174]">Last 10 executions</span>
+        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <SectionHeader
+              title="Recent API call history"
+              description="Last 10 executions"
+              className="border-b-0 pb-0"
+            />
           </div>
 
           <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
             {history.length === 0 ? (
-              <div className="py-8 text-center text-xs text-[#62695d]">
+              <div className="py-8 text-center text-xs text-muted-foreground/70">
                 No recent API calls in this session.
               </div>
             ) : (
               history.map((entry, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between border border-[#1e241a] bg-[#11150f] p-2.5 text-xs font-mono"
+                  className="flex items-center justify-between rounded border border-border bg-background p-2.5 text-xs font-mono"
                 >
                   <div>
-                    <div className="text-[#f0eee5] font-semibold">{entry.jobId}</div>
-                    <div className="text-[10px] text-[#7a8174]">
+                    <div className="text-foreground font-medium">{entry.jobId}</div>
+                    <div className="text-[11px] text-muted-foreground/70">
                       {entry.timestamp} · {entry.rowCount} txns · {entry.mode}
                     </div>
                   </div>
                   <div className="text-right">
-                    <span
-                      className={`inline-block px-1.5 py-0.5 text-[10px] border ${
-                        entry.status === "SUCCESS"
-                          ? "border-[#4a5e38] text-[#aab98b]"
-                          : entry.status === "ACCEPTED"
-                          ? "border-[#605530] text-[#d4af37]"
-                          : "border-[#603530] text-[#e06c75]"
-                      }`}
-                    >
+                    <Badge variant={entry.status === "SUCCESS" ? "success" : entry.status === "ACCEPTED" ? "secondary" : "destructive"}>
                       {entry.status}
-                    </span>
-                    <div className="mt-0.5 text-[10px] text-[#62695d]">{entry.latencyMs}ms</div>
+                    </Badge>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground/70">{entry.latencyMs}ms</div>
                   </div>
                 </div>
               ))

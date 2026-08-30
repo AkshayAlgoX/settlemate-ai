@@ -17,7 +17,7 @@ npm -v
 echo "→ [2/6] Initializing persistent SQLite database..."
 npm ci --silent || npm install
 npx prisma generate
-npx prisma db push --skip-generate
+npx prisma db push
 npx tsx scripts/init-db.ts
 
 # 3. Run full verification suite before deployment

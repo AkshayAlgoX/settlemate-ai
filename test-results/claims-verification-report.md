@@ -1,6 +1,6 @@
 # SettleMate AI — Reproducible Claims Verification Report
 
-*Generated at: 2026-08-24T20:20:08.180Z (Total Verification Runtime: 249.54s)*
+*Generated at: 2026-08-28T07:33:07.013Z (Total Verification Runtime: 286.16s)*
 
 ### Official Dataset SHA-256 Fingerprint: `81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b`
 ### Metric Payload SHA-256 Seal: `9255d2507edbdec16344e1c37d0ce4a6995fe10527447c1813ae16fcdfbcbaa6`

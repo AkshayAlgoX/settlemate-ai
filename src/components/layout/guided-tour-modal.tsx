@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Sparkles,
   ChevronRight,
   ChevronLeft,
   X,
@@ -13,8 +12,9 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
-  CheckCircle2,
+  Check,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TourStep {
   title: string;
@@ -28,74 +28,116 @@ interface TourStep {
 
 const TOUR_STEPS: TourStep[] = [
   {
-    title: "1. Advisory-Only AI with Deterministic Validation",
-    badge: "🛡️ 01 · CORE ARCHITECTURAL BOUNDARY",
-    href: "/security",
-    icon: ShieldCheck,
-    pitch: "AI assists financial operations but never controls financial truth. Advisory models formulate structured assertion ASTs that are mechanically verified by non-LLM validators at 134,511 claims/s before ledger finalization.",
-    keyHighlights: [
-      "AI is mathematically forbidden from directly mutating ledger balances",
-      "All claims must cite immutable Context Vault evidence (vouchers, UTRs)",
-      "Zero-LLM financial invariant gate enforces strict money conservation (0 paise drift)",
-      "Adversarial prompt injections and fake voucher IDs are blocked in <10ms",
-    ],
-    recommendedAction: "Explore the AI Safety Boundaries and Non-LLM Verification gates.",
-  },
-  {
-    title: "2. 98.1% Accuracy on Official Benchmark",
-    badge: "🎯 02 · BITWISE REPRODUCIBLE TRUTH",
-    href: "/track04-compliance",
-    icon: Target,
-    pitch: "Measured on the official 250-record competition dataset (seed: 20260821) with exact SHA-256 fingerprint 81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b.",
-    keyHighlights: [
-      "98.1% Overall Accuracy · 98% Precision · 98% Recall",
-      "90% Adversarial Catch Rate (9/10 detected; 10th is sub-rupee ₹0.47 by design)",
-      "806.75 rec/sec official throughput, scaling up to 1,246 rec/sec on 10k–100k batches",
-      "100% compliant across all 8 Razorpay Track 04 judging criteria",
-    ],
-    recommendedAction: "Review the Track 04 Compliance Matrix or execute 'npm run evaluate'.",
-  },
-  {
-    title: "3. Cryptographic Decision Receipts + Offline Verification",
-    badge: "📜 03 · TAMPER-EVIDENT MERKLE DAG",
-    href: "/audit-trail",
-    icon: FileCheck,
-    pitch: "Every finalized reconciliation generates a self-contained Decision Receipt with a SHA-256 Merkle root that external auditors can verify in <1ms without calling any LLM or external database.",
-    keyHighlights: [
-      "Self-contained Merkle DAG links transaction inputs, AI claims, and approvals",
-      "In-browser standalone offline verifier (0 LLMs, 0 external databases)",
-      "Instant bitwise detection of any tampered ledger state or altered amounts",
-      "Immutable double-entry journal (Debits == Credits guaranteed)",
-    ],
-    recommendedAction: "Click 'Verify Offline' in the Audit Trail to test instant receipt verification.",
-  },
-  {
-    title: "4. Honest Exception List with Reason Codes",
-    badge: "🔍 04 · AUDITABLE FINANCE-OPS",
-    href: "/exception-analysis/EXP-REFUND-001",
+    title: "1. The Financial Reconciliation Problem",
+    badge: "01 · Scale & Variance",
+    href: "/sandbox",
     icon: AlertCircle,
-    pitch: "When variances occur, SettleMate isolates them with precise paise amounts, transparent reason codes, Context Vault evidence links, and human-in-the-loop Maker/Checker controls.",
+    pitch: "Modern digital commerce processes millions of multi-channel transactions daily across gateways, banks, and ledgers. Manual spreadsheet triage causes fee leakage, delayed dispute resolutions, and balance drift.",
+    keyHighlights: [
+      "Fragmented data across order carts, payment gateways, and bank settlement feeds",
+      "Gateway fee discrepancies, MDR rate shifts, and partial refund mismatches",
+      "Manual reconciliation bottlenecks that delay month-end financial closing",
+      "High operational risk when LLMs are mistakenly given direct database write access",
+    ],
+    recommendedAction: "Inspect raw multi-party transaction batches in the Interactive Sandbox.",
+  },
+  {
+    title: "2. Deterministic Reconciliation First",
+    badge: "02 · Rule-Engine Core",
+    href: "/judge-mode",
+    icon: Target,
+    pitch: "The financial source of truth is governed by deterministic rules, exact integer-paise arithmetic, and UTR matching. Over 96% of transactions resolve instantly without invoking any AI model.",
+    keyHighlights: [
+      "3-pass multi-window reconciliation: Exact UTR, Order ID + Amount, and Sliding Window",
+      "Exact integer paise math: Zero floating-point drift (Debits == Credits guaranteed)",
+      "98.1% accuracy, 98% precision, and 98% recall on the official benchmark dataset",
+      "High throughput: >900 records/sec per single CPU core on local execution",
+    ],
+    recommendedAction: "Execute the benchmark evaluation in Judge Mode.",
+  },
+  {
+    title: "3. Honest Exception Detection",
+    badge: "03 · Variance Isolation",
+    href: "/exceptions",
+    icon: AlertCircle,
+    pitch: "When financial variances occur, SettleMate isolates them with structured reason codes, exact paise shortfall deltas, and immutable Context Vault evidence links.",
     keyHighlights: [
       "Clear taxonomy: Fee overcharges, partial refunds, delayed settlements, duplicate credits",
-      "Expected vs. actual side-by-side arithmetic with exact delta shortfall",
-      "Dual-control Maker/Checker sign-off (Admin approval required for journal posting)",
-      "No auto-fabrication: ambiguous cases (<80% confidence) escalate to human review",
+      "Side-by-side expected vs. actual breakdown with exact delta calculation",
+      "Context Vault evidence links referencing source vouchers and bank statements",
+      "Dual-control Maker/Checker authorization required before journal entry posting",
     ],
-    recommendedAction: "Inspect the 5-stage chronological event timeline and evidence voucher.",
+    recommendedAction: "Triage pending exceptions in the Exception Workbench.",
   },
   {
-    title: "5. Failure Recovery: 100K Chaos & 0 DLQ",
-    badge: "⚡ 05 · EFFECTIVELY-ONCE FINALIZATION",
-    href: "/verify",
-    icon: RefreshCw,
-    pitch: "Engineered for high-volume enterprise resilience. Injected with 10,000 worker crashes across a 100,000-record streaming load, achieving 100% crash recovery with zero dead-letter drops.",
+    title: "4. AI Investigation (Advisory-Only)",
+    badge: "04 · AI Root Cause",
+    href: "/chat",
+    icon: ShieldCheck,
+    pitch: "AI assists operations by analyzing discrepancies, identifying fee anomalies, and proposing resolutions, but is strictly advisory. The AI cannot mutate database records or execute financial transfers.",
     keyHighlights: [
-      "10,000 simulated worker crashes recovered with 100% completeness",
-      "0 dropped records in Dead Letter Queue (DLQ)",
-      "Atomic Compare-and-Swap (CAS) locking prevents duplicate ledger entries",
-      "Effectively-Once Financial Result via deterministic idempotency keys",
+      "Powered by Google Gemini for natural-language anomaly root-cause investigation",
+      "Emits structured, auditable hypothesis claims referencing explicit evidence IDs",
+      "Clear visual indicators for 'Live Gemini' vs 'Offline Fallback' mode",
+      "Zero secret leakage: API keys and sensitive customer PII are redacted from prompts",
     ],
-    recommendedAction: "Run the 100k Streaming Chaos suite in the Verification Hub.",
+    recommendedAction: "Ask questions in Finance Q&A to investigate exception root causes.",
+  },
+  {
+    title: "5. Non-LLM Claim Validation",
+    badge: "05 · Safety Boundary",
+    href: "/security",
+    icon: ShieldCheck,
+    pitch: "Every claim generated by an LLM is mechanically validated against raw transaction feeds by a non-LLM rule engine operating at 134,511 claims/sec before human authorization.",
+    keyHighlights: [
+      "AI output is treated as untrusted input and subjected to deterministic proof rules",
+      "Arithmetic verification: Claimed amount must equal the exact paise voucher balance",
+      "Evidence existence check: Cited voucher or UTR must exist in the immutable vault",
+      "Mathematically impossible for hallucinated AI output to enter the financial ledger",
+    ],
+    recommendedAction: "Review the Non-LLM Validation Gates in the Self-Test & Hardening Hub.",
+  },
+  {
+    title: "6. Adversarial Defense & Hostile Input Lab",
+    badge: "06 · Red Team Defense",
+    href: "/red-team",
+    icon: RefreshCw,
+    pitch: "Tested against hostile prompt injections, fake voucher IDs, SSRF payloads, and corrupted bank narrations with an official 90% adversarial catch rate.",
+    keyHighlights: [
+      "10 distinct attack vectors tested continuously in the Red Team Defense lab",
+      "SSRF guard blocks attempts to query AWS/GCP metadata (169.254.169.254) and loopback",
+      "Prompt injection payloads trying to override balance checks are blocked in <10ms",
+      "Financial conservation invariant is preserved under all hostile conditions",
+    ],
+    recommendedAction: "Simulate hostile prompt injections in the Red Team Defense lab.",
+  },
+  {
+    title: "7. Cryptographic Decision Receipts",
+    badge: "07 · Merkle DAG Audit",
+    href: "/audit-trail",
+    icon: FileCheck,
+    pitch: "Every finalized reconciliation outcome emits a self-contained Decision Receipt sealed with a SHA-256 Merkle DAG root that external auditors can verify in <1ms without calling any LLM.",
+    keyHighlights: [
+      "Self-contained Merkle DAG links transaction inputs, validator proofs, and approvals",
+      "Standalone in-browser offline verifier (0 external dependencies, 0 LLM calls)",
+      "Instant bitwise detection of any tampered ledger amounts or modified hashes",
+      "Exportable compliance bundles for statutory auditing and regulatory reporting",
+    ],
+    recommendedAction: "Verify an offline decision receipt in the General Ledger & DAG view.",
+  },
+  {
+    title: "8. Operational & Developer Integration",
+    badge: "08 · Enterprise API",
+    href: "/developer",
+    icon: FileCheck,
+    pitch: "Engineered for seamless enterprise integration with OpenAPI 3.1 REST endpoints, real-time Server-Sent Events (SSE) telemetry, and transactional webhook delivery with AES-256 encryption.",
+    keyHighlights: [
+      "Complete v1 REST API (`/api/v1/reconcile`, `/api/v1/stream/events`, `/api/v1/ready`)",
+      "Real-time SSE event streaming with stateless PostgreSQL replay on client reconnect",
+      "Transactional webhook outbox with HMAC-SHA256 signing, exponential backoff, and DLQ",
+      "Distributed multi-tier sliding-window rate limiting with graceful local fallback",
+    ],
+    recommendedAction: "Explore OpenAPI specs, test webhooks, and generate API keys in Developer Portal.",
   },
 ];
 
@@ -108,10 +150,25 @@ export function GuidedTourModal({
 }) {
   const [currentStep, setCurrentStep] = useState<number>(0);
 
+  // Keyboard navigation & Escape
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!isOpen) return;
+      if (e.key === "Escape") {
+        onClose();
+      } else if (e.key === "ArrowRight") {
+        setCurrentStep((prev) => Math.min(prev + 1, TOUR_STEPS.length - 1));
+      } else if (e.key === "ArrowLeft") {
+        setCurrentStep((prev) => Math.max(prev - 1, 0));
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const step = TOUR_STEPS[currentStep];
-  const Icon = step.icon;
   const isFirst = currentStep === 0;
   const isLast = currentStep === TOUR_STEPS.length - 1;
 
@@ -130,117 +187,103 @@ export function GuidedTourModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl border border-[#3e5532] bg-[#090c09] shadow-2xl overflow-hidden">
-        {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-[#252a24] bg-[#0d100d] px-6 py-4">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 border border-[#3e5532] bg-[#142211] text-[#a4b58a]">
-              <Sparkles className="h-4 w-4" />
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tour-dialog-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in-0 duration-100"
+    >
+      <div
+        className="fixed inset-0"
+        onClick={onClose}
+      />
+
+      <div className="relative z-50 w-full max-w-2xl rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden font-sans">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div>
+            <div className="text-xs text-muted-foreground font-medium">
+              Product Tour · Step {currentStep + 1} of {TOUR_STEPS.length}
             </div>
-            <div>
-              <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#a4b58a] block">
-                SettleMate AI · 5 Core Differentiators
-              </span>
-              <h2 className="text-sm font-bold text-[#e3e1d8]">
-                Interactive Judge Walkthrough (Under 3 Mins)
-              </h2>
-            </div>
+            <h2 id="tour-dialog-title" className="text-lg font-semibold text-foreground tracking-tight">
+              {step.title}
+            </h2>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono text-[#687063]">
-              {currentStep + 1} / {TOUR_STEPS.length}
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1 text-[#687063] hover:text-[#e3e1d8] transition-colors"
-              aria-label="Close tour"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Close tour"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* Step Progress Bar */}
-        <div className="grid grid-cols-5 gap-1 bg-[#060806] p-1.5 border-b border-[#1c201b]">
+        {/* Step Indicator */}
+        <div className="grid grid-cols-8 gap-1.5 bg-muted/40 p-1.5 border-b border-border">
           {TOUR_STEPS.map((s, idx) => (
             <button
               key={s.badge}
               type="button"
               onClick={() => setCurrentStep(idx)}
-              className={`h-1.5 rounded-none transition-all ${
+              className={cn(
+                "h-1.5 rounded-full transition-all",
                 idx === currentStep
-                  ? "bg-[#a4b58a]"
+                  ? "bg-primary"
                   : idx < currentStep
-                  ? "bg-[#3e5532]"
-                  : "bg-[#1c201b]"
-              }`}
+                  ? "bg-primary/40"
+                  : "bg-muted"
+              )}
               title={s.title}
             />
           ))}
         </div>
 
-        {/* Main Content Area */}
+        {/* Body */}
         <div className="p-6 space-y-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <span className="font-mono text-[9px] font-bold px-2 py-0.5 border border-[#3e5532] bg-[#142211] text-[#a4b58a] inline-block">
-                {step.badge}
-              </span>
-              <h3 className="text-base font-bold text-[#f0eee6] pt-1">
-                {step.title}
-              </h3>
-            </div>
-
-            <div className="p-3 border border-[#252a24] bg-[#0d100d] text-[#a4b58a] shrink-0">
-              <Icon className="h-6 w-6" />
-            </div>
-          </div>
-
-          <p className="text-xs leading-relaxed text-[#a4ab9e]">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             {step.pitch}
           </p>
 
-          {/* Key Highlights Checklist */}
-          <div className="space-y-2 border border-[#20261e] bg-[#0c100c] p-4">
-            <span className="text-[9px] font-mono font-bold uppercase tracking-[0.16em] text-[#687063] block mb-2">
-              Verified Technical Proofs
-            </span>
-            <div className="grid grid-cols-1 gap-2">
+          {/* Highlights */}
+          <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+            <div className="text-xs text-muted-foreground font-medium">
+              Key Proof Points
+            </div>
+            <div className="space-y-2">
               {step.keyHighlights.map((h) => (
-                <div key={h} className="flex items-start gap-2 text-xs text-[#d3d2ca]">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-[#a4b58a] shrink-0 mt-0.5" />
+                <div key={h} className="flex items-start gap-2.5 text-sm text-foreground">
+                  <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
                   <span>{h}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Recommended Action / Jump Link */}
-          <div className="flex items-center justify-between gap-3 border border-[#2e3b26] bg-[#11170d] p-3 text-xs">
-            <div className="text-[11px] text-[#a9ba8a]">
-              <strong className="text-[#e3e1d8]">Deep Dive:</strong> {step.recommendedAction}
-            </div>
+          {/* Action Link */}
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-3 text-sm">
+            <span className="text-muted-foreground text-xs sm:text-sm">
+              <strong className="text-foreground">Action:</strong> {step.recommendedAction}
+            </span>
             <Link
               href={step.href}
               onClick={onClose}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border border-[#5d6e46] bg-[#1a2b16] hover:bg-[#233a1e] text-[#c7d5a5] shrink-0 transition"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-foreground hover:underline shrink-0"
             >
-              <span>Explore Live</span>
-              <ExternalLink className="h-3 w-3" />
+              <span>View live</span>
+              <ExternalLink className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
 
-        {/* Footer Navigation */}
-        <div className="flex items-center justify-between border-t border-[#252a24] bg-[#0d100d] px-6 py-4">
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-border px-6 py-3.5 bg-card/50">
           <button
             type="button"
             onClick={handlePrev}
             disabled={isFirst}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border border-[#252a24] bg-[#060806] text-[#8c9288] hover:text-[#e3e1d8] disabled:opacity-30 disabled:pointer-events-none transition"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 disabled:opacity-30 disabled:pointer-events-none transition"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
             <span>Previous</span>
@@ -250,17 +293,17 @@ export function GuidedTourModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-[10px] font-mono text-[#687063] hover:text-[#8c9288] transition"
+              className="h-8 rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground transition"
             >
-              Skip Tour
+              Skip
             </button>
 
             <button
               type="button"
               onClick={handleNext}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider border border-[#5d6e46] bg-[#172012] hover:bg-[#1f2c18] text-[#c7d5a5] shadow-[0_0_15px_rgba(164,186,128,0.15)] transition"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition"
             >
-              <span>{isLast ? "Complete Tour" : "Next Differentiator"}</span>
+              <span>{isLast ? "Done" : "Next"}</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>

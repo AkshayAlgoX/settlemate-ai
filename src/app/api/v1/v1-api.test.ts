@@ -193,19 +193,41 @@ async function main() {
     assert.ok(regJson.webhook.id.startsWith("wh_"));
     assert.ok(regJson.webhook.secret.startsWith("whsec_"));
 
-    const listReq = new NextRequest("http://localhost:3000/api/v1/webhooks/register");
+    const listReq = new NextRequest("http://localhost:3000/api/v1/webhooks/register", {
+      headers: { "X-API-Key": VALID_API_KEY },
+    });
     const listRes = await webhooksGet(listReq);
     const listJson = await listRes.json();
     assert.ok(listJson.count >= 2);
 
-    const logsReq = new NextRequest("http://localhost:3000/api/v1/webhooks/logs");
+    const logsReq = new NextRequest("http://localhost:3000/api/v1/webhooks/logs", {
+      headers: { "X-API-Key": VALID_API_KEY },
+    });
     const logsRes = await webhookLogsGet(logsReq);
     const logsJson = await logsRes.json();
     assert.equal(logsRes.status, 200);
     assert.ok(Array.isArray(logsJson.logs));
   });
 
-  console.log("\nv1-api: ALL 7 TESTS PASSED\n");
+  // The v1 surface is a machine API: proxy.ts lets /api/v1/* past the session
+  // boundary precisely so each route's own sk_ key check is the gate. An
+  // unauthenticated read of tenant data must therefore be rejected here, not
+  // upstream. Regression guard for the auth-boundary unification.
+  await test("v1 tenant-data reads reject an anonymous caller with 401", async () => {
+    const anonLogs = await webhookLogsGet(
+      new NextRequest("http://localhost:3000/api/v1/webhooks/logs")
+    );
+    assert.equal(anonLogs.status, 401);
+    const anonLogsJson = await anonLogs.json();
+    assert.equal(anonLogsJson.error.code, "UNAUTHORIZED");
+
+    const anonList = await webhooksGet(
+      new NextRequest("http://localhost:3000/api/v1/webhooks/register")
+    );
+    assert.equal(anonList.status, 401);
+  });
+
+  console.log("\nv1-api: ALL 8 TESTS PASSED\n");
 }
 
 void main();

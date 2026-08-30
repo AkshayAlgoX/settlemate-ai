@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readMultiPassSnapshot, runMultiPassIdempotent } from "@/lib/reconciliation/multi-pass";
+import { ControlFailureError } from "@/lib/reconciliation/invariants";
+import { buildControlFailureResponse } from "@/lib/reconciliation/control-error";
 import { prisma } from "@/lib/db";
 
 // GET returns the most recent persisted multi-pass snapshot for the batch. It
@@ -80,6 +82,15 @@ export async function POST(
       ...outcome.body,
     });
   } catch (error) {
+    if (
+      error instanceof ControlFailureError ||
+      (error as { name?: string })?.name === "ControlFailureError" ||
+      (error as { code?: string })?.code === "CONTROL_FAILURE"
+    ) {
+      const payload = buildControlFailureResponse(error as ControlFailureError);
+      return NextResponse.json(payload, { status: 422 });
+    }
+
     console.error("Multi-pass error:", error);
     return NextResponse.json(
       { error: "Multi-pass reconciliation failed" },

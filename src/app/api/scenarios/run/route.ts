@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { safeErrorResponse } from "@/lib/security/api-security";
 import { formatCurrency } from "@/lib/format";
 import { buildIndexes } from "@/lib/reconciliation/indexer";
 import { matchAllRecords } from "@/lib/reconciliation/matcher";
@@ -272,9 +273,8 @@ export async function POST(req: NextRequest) {
       processedAt: new Date().toISOString(),
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message || "Scenario Execution Failed" },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail; the raw message leaked matcher and
+    // scenario-builder internals to the caller.
+    return safeErrorResponse(err, 500, "SCENARIO_ERROR");
   }
 }

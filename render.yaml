@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: settlemate-ai
+    env: node
+    plan: free
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: WEBHOOK_SHARED_SECRET
+        sync: false
+      - key: METRICS_TOKEN
+        sync: false

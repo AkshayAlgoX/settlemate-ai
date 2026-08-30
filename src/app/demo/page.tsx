@@ -8,14 +8,15 @@ import {
   Brain,
   Check,
   CheckCircle2,
-  Database,
   Loader2,
   Play,
-  ShieldCheck,
-  Sparkles,
   XCircle,
   Zap,
 } from "lucide-react";
+import { apiErrorMessage } from "@/lib/api/error-message";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
 
 export interface ScaleOption {
   size: number;
@@ -101,31 +102,31 @@ interface ScaleRunReport {
 function StepIcon({ status }: { status: StepStatus }) {
   if (status === "done") {
     return (
-      <div className="flex h-7 w-7 items-center justify-center border border-[#3e4d36] bg-[#11160f]">
-        <Check className="h-3.5 w-3.5 text-[#a4b58a]" />
+      <div className="flex h-7 w-7 items-center justify-center rounded border border-border bg-background">
+        <Check className="h-3.5 w-3.5 text-[#10b981]" />
       </div>
     );
   }
 
   if (status === "running") {
     return (
-      <div className="flex h-7 w-7 items-center justify-center border border-[#566042] bg-[#14180f]">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#b4c18f]" />
+      <div className="flex h-7 w-7 items-center justify-center rounded border border-border bg-background">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground" />
       </div>
     );
   }
 
   if (status === "error") {
     return (
-      <div className="flex h-7 w-7 items-center justify-center border border-[#533936] bg-[#160f0d]">
-        <XCircle className="h-3.5 w-3.5 text-[#c07e73]" />
+      <div className="flex h-7 w-7 items-center justify-center rounded border border-[#3b1818] bg-[#140a0a]">
+        <XCircle className="h-3.5 w-3.5 text-[#ef4444]" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-7 w-7 items-center justify-center border border-[#30362f] bg-[#0d100d]">
-      <span className="h-1.5 w-1.5 rounded-full bg-[#555c53]" />
+    <div className="flex h-7 w-7 items-center justify-center rounded border border-border bg-background">
+      <span className="h-1.5 w-1.5 rounded-full bg-[#666666]" />
     </div>
   );
 }
@@ -162,7 +163,6 @@ export default function DemoPage() {
 
     try {
       if (isStreamingScale) {
-        // Execute real streaming orchestrator on server
         const response = await fetch("/api/scale/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -171,12 +171,11 @@ export default function DemoPage() {
 
         const data = await response.json();
         if (!response.ok || !data?.success) {
-          throw new Error(data?.error || "Streaming scale run failed.");
+          throw new Error(apiErrorMessage(data, "Streaming scale run failed."));
         }
 
         setScaleResult(data);
       } else {
-        // Generate standard synthetic dataset
         const response = await fetch("/api/batches/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -295,559 +294,438 @@ export default function DemoPage() {
     steps.length > 0 && steps.every((s) => s.status === "done");
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[8px] font-medium uppercase tracking-[0.22em] text-[#63695f]">
-              <ShieldCheck className="h-3.5 w-3.5 text-[#97a57e]" />
-              Interactive Reconciliation Control Plane
-            </div>
+      <PageHeader
+        tag="Interactive Lab"
+        title="Scale lab & benchmark execution"
+        description="Deterministic financial scenarios, multi-worker streaming partitions, and live cryptographic verification."
+        badge={<Badge variant="outline">{isStreamingScale ? "Streaming workers" : size === 250 ? "Official benchmark" : "Standard run"}</Badge>}
+      />
 
-            <h1 className="mt-1 text-[20px] font-bold tracking-[-0.03em] text-[#e3e1d8]">
-              Scale Lab & Benchmark Execution
-            </h1>
-
-            <p className="mt-1 text-[11px] text-[#71776d]">
-              Deterministic scenarios, multi-worker streaming partitions, and live cryptographic verification.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.14em] ${
-              isStreamingScale
-                ? "border-[#384a56] bg-[#0c141a] text-[#88b0c4]"
-                : size === 250
-                ? "border-[#4a5839] bg-[#12180e] text-[#a8b88d]"
-                : "border-[#30352f] bg-[#0e110e] text-[#858b81]"
-            }`}>
-              <span className="h-1.5 w-1.5 rounded-full bg-current" />
-              {isStreamingScale ? "STREAMING WORKERS" : size === 250 ? "OFFICIAL BENCHMARK" : "STANDARD RUN"}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* Top Level Mode Selector */}
-      <div className="flex border-b border-[#2a2e29] bg-[#0d100d]">
+      {/* Mode Selector Tabs */}
+      <div className="inline-flex rounded-md border border-border bg-card p-0.5">
         <button
           type="button"
           onClick={() => setActiveTab("TRACK_04")}
-          className={`flex items-center gap-2 px-6 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${
+          className={`px-3.5 py-1.5 text-xs font-medium rounded transition ${
             activeTab === "TRACK_04"
-              ? "border-[#a4b58a] text-[#e3e1d8] bg-[#141a12]"
-              : "border-transparent text-[#71776d] hover:text-[#c5cbc1] hover:bg-[#10130f]"
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Sparkles className="h-4 w-4 text-[#a4b58a]" />
-          Razorpay Track 04: AI Finance-Ops Loop
+          <span>Track 04: Finance-Ops Loop</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("SCALE_LAB")}
-          className={`flex items-center gap-2 px-6 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${
+          className={`px-3.5 py-1.5 text-xs font-medium rounded transition ${
             activeTab === "SCALE_LAB"
-              ? "border-[#a4b58a] text-[#e3e1d8] bg-[#141a12]"
-              : "border-transparent text-[#71776d] hover:text-[#c5cbc1] hover:bg-[#10130f]"
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Database className="h-4 w-4 text-[#88b0c4]" />
-          Scale Lab & Official Benchmark (250 to 10M)
+          <span>Scale Lab & Benchmark (250 to 10M)</span>
         </button>
       </div>
 
       {activeTab === "TRACK_04" ? (
         <FinanceOpsVisualizer />
       ) : (
-        <>
-      {error ? (
-        <div className="flex items-start gap-3 border border-[#553833] bg-[#160f0d] px-4 py-3">
-          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#bf7d72]" />
-          <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#c17e73]">
-              Execution failed
-            </div>
-            <div className="mt-1 text-[10px] leading-5 text-[#98716b]">
-              {error}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Configuration */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="border-b border-[#252a24] px-5 py-4">
-          <div className="flex items-center gap-2">
-            <Database className="h-3.5 w-3.5 text-[#98a47f]" />
-            <div>
-              <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-                Scale Selection & Mode
-              </div>
-              <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
-                Choose workload size and execution architecture
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-px bg-[#252a24] xl:grid-cols-[320px_1fr]">
-          {/* Size Selector */}
-          <div className="bg-[#0a0d0a] p-5">
-            <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#626960]">
-              Scale Presets
-            </div>
-
-            <div className="mt-2 text-[11px] text-[#bfc0b8]">
-              Select execution tier
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              {SIZES.map((opt) => {
-                const selected = size === opt.size;
-
-                return (
-                  <button
-                    key={opt.size}
-                    type="button"
-                    disabled={loading}
-                    onClick={() => {
-                      setSize(opt.size);
-                      setResult(null);
-                      setScaleResult(null);
-                    }}
-                    className={`relative flex flex-col items-start justify-center p-3 border text-left transition ${
-                      selected
-                        ? "border-[#657151] bg-[#151b11] text-[#c5d0aa]"
-                        : "border-[#30352f] bg-[#0e110e] text-[#777d74] hover:border-[#4b5442] hover:text-[#b3b6ad]"
-                    }`}
-                  >
-                    {selected ? (
-                      <span className="absolute left-0 top-0 h-full w-px bg-[#a6b589]" />
-                    ) : null}
-
-                    <span className="text-[12px] font-bold font-mono text-[#d0cec6]">
-                      {opt.label} recs
-                    </span>
-                    <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wider text-[#8b9580]">
-                      {opt.badge}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-5 border-t border-[#20241f] pt-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[8px] uppercase tracking-[0.14em] text-[#5c635a]">
-                  Selected Tier
-                </span>
-                <span className="font-mono text-[12px] font-bold text-[#b5bd9e]">
-                  {size.toLocaleString()} records
-                </span>
-              </div>
-              <div className="mt-1 text-[8px] text-[#4f554d]">
-                {isStreamingScale ? "Bounded chunk streaming · 16 workers" : "Deterministic in-memory evaluation"}
-              </div>
-            </div>
-          </div>
-
-          {/* Execution Mode Details */}
-          <div className="bg-[#0a0d0a] p-5">
-            {isStreamingScale ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#626960]">
-                      Hyperscale Pre-Flight Configuration
-                    </div>
-                    <div className="mt-1 text-[12px] font-semibold text-[#88b0c4]">
-                      Bounded-Memory Streaming Engine
-                    </div>
-                  </div>
-                  <span className="border border-[#384a56] bg-[#0c141a] px-2 py-0.5 font-mono text-[8px] text-[#88b0c4]">
-                    STREAMING_BOUNDED_HEAP
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="border border-[#1e231e] bg-[#0e120e] p-3">
-                    <div className="text-[7px] uppercase tracking-[0.15em] text-[#5a6156]">Partitions</div>
-                    <div className="mt-1 font-mono text-[14px] font-bold text-[#d0cec6]">
-                      {(size / 20).toLocaleString()}
-                    </div>
-                    <div className="mt-0.5 text-[7px] text-[#60675c]">Disjoint Clusters</div>
-                  </div>
-
-                  <div className="border border-[#1e231e] bg-[#0e120e] p-3">
-                    <div className="text-[7px] uppercase tracking-[0.15em] text-[#5a6156]">Worker Pool</div>
-                    <div className="mt-1 font-mono text-[14px] font-bold text-[#a8b88d]">
-                      16 Workers
-                    </div>
-                    <div className="mt-0.5 text-[7px] text-[#60675c]">Concurrent Leases</div>
-                  </div>
-
-                  <div className="border border-[#1e231e] bg-[#0e120e] p-3">
-                    <div className="text-[7px] uppercase tracking-[0.15em] text-[#5a6156]">Memory Safety</div>
-                    <div className="mt-1 font-mono text-[14px] font-bold text-[#96a879]">
-                      O(chunk) Heap
-                    </div>
-                    <div className="mt-0.5 text-[7px] text-[#60675c]">Zero Whole-Batch Alloc</div>
-                  </div>
-
-                  <div className="border border-[#1e231e] bg-[#0e120e] p-3">
-                    <div className="text-[7px] uppercase tracking-[0.15em] text-[#5a6156]">Audit Lineage</div>
-                    <div className="mt-1 font-mono text-[14px] font-bold text-[#d0cec6]">
-                      Binary DAG
-                    </div>
-                    <div className="mt-0.5 text-[7px] text-[#60675c]">SHA-256 Merkle Root</div>
-                  </div>
-                </div>
-
-                <p className="text-[10px] leading-relaxed text-[#757c70]">
-                  This run streams synthetic financial partitions directly into distributed worker queues in bounded chunks.
-                  Results are staged, aggregated, and cryptographically verified with 0 retries and 0 DLQ.
-                </p>
-              </div>
-            ) : (
+        <div className="space-y-6">
+          {error ? (
+            <div className="flex items-start gap-3 rounded-md border border-[#3b1818] bg-[#140a0a] p-4 text-xs text-[#ef4444]">
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <div className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#626960]">
-                      Scenario Distribution
-                    </div>
-                    <div className="mt-1 text-[10px] text-[#757b72]">
-                      Ten deterministic financial conditions across the generated batch.
-                    </div>
-                  </div>
-                  <span className="font-mono text-[9px] text-[#535a51]">100%</span>
-                </div>
-
-                <div className="mt-4 space-y-2.5">
-                  {DISTRIBUTION.map((item, index) => {
-                    const count = Math.round((size * item.pct) / 100);
-                    return (
-                      <div key={item.label}>
-                        <div className="mb-1 flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="font-mono text-[7px] text-[#4e554c]">
-                              {String(index + 1).padStart(2, "0")}
-                            </span>
-                            <span className="truncate text-[9px] text-[#8f948b]">
-                              {item.label}
-                            </span>
-                          </div>
-                          <span className="shrink-0 font-mono text-[8px] text-[#686f65]">
-                            {item.pct}% · {count}
-                          </span>
-                        </div>
-                        <div className="h-1 bg-[#222720]">
-                          <div
-                            className="h-full bg-[#88966f] transition-all"
-                            style={{ width: item.pct + "%" }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <div className="font-semibold">Execution failed</div>
+                <div className="mt-1 text-muted-foreground">{error}</div>
               </div>
-            )}
-          </div>
-        </div>
-
-        <div className="border-t border-[#252a24] p-5">
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={loading}
-            className={`group flex h-11 w-full items-center justify-center gap-2 border text-[9px] font-semibold uppercase tracking-[0.15em] transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              isStreamingScale
-                ? "border-[#3b5566] bg-[#101b22] text-[#9fc7dc] hover:bg-[#16252f]"
-                : "border-[#596648] bg-[#151b11] text-[#c1cd9f] hover:bg-[#1a2115]"
-            }`}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {isStreamingScale ? "Executing multi-worker streaming reconciliation..." : "Generating dataset..."}
-              </>
-            ) : (
-              <>
-                <Play className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                {isStreamingScale
-                  ? "Launch " + size.toLocaleString() + "-Record Streaming Execution (16 Workers)"
-                  : "Generate " + size.toLocaleString() + " Records"}
-              </>
-            )}
-          </button>
-        </div>
-      </section>
-
-      {/* Scale Run Telemetry Result */}
-      {scaleResult ? (
-        <section className="border border-[#384a56] bg-[#0c141a]">
-          <div className="flex flex-col gap-4 border-b border-[#1f2e38] px-5 py-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-[#88b0c4]" />
-                <span className="text-[8px] font-bold uppercase tracking-[0.19em] text-[#88b0c4]">
-                  Scale Execution Verified · {scaleResult.classification}
-                </span>
-              </div>
-              <div className="mt-1 font-mono text-[10px] text-[#a4c5d6]">
-                Run ID: {scaleResult.runId}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/dashboard?batchId=" + scaleResult.batchId)}
-                className="inline-flex items-center gap-1.5 border border-[#4a6b7e] bg-[#16252f] px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.14em] text-[#a8d0e6] transition hover:bg-[#1e3442]"
-              >
-                Inspect in Dashboard
-                <ArrowRight className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-px bg-[#1f2e38] md:grid-cols-4 lg:grid-cols-6">
-            <div className="bg-[#090f14] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#688291]">Throughput</div>
-              <div className="mt-1 font-mono text-[18px] font-bold text-[#88b0c4]">
-                {scaleResult.report.throughputRps.toLocaleString()}
-              </div>
-              <div className="mt-0.5 text-[7px] text-[#688291]">records / sec</div>
-            </div>
-
-            <div className="bg-[#090f14] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#688291]">Wall Duration</div>
-              <div className="mt-1 font-mono text-[18px] font-bold text-[#d7d5cd]">
-                {scaleResult.report.wallTimeMs >= 1000
-                  ? (scaleResult.report.wallTimeMs / 1000).toFixed(2) + "s"
-                  : scaleResult.report.wallTimeMs + "ms"}
-              </div>
-              <div className="mt-0.5 text-[7px] text-[#688291]">end-to-end</div>
-            </div>
-
-            <div className="bg-[#090f14] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#688291]">Partitions</div>
-              <div className="mt-1 font-mono text-[18px] font-bold text-[#d7d5cd]">
-                {scaleResult.report.totalPartitions.toLocaleString()}
-              </div>
-              <div className="mt-0.5 text-[7px] text-[#688291]">all completed</div>
-            </div>
-
-            <div className="bg-[#090f14] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#688291]">Worker Pool</div>
-              <div className="mt-1 font-mono text-[18px] font-bold text-[#a8b88d]">
-                {scaleResult.report.workerCount} Workers
-              </div>
-              <div className="mt-0.5 text-[7px] text-[#688291]">{scaleResult.report.workerUtilizationPct}% utilization</div>
-            </div>
-
-            <div className="bg-[#090f14] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#688291]">Peak Heap</div>
-              <div className="mt-1 font-mono text-[18px] font-bold text-[#96a879]">
-                {scaleResult.report.peakHeapMB} MB
-              </div>
-              <div className="mt-0.5 text-[7px] text-[#688291]">bounded stream</div>
-            </div>
-
-            <div className="bg-[#090f14] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#688291]">Reliability</div>
-              <div className="mt-1 font-mono text-[18px] font-bold text-[#96a879]">
-                0 Retry / 0 DLQ
-              </div>
-              <div className="mt-0.5 text-[7px] text-[#688291]">100% lease success</div>
-            </div>
-          </div>
-
-          <div className="border-t border-[#1f2e38] p-4 bg-[#090f14]">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between text-[8px]">
-              <span className="uppercase tracking-[0.14em] text-[#688291]">
-                Cryptographic Merkle DAG Root:
-              </span>
-              <span className="font-mono text-[#a8d0e6] truncate max-w-xl">
-                {scaleResult.report.merkleRoot}
-              </span>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {/* Generated result for Standard runs */}
-      {result && !isStreamingScale ? (
-        <section className="border border-[#394833] bg-[#0d100d]">
-          <div className="flex flex-col gap-4 border-b border-[#2b3328] px-5 py-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-[#9faf83]" />
-                <span className="text-[8px] font-medium uppercase tracking-[0.19em] text-[#68725f]">
-                  Batch generated
-                </span>
-              </div>
-              <div className="mt-2 font-mono text-[10px] text-[#aeb39f]">
-                {result.batchId}
-              </div>
-            </div>
-
-            <span className="inline-flex items-center gap-1.5 border border-[#394833] bg-[#10150f] px-2.5 py-1.5 text-[8px] uppercase tracking-[0.13em] text-[#9faf83]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#94a779]" />
-              Ready for reconciliation
-            </span>
-          </div>
-
-          {result.stats ? (
-            <div className="grid grid-cols-2 gap-px bg-[#252a24] md:grid-cols-4">
-              {Object.entries(result.stats).map(([key, value]) => (
-                <div key={key} className="bg-[#0a0d0a] p-4">
-                  <div className="text-[8px] uppercase tracking-[0.16em] text-[#626960]">
-                    {key.replace(/([A-Z])/g, " $1")}
-                  </div>
-                  <div className="mt-2 text-[20px] font-semibold tracking-[-0.035em] text-[#dddcd4]">
-                    {value}
-                  </div>
-                </div>
-              ))}
             </div>
           ) : null}
 
-          <div className="border-t border-[#252a24] p-5">
-            <button
-              type="button"
-              onClick={handleReconcile}
-              disabled={loading}
-              className="group flex h-11 w-full items-center justify-center gap-2 bg-[#d9d6c7] text-[9px] font-semibold uppercase tracking-[0.15em] text-[#11130f] transition hover:bg-[#ece9da] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Running reconciliation pipeline
-                </>
-              ) : (
-                <>
-                  <Zap className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
-                  Run 3-pass reconciliation
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                </>
-              )}
-            </button>
-          </div>
-        </section>
-      ) : null}
+          {/* Configuration Grid */}
+          <section className="rounded-lg border border-border bg-card p-6 space-y-6">
+            <SectionHeader
+              title="Workload configuration & scale presets"
+              description="Choose dataset size and execution engine tier"
+              className="border-b-0 pb-0"
+            />
 
-      {/* Progress */}
-      {steps.length > 0 ? (
-        <section className="border border-[#2a2e29] bg-[#0d100d]">
-          <div className="flex items-center justify-between border-b border-[#252a24] px-5 py-4">
-            <div className="flex items-center gap-2">
-              <Brain className="h-3.5 w-3.5 text-[#9c9f80]" />
-              <div>
-                <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-                  Execution
+            <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
+              {/* Size Selector */}
+              <div className="rounded-md border border-border bg-background p-5 space-y-4">
+                <div className="text-xs font-semibold text-foreground">Scale Presets</div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {SIZES.map((opt) => {
+                    const selected = size === opt.size;
+
+                    return (
+                      <button
+                        key={opt.size}
+                        type="button"
+                        disabled={loading}
+                        onClick={() => {
+                          setSize(opt.size);
+                          setResult(null);
+                          setScaleResult(null);
+                        }}
+                        className={`flex flex-col items-start p-3 rounded border text-left transition ${
+                          selected
+                            ? "border-[#ededed] bg-secondary text-foreground"
+                            : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-border"
+                        }`}
+                      >
+                        <span className="text-xs font-mono font-semibold">
+                          {opt.label} recs
+                        </span>
+                        <span className="mt-0.5 text-[10px] text-muted-foreground/70">
+                          {opt.badge}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
-                  Reconciliation pipeline
+
+                <div className="border-t border-border pt-3 text-xs">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Selected</span>
+                    <span className="font-mono font-semibold text-foreground">
+                      {size.toLocaleString()} records
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground/70">
+                    {isStreamingScale ? "Bounded chunk streaming · 16 workers" : "Deterministic in-memory evaluation"}
+                  </div>
                 </div>
+              </div>
+
+              {/* Execution Mode Details */}
+              <div className="rounded-md border border-border bg-background p-5 space-y-4">
+                {isStreamingScale ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">
+                          Streaming Engine Configuration
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          Bounded-memory parallel worker pool
+                        </div>
+                      </div>
+                      <Badge variant="outline">
+                        STREAMING_BOUNDED_HEAP
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
+                      <div className="rounded border border-border bg-card p-3 space-y-1">
+                        <div className="font-mono text-base font-semibold text-foreground">
+                          {(size / 20).toLocaleString()}
+                        </div>
+                        <div className="text-xs font-medium text-foreground">Partitions</div>
+                        <div className="text-[11px] text-muted-foreground/70">Disjoint clusters</div>
+                      </div>
+
+                      <div className="rounded border border-border bg-card p-3 space-y-1">
+                        <div className="font-mono text-base font-semibold text-foreground">
+                          16 Workers
+                        </div>
+                        <div className="text-xs font-medium text-foreground">Worker pool</div>
+                        <div className="text-[11px] text-muted-foreground/70">Concurrent leases</div>
+                      </div>
+
+                      <div className="rounded border border-border bg-card p-3 space-y-1">
+                        <div className="font-mono text-base font-semibold text-[#10b981]">
+                          O(chunk) Heap
+                        </div>
+                        <div className="text-xs font-medium text-foreground">Memory safety</div>
+                        <div className="text-[11px] text-muted-foreground/70">Bounded footprint</div>
+                      </div>
+
+                      <div className="rounded border border-border bg-card p-3 space-y-1">
+                        <div className="font-mono text-base font-semibold text-foreground">
+                          Binary DAG
+                        </div>
+                        <div className="text-xs font-medium text-foreground">Audit lineage</div>
+                        <div className="text-[11px] text-muted-foreground/70">SHA-256 Merkle root</div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Streams synthetic financial partitions directly into distributed worker queues in bounded chunks with 0 retries and 0 dead letters.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-foreground">
+                        Scenario Distribution (10 Deterministic Conditions)
+                      </div>
+                      <span className="font-mono text-xs text-muted-foreground/70">100%</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {DISTRIBUTION.map((item, index) => {
+                        const count = Math.round((size * item.pct) / 100);
+                        return (
+                          <div key={item.label} className="p-2 rounded border border-border bg-card space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{String(index + 1).padStart(2, "0")}. {item.label}</span>
+                              <span className="font-mono text-foreground">{item.pct}% ({count})</span>
+                            </div>
+                            <div className="h-1 bg-secondary rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary text-primary-foreground rounded-full"
+                                style={{ width: item.pct + "%" }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            <span className="text-[8px] uppercase tracking-[0.14em] text-[#555c53]">
-              {steps.filter((step) => step.status === "done").length}/
-              {steps.length} complete
-            </span>
-          </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={loading}
+                className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Executing streaming workload...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    <span>
+                      {isStreamingScale
+                        ? `Launch ${size.toLocaleString()}-record streaming execution (16 workers)`
+                        : `Generate ${size.toLocaleString()} records`}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
 
-          <div className="p-5">
-            <div className="space-y-0">
-              {steps.map((step, index) => (
-                <div
-                  key={step.label + "-" + index}
-                  className="relative flex gap-4"
-                >
-                  {index < steps.length - 1 ? (
-                    <span
-                      className={`absolute left-[13px] top-7 h-[calc(100%-7px)] w-px ${
-                        step.status === "done"
-                          ? "bg-[#4c5a40]"
-                          : "bg-[#292f28]"
-                      }`}
-                    />
-                  ) : null}
-
-                  <div className="relative z-10 shrink-0">
-                    <StepIcon status={step.status} />
+          {/* Scale Run Telemetry Result */}
+          {scaleResult ? (
+            <section className="rounded-lg border border-border bg-card p-6 space-y-6">
+              <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-[#10b981]" />
+                    <span className="text-xs font-semibold text-foreground">
+                      Scale Execution Verified · {scaleResult.classification}
+                    </span>
                   </div>
-
-                  <div className="min-w-0 flex-1 pb-6">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <span
-                        className={`text-[10px] font-semibold ${
-                          step.status === "done"
-                            ? "text-[#aebc95]"
-                            : step.status === "running"
-                              ? "text-[#c1c998]"
-                              : step.status === "error"
-                                ? "text-[#c07f73]"
-                                : "text-[#71776e]"
-                        }`}
-                      >
-                        {step.label}
-                      </span>
-
-                      {step.status === "done" ? (
-                        <span className="text-[7px] uppercase tracking-[0.14em] text-[#64705c]">
-                          Complete
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {step.detail ? (
-                      <p className="mt-1 text-[9px] leading-5 text-[#61685f]">
-                        {step.detail}
-                      </p>
-                    ) : null}
+                  <div className="mt-1 font-mono text-xs text-muted-foreground">
+                    Run ID: {scaleResult.runId}
                   </div>
                 </div>
-              ))}
-            </div>
 
-            {pipelineComplete ? (
-              <div className="mt-1 flex items-center justify-between gap-4 border border-[#394833] bg-[#10150f] px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard?batchId=" + scaleResult.batchId)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
+                >
+                  <span>Inspect in dashboard</span>
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6 text-xs">
+                <div className="rounded border border-border bg-background p-4 space-y-1">
+                  <div className="font-mono text-lg font-semibold text-foreground">
+                    {scaleResult.report.throughputRps.toLocaleString()}
+                  </div>
+                  <div className="text-xs font-medium text-foreground">Throughput</div>
+                  <div className="text-[11px] text-muted-foreground/70">rec / sec</div>
+                </div>
+
+                <div className="rounded border border-border bg-background p-4 space-y-1">
+                  <div className="font-mono text-lg font-semibold text-foreground">
+                    {scaleResult.report.wallTimeMs >= 1000
+                      ? (scaleResult.report.wallTimeMs / 1000).toFixed(2) + "s"
+                      : scaleResult.report.wallTimeMs + "ms"}
+                  </div>
+                  <div className="text-xs font-medium text-foreground">Wall duration</div>
+                  <div className="text-[11px] text-muted-foreground/70">end-to-end</div>
+                </div>
+
+                <div className="rounded border border-border bg-background p-4 space-y-1">
+                  <div className="font-mono text-lg font-semibold text-foreground">
+                    {scaleResult.report.totalPartitions.toLocaleString()}
+                  </div>
+                  <div className="text-xs font-medium text-foreground">Partitions</div>
+                  <div className="text-[11px] text-muted-foreground/70">all completed</div>
+                </div>
+
+                <div className="rounded border border-border bg-background p-4 space-y-1">
+                  <div className="font-mono text-lg font-semibold text-foreground">
+                    {scaleResult.report.workerCount} Workers
+                  </div>
+                  <div className="text-xs font-medium text-foreground">Worker pool</div>
+                  <div className="text-[11px] text-muted-foreground/70">{scaleResult.report.workerUtilizationPct}% utilization</div>
+                </div>
+
+                <div className="rounded border border-border bg-background p-4 space-y-1">
+                  <div className="font-mono text-lg font-semibold text-[#10b981]">
+                    {scaleResult.report.peakHeapMB} MB
+                  </div>
+                  <div className="text-xs font-medium text-foreground">Peak heap</div>
+                  <div className="text-[11px] text-muted-foreground/70">bounded stream</div>
+                </div>
+
+                <div className="rounded border border-border bg-background p-4 space-y-1">
+                  <div className="font-mono text-lg font-semibold text-[#10b981]">
+                    0 Retry / 0 DLQ
+                  </div>
+                  <div className="text-xs font-medium text-foreground">Reliability</div>
+                  <div className="text-[11px] text-muted-foreground/70">100% success</div>
+                </div>
+              </div>
+
+              <div className="rounded border border-border bg-background p-3 text-xs font-mono">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-muted-foreground/70">Merkle DAG Root:</span>
+                  <span className="text-foreground break-all max-w-xl">
+                    {scaleResult.report.merkleRoot}
+                  </span>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {/* Generated Result for Standard Runs */}
+          {result && !isStreamingScale ? (
+            <section className="rounded-lg border border-border bg-card p-6 space-y-6">
+              <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-[#10b981]" />
+                    <span className="text-xs font-semibold text-foreground">
+                      Batch generated
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-xs text-muted-foreground">
+                    {result.batchId}
+                  </div>
+                </div>
+
+                <Badge variant="success">
+                  Ready for reconciliation
+                </Badge>
+              </div>
+
+              {result.stats ? (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 text-xs">
+                  {Object.entries(result.stats).map(([key, value]) => (
+                    <div key={key} className="rounded border border-border bg-background p-4">
+                      <div className="text-[10px] uppercase text-muted-foreground/70">
+                        {key.replace(/([A-Z])/g, " $1")}
+                      </div>
+                      <div className="mt-1 font-mono text-lg font-semibold text-foreground">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleReconcile}
+                  disabled={loading}
+                  className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Running multi-pass reconciliation...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-3.5 w-3.5" />
+                      <span>Run 3-pass reconciliation pipeline</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {/* Execution Pipeline Steps */}
+          {steps.length > 0 ? (
+            <section className="rounded-lg border border-border bg-card p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-border pb-3">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-[#9faf83]" />
-                  <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#a7b58c]">
-                    Pipeline complete
+                  <Brain className="h-4 w-4 text-foreground" />
+                  <span className="text-xs font-semibold text-foreground">
+                    Multi-pass pipeline progress
                   </span>
                 </div>
 
-                <span className="text-[8px] uppercase tracking-[0.12em] text-[#626960]">
-                  Opening dashboard
+                <span className="text-xs font-mono text-muted-foreground/70">
+                  {steps.filter((step) => step.status === "done").length}/{steps.length} complete
                 </span>
               </div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
 
-        </>
+              <div className="space-y-4 pt-2">
+                {steps.map((step, index) => (
+                  <div key={step.label + "-" + index} className="flex gap-4 items-start text-xs">
+                    <StepIcon status={step.status} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`font-semibold ${
+                          step.status === "done"
+                            ? "text-foreground"
+                            : step.status === "running"
+                            ? "text-foreground"
+                            : step.status === "error"
+                            ? "text-[#ef4444]"
+                            : "text-muted-foreground/70"
+                        }`}>
+                          {step.label}
+                        </span>
+                        {step.status === "done" && (
+                          <Badge variant="success">Done</Badge>
+                        )}
+                      </div>
+                      {step.detail ? (
+                        <p className="mt-1 text-xs text-muted-foreground font-mono">
+                          {step.detail}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {pipelineComplete ? (
+                <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-background p-3 text-xs">
+                  <div className="flex items-center gap-2 text-[#10b981]">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Pipeline complete</span>
+                  </div>
+                  <span className="text-muted-foreground">
+                    Opening dashboard...
+                  </span>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
       )}
-
-      {/* Footer */}
-      <div className="flex flex-col gap-3 border-t border-[#20241f] pt-4 text-[8px] uppercase tracking-[0.16em] text-[#4f554d] sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-3 w-3" />
-          Real Scale & Invariant Truth
-        </div>
-
-        <div className="flex items-center gap-4">
-          <span>Deterministic</span>
-          <span>Bounded Stream</span>
-          <span>Reproducible Merkle Root</span>
-        </div>
-      </div>
     </div>
   );
 }

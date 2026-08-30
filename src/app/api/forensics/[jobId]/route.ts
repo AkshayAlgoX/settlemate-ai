@@ -7,6 +7,7 @@ import {
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
 } from "@/lib/security/api-security";
 import { buildForensicsTimeline } from "@/lib/forensics/forensics-engine";
 import { instrument } from "@/lib/observability/route";
@@ -50,16 +51,9 @@ async function handleGet(
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        {
-          success: false,
-          error: (err as Error).message || "Failed to retrieve forensics timeline",
-          timestamp: new Date().toISOString(),
-        },
-        { status: 500 }
-      )
-    );
+    // safeErrorResponse masks 5xx detail; the raw message exposed SQLite paths
+    // and timeline-builder internals on failure.
+    return safeErrorResponse(err, 500, "FORENSICS_TIMELINE_ERROR");
   }
 }
 

@@ -12,7 +12,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { CouncilReviewRequest, InvestigatorOutput } from "./council";
 import type { AIClaim } from "./claim-types";
-import { AiClaimLogRepository } from "@/lib/storage/sqlite-db";
+import { UnifiedAiClaimLogRepository as AiClaimLogRepository } from "@/lib/storage/unified-store";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";

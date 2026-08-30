@@ -1,10 +1,24 @@
 /*
- * SettleMate AI — Decision Receipt Retrieval Endpoint
+ * SettleMate AI — Decision Receipt Retrieval & Independent Verification Endpoint
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { applySecurityHeaders, handleCorsPreflight, rateLimitGuard } from "@/lib/security/api-security";
-import { DecisionReceiptRepository, JobRepository } from "@/lib/storage/sqlite-db";
+import {
+  UnifiedReceiptRepository as DecisionReceiptRepository,
+  UnifiedJobRepository as JobRepository,
+} from "@/lib/storage/unified-store";
+import {
+  verifyDecisionReceipt,
+  generateOfflineEvidenceBundle,
+} from "@/lib/reconciliation/merkle-verifier";
+import type { V1DecisionReceipt } from "@/lib/api/v1-store";
+
+interface FormattedReceipt extends V1DecisionReceipt {
+  receiptId?: string;
+  jobId?: string;
+  createdAt?: string;
+}
 
 export async function OPTIONS() {
   return handleCorsPreflight();
@@ -33,28 +47,53 @@ export async function GET(
     receipt = DecisionReceiptRepository.getByJobId(id);
   }
 
-  if (!receipt) {
+  let formattedReceipt: FormattedReceipt | null = null;
+  let jobSummary: Record<string, unknown> = {};
+
+  if (receipt) {
+    formattedReceipt = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      rootHash: receipt.rootHash,
+      leafCount: receipt.leafCount,
+      algorithm: receipt.algorithm,
+      timestamp: receipt.timestamp,
+      fingerprint: receipt.fingerprint,
+      signature: receipt.signature,
+      createdAt: receipt.createdAt,
+    };
+    if (receipt.jobId) {
+      const job = JobRepository.get(receipt.jobId);
+      if (job?.summary) {
+        try {
+          jobSummary = JSON.parse(job.summary);
+        } catch {}
+      }
+    }
+  } else {
     // Check if the job exists and has a receipt embedded
     const job = JobRepository.get(id);
     if (job?.receipt) {
       const parsedReceipt = JSON.parse(job.receipt);
-      return applySecurityHeaders(
-        NextResponse.json({
-          success: true,
-          receipt: {
-            receiptId: `rcpt_${parsedReceipt.fingerprint || id}`,
-            jobId: job.jobId,
-            rootHash: parsedReceipt.rootHash,
-            leafCount: parsedReceipt.leafCount,
-            algorithm: parsedReceipt.algorithm,
-            timestamp: parsedReceipt.timestamp,
-            fingerprint: parsedReceipt.fingerprint,
-            signature: parsedReceipt.signature,
-          },
-        })
-      );
+      formattedReceipt = {
+        receiptId: `rcpt_${parsedReceipt.fingerprint || id}`,
+        jobId: job.jobId,
+        rootHash: parsedReceipt.rootHash,
+        leafCount: parsedReceipt.leafCount,
+        algorithm: parsedReceipt.algorithm,
+        timestamp: parsedReceipt.timestamp,
+        fingerprint: parsedReceipt.fingerprint,
+        signature: parsedReceipt.signature,
+      };
+      if (job.summary) {
+        try {
+          jobSummary = JSON.parse(job.summary);
+        } catch {}
+      }
     }
+  }
 
+  if (!formattedReceipt) {
     return applySecurityHeaders(
       NextResponse.json(
         {
@@ -68,21 +107,16 @@ export async function GET(
     );
   }
 
+  // Execute independent deterministic verification
+  const verification = verifyDecisionReceipt(formattedReceipt);
+  const offlineBundle = generateOfflineEvidenceBundle(formattedReceipt, jobSummary);
+
   return applySecurityHeaders(
     NextResponse.json({
       success: true,
-      receipt: {
-        receiptId: receipt.receiptId,
-        jobId: receipt.jobId,
-        rootHash: receipt.rootHash,
-        leafCount: receipt.leafCount,
-        algorithm: receipt.algorithm,
-        timestamp: receipt.timestamp,
-        fingerprint: receipt.fingerprint,
-        signature: receipt.signature,
-        canonicalPayload: receipt.canonicalPayload ? JSON.parse(receipt.canonicalPayload) : undefined,
-        createdAt: receipt.createdAt,
-      },
+      receipt: formattedReceipt,
+      verification,
+      offlineVerificationBundle: offlineBundle,
     })
   );
 }

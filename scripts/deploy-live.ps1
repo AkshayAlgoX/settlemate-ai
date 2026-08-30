@@ -13,7 +13,7 @@ npm -v
 # 2. Database & dependencies
 Write-Host "→ [2/6] Generating Prisma Client and initializing persistent SQLite database..." -ForegroundColor Yellow
 npx prisma generate
-npx prisma db push --skip-generate
+npx prisma db push
 npx tsx scripts/init-db.ts
 
 # 3. Test verification

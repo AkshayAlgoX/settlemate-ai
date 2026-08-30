@@ -218,9 +218,37 @@ export const metrics = {
     "settlemate_ai_validator_checks_total",
     "Total AI claim-validator checks, labeled by result (pass/fail)"
   ),
+  webhookEnqueued: registry.counter(
+    "settlemate_webhook_enqueued_total",
+    "Total webhook delivery attempts enqueued"
+  ),
   webhookDeliveries: registry.counter(
     "settlemate_webhook_deliveries_total",
-    "Total webhook delivery attempts, labeled by status"
+    "Total webhook delivery attempts, labeled by event"
+  ),
+  webhookSuccess: registry.counter(
+    "settlemate_webhook_success_total",
+    "Total successful webhook deliveries"
+  ),
+  webhookFailures: registry.counter(
+    "settlemate_webhook_failure_total",
+    "Total failed webhook delivery attempts"
+  ),
+  webhookRetries: registry.counter(
+    "settlemate_webhook_retry_total",
+    "Total webhook delivery retries scheduled"
+  ),
+  webhookDeadLetter: registry.counter(
+    "settlemate_webhook_dead_letter_total",
+    "Total webhook deliveries transitioned to Dead Letter Queue (DLQ)"
+  ),
+  webhookSsrfBlocked: registry.counter(
+    "settlemate_webhook_ssrf_block_total",
+    "Total webhook deliveries blocked by SSRF defense"
+  ),
+  webhookLatencyMs: registry.histogram(
+    "settlemate_webhook_latency_ms",
+    "Webhook outbound delivery latency in milliseconds"
   ),
   rateLimitRejections: registry.counter(
     "settlemate_rate_limit_rejections_total",
@@ -229,6 +257,118 @@ export const metrics = {
   dbBusyRetries: registry.counter(
     "settlemate_db_busy_retries_total",
     "Total SQLITE_BUSY retries performed by the storage layer"
+  ),
+  dbTransactionsTotal: registry.counter(
+    "settlemate_db_transactions_total",
+    "Total database transactions executed, labeled by status"
+  ),
+  dbRollbacksTotal: registry.counter(
+    "settlemate_db_rollbacks_total",
+    "Total database transaction rollbacks"
+  ),
+  dbQueryDurationMs: registry.histogram(
+    "settlemate_db_query_duration_ms",
+    "Database query execution latency in milliseconds"
+  ),
+  dbConnectionsActive: registry.gauge(
+    "settlemate_db_connections_active",
+    "Current active database connections in connection pool"
+  ),
+  jobClaimsTotal: registry.counter(
+    "settlemate_job_claims_total",
+    "Total asynchronous jobs claimed by distributed workers, labeled by tenant and job type"
+  ),
+  jobCompletedTotal: registry.counter(
+    "settlemate_job_completed_total",
+    "Total asynchronous jobs completed successfully by distributed workers"
+  ),
+  jobFailedTotal: registry.counter(
+    "settlemate_job_failed_total",
+    "Total asynchronous jobs failed during worker execution"
+  ),
+  jobDeadLetterTotal: registry.counter(
+    "settlemate_job_dead_letter_total",
+    "Total jobs exhausted retries and transitioned to Dead Letter Queue (DLQ)"
+  ),
+  jobRetryTotal: registry.counter(
+    "settlemate_job_retry_total",
+    "Total job retries scheduled with exponential backoff"
+  ),
+  jobLeaseExpiryTotal: registry.counter(
+    "settlemate_job_lease_expiry_total",
+    "Total expired leases reclaimed by healthy workers"
+  ),
+  jobProcessingDurationMs: registry.histogram(
+    "settlemate_job_processing_duration_ms",
+    "Job execution duration in milliseconds by distributed workers"
+  ),
+  streamConnections: registry.counter(
+    "settlemate_stream_connections_active",
+    "Active Server-Sent Events (SSE) stream client connections"
+  ),
+  streamEventsPublished: registry.counter(
+    "settlemate_stream_events_published_total",
+    "Total real-time telemetry events published to event broker"
+  ),
+  streamEventsDelivered: registry.counter(
+    "settlemate_stream_events_delivered_total",
+    "Total real-time telemetry events delivered to connected SSE clients"
+  ),
+  streamReconnects: registry.counter(
+    "settlemate_stream_reconnects_total",
+    "Total SSE reconnect events with Last-Event-ID catch-up"
+  ),
+  streamDeliveryErrors: registry.counter(
+    "settlemate_stream_delivery_errors_total",
+    "Total stream event delivery errors"
+  ),
+  ingestionEventsReceived: registry.counter(
+    "settlemate_ingestion_events_received_total",
+    "Total streaming ingestion records received via POST /api/v1/stream/ingest"
+  ),
+  ingestionEventsRejected: registry.counter(
+    "settlemate_ingestion_events_rejected_total",
+    "Total streaming ingestion records rejected due to validation or rate limit"
+  ),
+  ingestionDuplicateEvents: registry.counter(
+    "settlemate_ingestion_duplicate_events_total",
+    "Total duplicate streaming ingestion requests safely deduplicated"
+  ),
+  domainEventsCreatedTotal: registry.counter(
+    "settlemate_domain_events_created_total",
+    "Total durable domain events persisted in PostgreSQL"
+  ),
+  domainEventsReplayedTotal: registry.counter(
+    "settlemate_domain_events_replayed_total",
+    "Total historical domain events replayed via Last-Event-ID"
+  ),
+  domainEventReplayMissesTotal: registry.counter(
+    "settlemate_domain_event_replay_misses_total",
+    "Total replay misses when requested sequence is beyond retention"
+  ),
+  archiveUploadTotal: registry.counter(
+    "settlemate_archive_upload_total",
+    "Total archival upload operations initiated"
+  ),
+  archiveUploadSuccessTotal: registry.counter(
+    "settlemate_archive_upload_success_total",
+    "Total archival uploads completed successfully"
+  ),
+  archiveUploadFailureTotal: registry.counter(
+    "settlemate_archive_upload_failure_total",
+    "Total archival upload failures"
+  ),
+  archiveVerificationTotal: registry.counter(
+    "settlemate_archive_verification_total",
+    "Total archival integrity verification checks performed"
+  ),
+  archiveChecksumFailureTotal: registry.counter(
+    "settlemate_archive_checksum_failure_total",
+    "Total archival checksum verification failures"
+  ),
+  archiveRestoreTotal: registry.counter(
+    "settlemate_archive_restore_total",
+    "Total archival object restores retrieved"
   ),
 };
 

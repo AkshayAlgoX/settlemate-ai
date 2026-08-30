@@ -4,18 +4,19 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  AlertTriangle,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Loader2,
   Search,
-  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { EXCEPTION_LABELS, type ExceptionType } from "@/lib/constants";
 import { formatCurrency } from "@/lib/format";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+import { Dropdown } from "@/components/ui/dropdown";
 
 interface ExceptionItem {
   id: string;
@@ -57,104 +58,6 @@ function formatType(value: string) {
   );
 }
 
-function RiskBadge({ risk }: { risk: string }) {
-  const config = {
-    HIGH: {
-      label: "High",
-      text: "text-[#c88679]",
-      border: "border-[#5a3b36]",
-      bg: "bg-[#180f0d]",
-      dot: "bg-[#b77167]",
-    },
-    MEDIUM: {
-      label: "Medium",
-      text: "text-[#c6af77]",
-      border: "border-[#5b4d32]",
-      bg: "bg-[#171309]",
-      dot: "bg-[#b69a5d]",
-    },
-    LOW: {
-      label: "Low",
-      text: "text-[#a3b289]",
-      border: "border-[#3b4935]",
-      bg: "bg-[#10150f]",
-      dot: "bg-[#879c72]",
-    },
-  }[risk as "HIGH" | "MEDIUM" | "LOW"] || {
-    label: risk,
-    text: "text-[#929890]",
-    border: "border-[#333832]",
-    bg: "bg-[#10130f]",
-    dot: "bg-[#747b72]",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 border px-2 py-1 text-[8px] font-semibold uppercase tracking-[0.15em] ${config.border} ${config.bg} ${config.text}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} />
-      {config.label}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<
-    string,
-    { text: string; border: string; bg: string }
-  > = {
-    OPEN: {
-      text: "text-[#a6aaa1]",
-      border: "border-[#3b4039]",
-      bg: "bg-[#111410]",
-    },
-    INVESTIGATING: {
-      text: "text-[#a7b49a]",
-      border: "border-[#414c39]",
-      bg: "bg-[#12160f]",
-    },
-    PENDING_APPROVAL: {
-      text: "text-[#c4ad76]",
-      border: "border-[#564a31]",
-      bg: "bg-[#17130b]",
-    },
-    ESCALATED: {
-      text: "text-[#c58378]",
-      border: "border-[#533b36]",
-      bg: "bg-[#170f0d]",
-    },
-    RESOLVED: {
-      text: "text-[#9eb281]",
-      border: "border-[#394936]",
-      bg: "bg-[#10150e]",
-    },
-    REJECTED: {
-      text: "text-[#c07f77]",
-      border: "border-[#503834]",
-      bg: "bg-[#170f0d]",
-    },
-    REOPENED: {
-      text: "text-[#b1a47f]",
-      border: "border-[#4e4532]",
-      bg: "bg-[#14120d]",
-    },
-  };
-
-  const style = config[status] || {
-    text: "text-[#8e948c]",
-    border: "border-[#343934]",
-    bg: "bg-[#111410]",
-  };
-
-  return (
-    <span
-      className={`inline-flex whitespace-nowrap border px-2 py-1 text-[8px] font-medium uppercase tracking-[0.12em] ${style.border} ${style.bg} ${style.text}`}
-    >
-      {status.replace(/_/g, " ")}
-    </span>
-  );
-}
-
 function StatBlock({
   label,
   value,
@@ -167,30 +70,27 @@ function StatBlock({
   tone?: "neutral" | "risk" | "warning" | "safe";
 }) {
   const valueColor = {
-    neutral: "text-[#ece9df]",
-    risk: "text-[#c78678]",
-    warning: "text-[#c6ad73]",
-    safe: "text-[#a6b78b]",
+    neutral: "text-foreground",
+    risk: "text-[#ef4444]",
+    warning: "text-foreground",
+    safe: "text-[#10b981]",
   }[tone];
 
   return (
-    <div className="border-r border-[#252a24] px-5 py-5 last:border-r-0">
-      <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#666d63]">
-        {label}
-      </div>
-
-      <div
-        className={`mt-3 text-[25px] font-semibold tracking-[-0.045em] ${valueColor}`}
-      >
+    <div className="p-4 space-y-1">
+      <div className={`text-2xl font-semibold font-mono tracking-tight ${valueColor}`}>
         {value}
       </div>
-
+      <div className="text-xs font-medium text-foreground">
+        {label}
+      </div>
       {detail ? (
-        <div className="mt-1 text-[9px] text-[#5f655c]">{detail}</div>
+        <div className="text-[11px] text-muted-foreground/70">{detail}</div>
       ) : null}
     </div>
   );
 }
+
 function PremiumSelect({
   label,
   value,
@@ -218,36 +118,29 @@ function PremiumSelect({
 
   return (
     <div
-      className="relative bg-[#0a0d0a] p-4"
+      className="relative rounded-md border border-border bg-background p-3 text-xs"
       onClick={(e) => e.stopPropagation()}
     >
-      <label className="mb-2 block text-[8px] font-medium uppercase tracking-[0.18em] text-[#687066]">
+      <label className="text-muted-foreground block mb-1.5">
         {label}
       </label>
 
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className={`flex h-10 w-full items-center justify-between border px-3 text-left transition ${
-          open
-            ? "border-[#697557] bg-[#11150f]"
-            : "border-[#30352f] bg-[#10130f] hover:border-[#4a5342]"
-        }`}
+        className="flex h-8 w-full items-center justify-between rounded border border-border bg-card px-2.5 text-left text-xs text-foreground hover:border-border transition"
       >
-        <span className="truncate text-[11px] text-[#c4c5bd]">
-          {selected}
-        </span>
-
+        <span className="truncate">{selected}</span>
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-[#777e73] transition-transform ${
+          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform ${
             open ? "rotate-180" : ""
           }`}
         />
       </button>
 
       {open && (
-        <div className="absolute left-4 right-4 top-[76px] z-50 overflow-hidden border border-[#41483a] bg-[#0b0e0b] shadow-[0_20px_45px_rgba(0,0,0,0.55)]">
-          <div className="max-h-[280px] overflow-y-auto py-1">
+        <div className="absolute left-3 right-3 top-[68px] z-50 overflow-hidden rounded-md border border-border bg-card shadow-2xl">
+          <div className="max-h-56 overflow-y-auto py-1">
             {options.map((option) => {
               const active = option.value === value;
 
@@ -259,19 +152,13 @@ function PremiumSelect({
                     onChange(option.value);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2.5 text-left transition ${
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition ${
                     active
-                      ? "bg-[#171d13] text-[#e0e0d7]"
-                      : "text-[#9b9e96] hover:bg-[#131711] hover:text-[#d8d7cf]"
+                      ? "bg-secondary text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
                   }`}
                 >
-                  <span className="text-[11px]">
-                    {option.label}
-                  </span>
-
-                  {active && (
-                    <Check className="h-3.5 w-3.5 text-[#aab88d]" />
-                  )}
+                  <span>{option.label}</span>
                 </button>
               );
             })}
@@ -353,8 +240,6 @@ function ExceptionsQueueContent() {
     query.set("page", String(page));
     query.set("pageSize", String(pageSize));
 
-    // Reset the spinner outside the synchronous effect frame; the fetch's own
-    // async completion clears it (react-hooks/set-state-in-effect).
     queueMicrotask(() => setLoading(true));
 
     fetch(`/api/exceptions/${batchId}?${query.toString()}`)
@@ -386,7 +271,6 @@ function ExceptionsQueueContent() {
       )
       .catch((error) => {
         console.error(error);
-
         if (active) setLoading(false);
       });
 
@@ -408,429 +292,279 @@ function ExceptionsQueueContent() {
   };
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border-b border-[#20241f] pb-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center border border-[#343a31] bg-[#10130f]">
-                <AlertTriangle className="h-3.5 w-3.5 text-[#b8a170]" />
-              </div>
-
-              <span className="text-[8px] font-medium uppercase tracking-[0.22em] text-[#666d63]">
-                Operations / Exceptions
-              </span>
-            </div>
-
-            <h1 className="text-[28px] font-semibold tracking-[-0.045em] text-[#eeece4]">
-              Exception queue
-            </h1>
-
-            <p className="mt-2 max-w-2xl text-[11px] leading-5 text-[#737971]">
-              Review, investigate, and progress settlement exceptions through
-              the controlled financial workflow.
-            </p>
-          </div>
-
-          {batchId ? (
-            <div className="border border-[#30352f] bg-[#0e110e] px-3 py-2">
-              <div className="text-[7px] font-medium uppercase tracking-[0.18em] text-[#62685f]">
-                Active batch
-              </div>
-
-              <div className="mt-1 font-mono text-[9px] text-[#a5a99f]">
-                {batchId.slice(0, 18)}...
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </header>
-
-      {/* Risk overview */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="border-b border-[#252a24] px-5 py-4">
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="h-3.5 w-3.5 text-[#8f987c]" />
-
-            <span className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-              Risk overview
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-px bg-[#252a24] md:grid-cols-4">
-          <div className="bg-[#0b0e0b]">
-            <StatBlock
-              label="Amount at risk"
-              value={formatCurrency(summary.totalAmountAtRisk)}
-              detail="filtered exception exposure"
-              tone="risk"
-            />
-          </div>
-
-          <div className="bg-[#0b0e0b]">
-            <StatBlock
-              label="High risk"
-              value={summary.highRiskCount}
-              detail="requires highest scrutiny"
-              tone="risk"
-            />
-          </div>
-
-          <div className="bg-[#0b0e0b]">
-            <StatBlock
-              label="Medium risk"
-              value={summary.mediumRiskCount}
-              detail="requires investigation"
-              tone="warning"
-            />
-          </div>
-
-          <div className="bg-[#0b0e0b]">
-            <StatBlock
-              label="Low risk"
-              value={summary.lowRiskCount}
-              detail="lower priority exceptions"
-              tone="safe"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Controls */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="flex flex-col gap-4 border-b border-[#252a24] px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-              Investigation filters
-            </div>
-
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-[12px] text-[#cccac2]">
-                {totalCount.toLocaleString()} total exceptions (Page {page} of {totalPages})
-              </span>
-
-              {activeFilterCount > 0 ? (
-                <span className="border border-[#4a533d] bg-[#11160f] px-2 py-0.5 text-[8px] uppercase tracking-[0.12em] text-[#aeb98f]">
-                  {activeFilterCount} active
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {activeFilterCount > 0 ? (
-            <button
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.15em] text-[#858b82] transition hover:text-[#d1d0c8]"
-            >
-              <X className="h-3 w-3" />
-              Clear filters
-            </button>
-          ) : null}
-        </div>
-
-        <div className="grid gap-px bg-[#252a24] md:grid-cols-2 xl:grid-cols-5">
-  <PremiumSelect
-    label="Exception type"
-    value={filterType}
-    onChange={(v) => { setFilterType(v); setPage(1); }}
-    options={[
-      { value: "ALL", label: "All exception types" },
-      ...Object.entries(EXCEPTION_LABELS).map(([key, label]) => ({
-        value: key,
-        label,
-      })),
-    ]}
-  />
-
-  <PremiumSelect
-    label="Workflow state"
-    value={filterStatus}
-    onChange={(v) => { setFilterStatus(v); setPage(1); }}
-    options={[
-      { value: "ALL", label: "All workflow states" },
-      ...WORKFLOW_STATES.map((state) => ({
-        value: state,
-        label: state.replace(/_/g, " "),
-      })),
-    ]}
-  />
-
-  <PremiumSelect
-    label="Risk level"
-    value={filterRisk}
-    onChange={(v) => { setFilterRisk(v); setPage(1); }}
-    options={[
-      { value: "ALL", label: "All risk levels" },
-      { value: "HIGH", label: "High risk" },
-      { value: "MEDIUM", label: "Medium risk" },
-      { value: "LOW", label: "Low risk" },
-    ]}
-  />
-
-  <div className="bg-[#0a0d0a] p-4">
-    <div className="mb-2 flex items-center justify-between">
-      <label className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#687066]">
-        Sort & Order
-      </label>
-
-      <button
-        type="button"
-        onClick={() => { setSortOrder((o) => o === "asc" ? "desc" : "asc"); setPage(1); }}
-        className="text-[8px] uppercase font-mono tracking-[0.13em] text-[#a8b58d] transition hover:text-[#d0d8bc]"
-      >
-        {sortOrder === "desc" ? "DESC ↓" : "ASC ↑"}
-      </button>
-    </div>
-
-    <div className="relative">
-      <select
-        value={sortBy}
-        onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-        className="h-10 w-full appearance-none border border-[#30352f] bg-[#10130f] px-3 pr-8 text-[11px] text-[#d0cec5] outline-none transition hover:border-[#4a5342] focus:border-[#687557]"
-      >
-        <option value="risk">Risk Level</option>
-        <option value="amount">Exposure Amount</option>
-        <option value="confidence">Confidence Score</option>
-        <option value="date">Creation Date</option>
-        <option value="type">Exception Type</option>
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#687066]" />
-    </div>
-  </div>
-
-  <div className="bg-[#0a0d0a] p-4">
-    <div className="mb-2 flex items-center justify-between">
-      <label className="text-[8px] font-medium uppercase tracking-[0.18em] text-[#687066]">
-        Search records
-      </label>
-
-      {searchQuery && (
-        <button
-          type="button"
-          onClick={() => { setSearchQuery(""); setPage(1); }}
-          className="text-[8px] uppercase tracking-[0.13em] text-[#666d63] transition hover:text-[#b5b9af]"
-        >
-          Clear
-        </button>
-      )}
-    </div>
-
-    <div
-      className={`flex h-10 items-center border bg-[#10130f] transition ${
-        searchQuery
-          ? "border-[#687557]"
-          : "border-[#30352f] hover:border-[#4a5342]"
-      }`}
-    >
-      <Search className="ml-3 h-3.5 w-3.5 shrink-0 text-[#697067]" />
-
-      <input
-        value={searchQuery}
-        onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-        placeholder="ID / UTR / Order / Payment"
-        className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-[11px] text-[#d0cec5] outline-none placeholder:text-[#50564e]"
+      <PageHeader
+        tag="Operations"
+        title="Exception queue"
+        description="Review, triage, and resolve settlement exceptions through deterministic multi-step audit verification."
+        badge={<Badge variant="outline">{batchId ? `Batch ${batchId.slice(0, 14)}...` : "Active Batch"}</Badge>}
       />
 
-      <span className="mr-3 hidden border border-[#30352f] px-1.5 py-0.5 text-[7px] uppercase tracking-[0.12em] text-[#535a51] sm:inline-block">
-        Search
-      </span>
-    </div>
-  </div>
-</div>
+      {/* Risk Overview Grid */}
+      <section className="rounded-lg border border-border bg-card">
+        <div className="border-b border-border p-4">
+          <SectionHeader
+            title="Exposure overview"
+            description="Filtered exception amounts categorized by severity"
+            className="border-b-0 pb-0"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border">
+          <StatBlock
+            label="Amount at risk"
+            value={formatCurrency(summary.totalAmountAtRisk)}
+            detail="Filtered exception exposure"
+            tone="risk"
+          />
+          <StatBlock
+            label="High risk"
+            value={summary.highRiskCount}
+            detail="Highest scrutiny required"
+            tone="risk"
+          />
+          <StatBlock
+            label="Medium risk"
+            value={summary.mediumRiskCount}
+            detail="Investigation required"
+            tone="warning"
+          />
+          <StatBlock
+            label="Low risk"
+            value={summary.lowRiskCount}
+            detail="Standard resolution"
+            tone="safe"
+          />
+        </div>
       </section>
 
-      {/* Queue */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="flex items-center justify-between border-b border-[#252a24] px-5 py-4">
-          <div>
-            <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-              Investigation queue
-            </div>
-
-            <div className="mt-1 text-[13px] font-semibold text-[#d9d7cf]">
-              Exceptions requiring action
-            </div>
+      {/* Filter Controls */}
+      <section className="rounded-lg border border-border bg-card p-5 space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-foreground">
+              Filter & Search ({totalCount.toLocaleString()} exceptions)
+            </span>
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary">{activeFilterCount} active</Badge>
+            )}
           </div>
 
-          <div className="flex items-center gap-4 text-[8px] uppercase tracking-[0.15em] text-[#555b52]">
-            <span>{totalCount.toLocaleString()} total exceptions</span>
-            <span>Page {page} of {totalPages}</span>
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition"
+            >
+              <X className="h-3 w-3" />
+              <span>Clear filters</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5 text-xs">
+          <PremiumSelect
+            label="Exception type"
+            value={filterType}
+            onChange={(v) => { setFilterType(v); setPage(1); }}
+            options={[
+              { value: "ALL", label: "All types" },
+              ...Object.entries(EXCEPTION_LABELS).map(([key, label]) => ({
+                value: key,
+                label,
+              })),
+            ]}
+          />
+
+          <PremiumSelect
+            label="Workflow state"
+            value={filterStatus}
+            onChange={(v) => { setFilterStatus(v); setPage(1); }}
+            options={[
+              { value: "ALL", label: "All workflow states" },
+              ...WORKFLOW_STATES.map((state) => ({
+                value: state,
+                label: state.replace(/_/g, " "),
+              })),
+            ]}
+          />
+
+          <PremiumSelect
+            label="Risk level"
+            value={filterRisk}
+            onChange={(v) => { setFilterRisk(v); setPage(1); }}
+            options={[
+              { value: "ALL", label: "All risk levels" },
+              { value: "HIGH", label: "High risk" },
+              { value: "MEDIUM", label: "Medium risk" },
+              { value: "LOW", label: "Low risk" },
+            ]}
+          />
+
+          <div className="rounded-xl border border-border bg-card p-3 space-y-1.5 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-medium">Sort & Order</span>
+              <button
+                type="button"
+                onClick={() => { setSortOrder((o) => o === "asc" ? "desc" : "asc"); setPage(1); }}
+                className="font-mono text-[11px] text-foreground hover:underline"
+              >
+                {sortOrder === "desc" ? "DESC ↓" : "ASC ↑"}
+              </button>
+            </div>
+            <Dropdown
+              value={sortBy}
+              onValueChange={(val) => { setSortBy(val); setPage(1); }}
+              options={[
+                { value: "risk", label: "Risk Level" },
+                { value: "amount", label: "Exposure Amount" },
+                { value: "confidence", label: "Confidence Score" },
+                { value: "date", label: "Creation Date" },
+                { value: "type", label: "Exception Type" },
+              ]}
+              size="sm"
+              triggerClassName="w-full"
+              data-testid="exceptions-sort-dropdown"
+            />
           </div>
+
+          <div className="rounded-md border border-border bg-background p-3 space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Search Records</span>
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(""); setPage(1); }}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
+              <input
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+                placeholder="ID / UTR / Order"
+                className="h-8 w-full rounded border border-border bg-card pl-8 pr-2 text-xs text-foreground placeholder-[#666666] focus:border-foreground/40 focus:outline-none font-mono"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Queue Table */}
+      <section className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <SectionHeader
+            title="Triage queue"
+            description="Exceptions awaiting investigation or sign-off"
+            className="border-b-0 pb-0"
+          />
+
+          <span className="text-xs font-mono text-muted-foreground/70">
+            Page {page} of {totalPages}
+          </span>
         </div>
 
         {loading ? (
-          <div className="flex min-h-[360px] items-center justify-center">
-            <div className="text-center">
-              <div className="mx-auto flex h-10 w-10 items-center justify-center border border-[#30352f] bg-[#10130f]">
-                <Loader2 className="h-4 w-4 animate-spin text-[#a5b47f]" />
-              </div>
-
-              <p className="mt-4 text-[9px] font-medium uppercase tracking-[0.18em] text-[#666c63]">
-                Loading exception queue
-              </p>
+          <div className="flex min-h-[300px] items-center justify-center">
+            <div className="text-center space-y-2">
+              <Loader2 className="h-5 w-5 animate-spin text-foreground mx-auto" />
+              <p className="text-xs text-muted-foreground">Loading exception queue...</p>
             </div>
           </div>
         ) : exceptions.length === 0 ? (
-          <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center border border-[#394736] bg-[#10150f]">
-              <CheckCircle2 className="h-5 w-5 text-[#9daf83]" />
+          <div className="flex min-h-[300px] flex-col items-center justify-center p-6 text-center space-y-3">
+            <CheckCircle2 className="h-8 w-8 text-[#10b981]" />
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Queue is clear</h3>
+              <p className="text-xs text-muted-foreground mt-1">No exceptions match current filters.</p>
             </div>
-
-            <h3 className="mt-5 text-[15px] font-semibold text-[#d9d7cf]">
-              Queue is clear
-            </h3>
-
-            <p className="mt-2 max-w-sm text-[11px] leading-5 text-[#656b62]">
-              No exceptions match the current investigation criteria.
-            </p>
-
-            {activeFilterCount > 0 || searchQuery ? (
+            {activeFilterCount > 0 && (
               <button
-                onClick={() => {
-                  clearFilters();
-                  setSearchQuery("");
-                }}
-                className="mt-5 border border-[#343a31] px-4 py-2 text-[9px] font-medium uppercase tracking-[0.14em] text-[#aab095] hover:bg-[#131710]"
+                type="button"
+                onClick={() => { clearFilters(); setSearchQuery(""); }}
+                className="inline-flex h-8 items-center rounded-md border border-border bg-card px-3 text-xs text-foreground hover:bg-accent transition"
               >
                 Reset view
               </button>
-            ) : null}
+            )}
           </div>
         ) : (
           <>
-            {/* Desktop */}
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[900px] border-collapse">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-[#252a24] bg-[#0a0d0a]">
-                    <th className="px-5 py-3 text-left text-[8px] font-medium uppercase tracking-[0.16em] text-[#5e645b]">
-                      Exception
-                    </th>
-
-                    <th className="px-4 py-3 text-left text-[8px] font-medium uppercase tracking-[0.16em] text-[#5e645b]">
-                      Reference
-                    </th>
-
-                    <th className="px-4 py-3 text-right text-[8px] font-medium uppercase tracking-[0.16em] text-[#5e645b]">
-                      Exposure
-                    </th>
-
-                    <th className="px-4 py-3 text-left text-[8px] font-medium uppercase tracking-[0.16em] text-[#5e645b]">
-                      Confidence
-                    </th>
-
-                    <th className="px-4 py-3 text-left text-[8px] font-medium uppercase tracking-[0.16em] text-[#5e645b]">
-                      Risk
-                    </th>
-
-                    <th className="px-4 py-3 text-left text-[8px] font-medium uppercase tracking-[0.16em] text-[#5e645b]">
-                      Workflow
-                    </th>
-
-                    <th className="px-5 py-3 text-right text-[8px] font-medium uppercase tracking-[0.16em] text-[#5e645b]">
-                      Action
-                    </th>
+                  <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                    <th className="px-4 py-2.5 font-medium">Exception</th>
+                    <th className="px-4 py-2.5 font-medium">Reference</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Exposure</th>
+                    <th className="px-4 py-2.5 font-medium">Confidence</th>
+                    <th className="px-4 py-2.5 font-medium">Risk</th>
+                    <th className="px-4 py-2.5 font-medium">Workflow</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Action</th>
                   </tr>
                 </thead>
-
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {exceptions.map((item, index) => (
-                    <tr
-                      key={item.id}
-                      className="group border-b border-[#1d211d] transition hover:bg-[#10140f]"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-start gap-3">
-                          <span className="pt-0.5 font-mono text-[8px] text-[#4d534b]">
+                    <tr key={item.id} className="hover:bg-accent/40 transition">
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-start gap-2.5">
+                          <span className="font-mono text-xs text-muted-foreground/70 pt-0.5">
                             {String(index + 1).padStart(2, "0")}
                           </span>
-
                           <div>
-                            <div className="text-[11px] font-medium text-[#d7d5cd]">
+                            <div className="font-medium text-foreground">
                               {formatType(item.exceptionType)}
                             </div>
-
-                            <div className="mt-1 max-w-[210px] truncate text-[9px] text-[#62685f]">
+                            <div className="text-[11px] text-muted-foreground truncate max-w-xs mt-0.5">
                               {item.suggestedAction || "Investigation required"}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-4 py-4">
-                        <div className="font-mono text-[9px] text-[#8b9088]">
-                          {item.paymentId ||
-                            item.settlementId ||
-                            item.orderId ||
-                            "N/A"}
-                        </div>
+                      <td className="px-4 py-3.5 font-mono text-[11px] text-muted-foreground">
+                        {item.paymentId || item.settlementId || item.orderId || "N/A"}
+                      </td>
 
-                        {item.paymentId && item.settlementId ? (
-                          <div className="mt-1 text-[8px] text-[#50564e]">
-                            settlement linked
+                      <td className="px-4 py-3.5 text-right font-mono">
+                        <div className="font-semibold text-foreground">
+                          {formatCurrency(item.amount)}
+                        </div>
+                        {item.mismatchAmount ? (
+                          <div className="text-[10px] text-[#ef4444]">
+                            Δ {formatCurrency(item.mismatchAmount)}
                           </div>
                         ) : null}
                       </td>
 
-                      <td className="px-4 py-4 text-right">
-                        <div className="text-[11px] font-medium text-[#c4b17c]">
-                          {formatCurrency(item.amount)}
-                        </div>
-
-                        {item.mismatchAmount ? (
-                          <div className="mt-1 text-[8px] text-[#a77a6f]">
-                            Δ {formatCurrency(item.mismatchAmount)}
-                          </div>
-                        ) : (
-                          <div className="mt-1 text-[8px] text-[#4f554d]">
-                            no variance
-                          </div>
-                        )}
+                      <td className="px-4 py-3.5 font-mono text-muted-foreground">
+                        {item.confidenceScore}%
                       </td>
 
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-[70px] overflow-hidden bg-[#232823]">
-                            <div
-                              className={`h-full ${
-                                item.confidenceScore >= 80
-                                  ? "bg-[#91a577]"
-                                  : item.confidenceScore >= 50
-                                    ? "bg-[#b7a06b]"
-                                    : "bg-[#a66d64]"
-                              }`}
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  Math.max(0, item.confidenceScore),
-                                )}%`,
-                              }}
-                            />
-                          </div>
-
-                          <span className="font-mono text-[9px] text-[#858b82]">
-                            {item.confidenceScore}%
-                          </span>
-                        </div>
+                      <td className="px-4 py-3.5">
+                        <Badge variant={item.riskLevel === "HIGH" ? "destructive" : item.riskLevel === "MEDIUM" ? "warning" : "success"}>
+                          {item.riskLevel}
+                        </Badge>
                       </td>
 
-                      <td className="px-4 py-4">
-                        <RiskBadge risk={item.riskLevel} />
+                      <td className="px-4 py-3.5">
+                        <Badge variant="outline">
+                          {item.status.replace(/_/g, " ")}
+                        </Badge>
                       </td>
 
-                      <td className="px-4 py-4">
-                        <StatusBadge status={item.status} />
-                      </td>
-
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-4 py-3.5 text-right">
                         <Link
                           href={`/exceptions/${batchId}/${item.id}`}
-                          className="inline-flex items-center gap-1.5 text-[9px] font-medium uppercase tracking-[0.13em] text-[#aab48e] transition hover:text-[#d0d8bc]"
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-medium"
                         >
-                          Investigate
-                          <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                          <span>Investigate</span>
+                          <ChevronRight className="h-3 w-3" />
                         </Link>
                       </td>
                     </tr>
@@ -839,100 +573,25 @@ function ExceptionsQueueContent() {
               </table>
             </div>
 
-            {/* Mobile */}
-            <div className="divide-y divide-[#1e231e] md:hidden">
-              {exceptions.map((item, index) => (
-                <Link
-                  key={item.id}
-                  href={`/exceptions/${batchId}/${item.id}`}
-                  className="block p-4 transition hover:bg-[#10140f]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[8px] text-[#4f554d]">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-
-                        <span className="truncate text-[11px] font-medium text-[#d7d5cd]">
-                          {formatType(item.exceptionType)}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 truncate font-mono text-[9px] text-[#686e65]">
-                        {item.paymentId ||
-                          item.settlementId ||
-                          item.orderId ||
-                          "N/A"}
-                      </div>
-                    </div>
-
-                    <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[#51584e]" />
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-[8px] uppercase tracking-[0.13em] text-[#555b52]">
-                        Exposure
-                      </div>
-
-                      <div className="mt-1 text-[11px] text-[#c4b17c]">
-                        {formatCurrency(item.amount)}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-[8px] uppercase tracking-[0.13em] text-[#555b52]">
-                        Confidence
-                      </div>
-
-                      <div className="mt-1 text-[11px] text-[#9ca198]">
-                        {item.confidenceScore}%
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-[8px] uppercase tracking-[0.13em] text-[#555b52]">
-                        Risk
-                      </div>
-
-                      <div className="mt-1">
-                        <RiskBadge risk={item.riskLevel} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-[8px] uppercase tracking-[0.13em] text-[#555b52]">
-                        Workflow
-                      </div>
-
-                      <div className="mt-1">
-                        <StatusBadge status={item.status} />
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
             {/* Pagination Controls */}
-            <div className="flex flex-col gap-3 border-t border-[#252a24] bg-[#0a0d0a] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4 text-[11px] text-[#788075]">
-                <div>
-                  Showing page <span className="font-semibold text-[#dddcd4]">{page}</span> of{" "}
-                  <span className="font-semibold text-[#dddcd4]">{totalPages}</span> ({totalCount.toLocaleString()} exceptions)
-                </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-border p-4 text-xs">
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <span>
+                  Showing page <span className="font-semibold text-foreground">{page}</span> of{" "}
+                  <span className="font-semibold text-foreground">{totalPages}</span> ({totalCount.toLocaleString()} items)
+                </span>
 
-                <div className="flex items-center gap-1.5 text-[9px]">
+                <div className="flex items-center gap-1">
                   <span>Rows:</span>
                   {[25, 50, 100].map((sz) => (
                     <button
                       key={sz}
                       type="button"
                       onClick={() => { setPageSize(sz); setPage(1); }}
-                      className={`border px-1.5 py-0.5 font-mono text-[9px] transition ${
+                      className={`h-6 px-2 font-mono text-[11px] rounded transition ${
                         pageSize === sz
-                          ? "border-[#657151] bg-[#151b11] text-[#c5d0aa]"
-                          : "border-[#30352f] text-[#788075] hover:border-[#4b5442]"
+                          ? "bg-secondary text-foreground font-medium"
+                          : "text-muted-foreground/70 hover:text-foreground"
                       }`}
                     >
                       {sz}
@@ -946,7 +605,7 @@ function ExceptionsQueueContent() {
                   type="button"
                   disabled={!hasPrev || loading}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="border border-[#30352f] bg-[#10130f] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#bfc0b8] transition hover:border-[#4a5342] disabled:opacity-40 disabled:hover:border-[#30352f]"
+                  className="inline-flex h-8 items-center rounded-md border border-border bg-card px-3 text-xs text-foreground hover:bg-accent disabled:opacity-50 transition"
                 >
                   Previous
                 </button>
@@ -955,7 +614,7 @@ function ExceptionsQueueContent() {
                   type="button"
                   disabled={!hasNext || loading}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="border border-[#30352f] bg-[#10130f] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#bfc0b8] transition hover:border-[#4a5342] disabled:opacity-40 disabled:hover:border-[#30352f]"
+                  className="inline-flex h-8 items-center rounded-md border border-border bg-card px-3 text-xs text-foreground hover:bg-accent disabled:opacity-50 transition"
                 >
                   Next
                 </button>
@@ -973,7 +632,7 @@ export default function ExceptionsPage() {
     <Suspense
       fallback={
         <div className="flex min-h-[70vh] items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[#a5b47f]" />
+          <Loader2 className="h-5 w-5 animate-spin text-foreground" />
         </div>
       }
     >

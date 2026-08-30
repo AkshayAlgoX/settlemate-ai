@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { safeErrorResponse } from "@/lib/security/api-security";
 import { prisma } from "@/lib/db";
 import { DistributedOrchestrator } from "@/lib/reconciliation/distributed/orchestrator";
 import { InMemoryDistributedQueue } from "@/lib/reconciliation/distributed/queue";
@@ -105,10 +106,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Scale run failed:", error);
-    return NextResponse.json(
-      { error: (error as Error).message || "Scale run execution failed" },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail; the raw message leaked Prisma query
+    // text and the orchestrator's internal partition state.
+    return safeErrorResponse(error, 500, "SCALE_RUN_ERROR");
   }
 }
 

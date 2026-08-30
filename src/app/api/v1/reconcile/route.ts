@@ -5,17 +5,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import Papa from "papaparse";
+import { z } from "zod";
 import { rupeesToPaise, formatCurrency } from "@/lib/format";
 import { buildIndexes } from "@/lib/reconciliation/indexer";
 import { matchAllRecords } from "@/lib/reconciliation/matcher";
 import { applyCardinalityMatching } from "@/lib/reconciliation/apply-cardinality";
 import {
+  apiKeyGuard,
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
-  validateApiKey,
-  sanitizeObject,
+  safeErrorResponse,
+  validateBodySize,
 } from "@/lib/security/api-security";
+import {
+  MAX_BODY_BYTES,
+  MAX_TXN_ROWS,
+  ReconcileRequestSchema,
+  TransactionInputSchema,
+  parseRequest,
+  type ValidatedTransactionInput,
+} from "@/lib/api/v1-schemas";
 import { instrument } from "@/lib/observability/route";
 import { metrics } from "@/lib/observability/metrics";
 import {
@@ -40,17 +50,43 @@ export async function OPTIONS() {
   return handleCorsPreflight();
 }
 
-interface RawTxnInput {
-  source?: string;
-  amount?: number | string;
-  currency?: string;
-  date?: string;
-  reference_id?: string;
-  referenceId?: string;
-  utr?: string;
-  fee?: number | string;
-  tax?: number | string;
-  [key: string]: unknown;
+/** 400 carrying field-level detail, e.g. `2.amount: amount must be a finite number`. */
+function validationErrorResponse(code: string, message: string, details: string[]) {
+  return applySecurityHeaders(
+    NextResponse.json({ error: { code, message, details } }, { status: 400 })
+  );
+}
+
+const TxnRowsSchema = z
+  .array(TransactionInputSchema)
+  .max(MAX_TXN_ROWS, `a single request accepts at most ${MAX_TXN_ROWS} transactions`);
+
+/**
+ * A blank CSV cell means "absent", not "empty string".
+ *
+ * Papa emits `""` for every empty cell, which would fail the min-length check on
+ * genuinely optional columns (utr, fee, tax, date). Dropping blanks keeps optional
+ * fields optional while still rejecting a blank *required* amount.
+ */
+function stripBlankFields(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (typeof value === "string" && value.trim() === "") continue;
+    if (value === null || value === undefined) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/** Parse CSV text and validate every row against the shared transaction schema. */
+function csvToValidatedRows(csvContent: string) {
+  const parsed = Papa.parse<Record<string, unknown>>(csvContent, {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: (h) => h.trim().toLowerCase().replace(/\s+/g, "_"),
+  });
+
+  return parseRequest(TxnRowsSchema, parsed.data.map(stripBlankFields));
 }
 
 async function handlePost(req: NextRequest) {
@@ -61,20 +97,9 @@ async function handlePost(req: NextRequest) {
   }
 
   // 2. API Key Authentication
-  const apiKey = req.headers.get("x-api-key") || req.headers.get("authorization");
-  const auth = validateApiKey(apiKey);
-  if (!auth.valid) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        {
-          error: {
-            code: "UNAUTHORIZED",
-            message: auth.error || "Valid API key starting with 'sk_' (length > 20) required",
-          },
-        },
-        { status: 401 }
-      )
-    );
+  const auth = apiKeyGuard(req);
+  if (!auth.allowed && auth.response) {
+    return auth.response;
   }
 
   const jobId = `job_${randomUUID().slice(0, 10)}`;
@@ -83,17 +108,12 @@ async function handlePost(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
     let webhookUrl: string | undefined;
-    const orders: NormalizedOrder[] = [];
-    const payments: NormalizedPayment[] = [];
-    const settlements: NormalizedSettlement[] = [];
-    const bankTransactions: NormalizedBankTxn[] = [];
-    const refunds: NormalizedRefund[] = [];
-    const chargebacks: NormalizedChargeback[] = [];
+    let rows: ValidatedTransactionInput[] = [];
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
-      webhookUrl = (formData.get("webhookUrl") as string) || undefined;
+      const rawWebhook = formData.get("webhookUrl");
 
       if (!file) {
         return applySecurityHeaders(
@@ -103,34 +123,64 @@ async function handlePost(req: NextRequest) {
           )
         );
       }
+
       const csvText = await file.text();
-      parseCsvIntoBatches(csvText, orders, payments, settlements, bankTransactions, refunds, chargebacks);
+      const size = validateBodySize(csvText, MAX_BODY_BYTES);
+      if (!size.valid) {
+        return validationErrorResponse("PAYLOAD_TOO_LARGE", size.error!, []);
+      }
+
+      // Validate the webhook target through the same schema as the JSON path.
+      if (typeof rawWebhook === "string" && rawWebhook.trim()) {
+        const wh = parseRequest(ReconcileRequestSchema, {
+          webhookUrl: rawWebhook.trim(),
+          csvContent: csvText,
+        });
+        if (!wh.ok) {
+          return validationErrorResponse(wh.code, wh.message, wh.details);
+        }
+        webhookUrl = wh.data.webhookUrl;
+      }
+
+      const validated = csvToValidatedRows(csvText);
+      if (!validated.ok) {
+        return validationErrorResponse(validated.code, validated.message, validated.details);
+      }
+      rows = validated.data;
     } else if (contentType.includes("application/json")) {
-      const rawBody = await req.json().catch(() => ({}));
-      const body = sanitizeObject(rawBody) as {
-        webhookUrl?: string;
-        transactions?: RawTxnInput[];
-        csvContent?: string;
-      };
+      // Read the body as text first so its size can be checked before parsing,
+      // and so csvContent is taken from the RAW body: sanitizeInputString
+      // truncates every string at 5,000 chars, which silently ate any CSV
+      // payload larger than that and reconciled the surviving fragment.
+      const rawText = await req.text();
+      const size = validateBodySize(rawText, MAX_BODY_BYTES);
+      if (!size.valid) {
+        return validationErrorResponse("PAYLOAD_TOO_LARGE", size.error!, []);
+      }
 
-      webhookUrl = typeof body.webhookUrl === "string" && body.webhookUrl.trim() ? body.webhookUrl.trim() : undefined;
+      let rawBody: unknown;
+      try {
+        rawBody = JSON.parse(rawText || "{}");
+      } catch {
+        return validationErrorResponse("INVALID_JSON", "Request body is not valid JSON", []);
+      }
 
-      if (body.csvContent && typeof body.csvContent === "string") {
-        parseCsvIntoBatches(body.csvContent, orders, payments, settlements, bankTransactions, refunds, chargebacks);
-      } else if (Array.isArray(body.transactions) && body.transactions.length > 0) {
-        parseTxnsArrayIntoBatches(body.transactions, orders, payments, settlements, bankTransactions, refunds, chargebacks);
+      const parsedBody = parseRequest(ReconcileRequestSchema, rawBody);
+      if (!parsedBody.ok) {
+        return validationErrorResponse(parsedBody.code, parsedBody.message, parsedBody.details);
+      }
+
+      webhookUrl = parsedBody.data.webhookUrl;
+
+      if (parsedBody.data.csvContent?.trim()) {
+        const validated = csvToValidatedRows(parsedBody.data.csvContent);
+        if (!validated.ok) {
+          return validationErrorResponse(validated.code, validated.message, validated.details);
+        }
+        rows = validated.data;
       } else {
-        return applySecurityHeaders(
-          NextResponse.json(
-            {
-              error: {
-                code: "BAD_REQUEST",
-                message: "Request body must contain 'transactions' array or 'csvContent' string",
-              },
-            },
-            { status: 400 }
-          )
-        );
+        // Already validated element-by-element by ReconcileRequestSchema.
+        rows = parsedBody.data.transactions ?? [];
       }
     } else {
       // Plain text CSV
@@ -143,8 +193,27 @@ async function handlePost(req: NextRequest) {
           )
         );
       }
-      parseCsvIntoBatches(csvText, orders, payments, settlements, bankTransactions, refunds, chargebacks);
+
+      const size = validateBodySize(csvText, MAX_BODY_BYTES);
+      if (!size.valid) {
+        return validationErrorResponse("PAYLOAD_TOO_LARGE", size.error!, []);
+      }
+
+      const validated = csvToValidatedRows(csvText);
+      if (!validated.ok) {
+        return validationErrorResponse(validated.code, validated.message, validated.details);
+      }
+      rows = validated.data;
     }
+
+    const orders: NormalizedOrder[] = [];
+    const payments: NormalizedPayment[] = [];
+    const settlements: NormalizedSettlement[] = [];
+    const bankTransactions: NormalizedBankTxn[] = [];
+    const refunds: NormalizedRefund[] = [];
+    const chargebacks: NormalizedChargeback[] = [];
+
+    normalizeRowsIntoBatches(rows, orders, payments, settlements, bankTransactions, refunds, chargebacks);
 
     const batchData: BatchData = {
       orders,
@@ -288,22 +357,25 @@ async function handlePost(req: NextRequest) {
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        {
-          error: {
-            code: "RECONCILIATION_ERROR",
-            message: (err as Error).message || "Internal Reconciliation Failure",
-          },
-        },
-        { status: 500 }
-      )
-    );
+    // safeErrorResponse masks the message for 5xx. The previous version returned
+    // `(err as Error).message` verbatim, which leaked internal paths and engine
+    // internals to any caller who could trigger a failure.
+    return safeErrorResponse(err, 500, "RECONCILIATION_ERROR");
   }
 }
 
-function parseTxnsArrayIntoBatches(
-  txns: RawTxnInput[],
+/**
+ * Normalise validated rows into the engine's batch shape.
+ *
+ * Every field is already schema-checked, so this function performs no coercion
+ * and has no fallbacks for bad values. It used to contain three:
+ *   `isNaN(rawAmount) ? 0`     — invented a ₹0 transaction from junk input
+ *   `rupeesToPaise(Number(fee))` — produced NaN paise that poisoned every sum
+ *   `isNaN(rowDate) ? now`     — silently backdated unparseable timestamps
+ * Those are now 400s at the boundary, which is the only honest answer.
+ */
+function normalizeRowsIntoBatches(
+  txns: ValidatedTransactionInput[],
   orders: NormalizedOrder[],
   payments: NormalizedPayment[],
   settlements: NormalizedSettlement[],
@@ -314,14 +386,12 @@ function parseTxnsArrayIntoBatches(
   const now = new Date();
 
   txns.forEach((row, index) => {
-    const source = String(row.source || "PAYMENT").trim().toUpperCase();
-    const rawAmount = Number(row.amount);
-    const amountPaise = isNaN(rawAmount) ? 0 : rupeesToPaise(rawAmount);
-    const refId = String(row.reference_id || row.referenceId || `TXN_${index + 1}`).trim();
-    const rowDate = row.date ? new Date(String(row.date)) : now;
-    const validDate = isNaN(rowDate.getTime()) ? now : rowDate;
-    const feePaise = row.fee ? rupeesToPaise(Number(row.fee)) : 0;
-    const taxPaise = row.tax ? rupeesToPaise(Number(row.tax)) : 0;
+    const source = row.source || "PAYMENT";
+    const amountPaise = rupeesToPaise(row.amount);
+    const refId = row.reference_id || row.referenceId || `TXN_${index + 1}`;
+    const validDate = row.date ? new Date(row.date) : now;
+    const feePaise = row.fee !== undefined ? rupeesToPaise(row.fee) : 0;
+    const taxPaise = row.tax !== undefined ? rupeesToPaise(row.tax) : 0;
 
     if (source === "PAYMENT" || source === "ORDER") {
       payments.push({
@@ -385,24 +455,6 @@ function parseTxnsArrayIntoBatches(
       });
     }
   });
-}
-
-function parseCsvIntoBatches(
-  csvContent: string,
-  orders: NormalizedOrder[],
-  payments: NormalizedPayment[],
-  settlements: NormalizedSettlement[],
-  bankTransactions: NormalizedBankTxn[],
-  refunds: NormalizedRefund[],
-  chargebacks: NormalizedChargeback[]
-) {
-  const parsed = Papa.parse<RawTxnInput>(csvContent, {
-    header: true,
-    skipEmptyLines: true,
-    transformHeader: (h) => h.trim().toLowerCase().replace(/\s+/g, "_"),
-  });
-
-  parseTxnsArrayIntoBatches(parsed.data, orders, payments, settlements, bankTransactions, refunds, chargebacks);
 }
 
 export const POST = instrument("v1.reconcile", handlePost);

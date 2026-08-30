@@ -2,20 +2,12 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
-  History,
   Play,
   Pause,
   RotateCcw,
   ChevronRight,
   ChevronLeft,
-  ShieldCheck,
-  Layers,
-  FileCheck,
-  Zap,
   CheckCircle2,
-  Lock,
-  Scale,
-  Database,
   Copy,
   Check,
   RefreshCw,
@@ -25,16 +17,11 @@ import {
   type ForensicsStep,
   type StoredJobSummaryItem,
 } from "@/lib/forensics/forensics-types";
-
-const PHASE_ICONS = {
-  INPUT_INGESTION: Database,
-  INDEX_BUILDING: Layers,
-  MATCHING_RESULTS: Scale,
-  AI_INVESTIGATION: Lock,
-  MAKER_CHECKER: ShieldCheck,
-  LEDGER_POSTING: Zap,
-  DECISION_RECEIPT: FileCheck,
-};
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+import { Dropdown } from "@/components/ui/dropdown";
+import { formatDateOnly, formatAuditTime } from "@/lib/format";
 
 export default function ForensicsPage() {
   const [jobs, setJobs] = useState<StoredJobSummaryItem[]>([]);
@@ -47,7 +34,6 @@ export default function ForensicsPage() {
 
   const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch job list on mount
   useEffect(() => {
     let mounted = true;
     fetch("/api/forensics/jobs")
@@ -65,7 +51,6 @@ export default function ForensicsPage() {
     };
   }, []);
 
-  // Fetch timeline when selectedJobId changes
   useEffect(() => {
     let mounted = true;
     if (!selectedJobId) return;
@@ -87,7 +72,6 @@ export default function ForensicsPage() {
     };
   }, [selectedJobId]);
 
-  // Automated Playback Timer
   useEffect(() => {
     if (isPlaying) {
       playbackTimerRef.current = setInterval(() => {
@@ -148,115 +132,100 @@ export default function ForensicsPage() {
   };
 
   const activeStep: ForensicsStep | undefined = timeline?.steps[currentStepIndex];
-  const StepIcon = activeStep ? (PHASE_ICONS[activeStep.phase] || FileCheck) : FileCheck;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#a4b58a]">
-              <History className="h-4 w-4 text-[#a4b58a]" />
-              Reconciliation Forensics &amp; Playback · 🔍 00W
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#e3e1d8]">
-              Step-by-Step Ledger Transformation &amp; Verification Playback
-            </h1>
-            <p className="mt-1 text-xs text-[#8c9288]">
-              Select any stored reconciliation job from persistent SQLite and replay the complete 7-phase transformation from raw inputs to verified double-entry ledger postings, AI claims, and cryptographic Merkle receipts.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+      <PageHeader
+        tag="Audit & Forensics"
+        title="Reconciliation playback & forensics"
+        description="Replay the deterministic 7-phase transformation from raw transactions to verified ledger postings, AI claims, and SHA-256 Merkle receipts."
+        badge={<Badge variant="outline">Forensics</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleReset}
-              className="px-3 py-2 border border-[#252a24] bg-[#090b09] hover:bg-[#121611] text-[#8c9288] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5"
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent transition"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset
+              <RotateCcw className="h-3 w-3 text-muted-foreground" />
+              <span>Reset</span>
             </button>
             <button
               type="button"
               onClick={handleStepPrev}
               disabled={currentStepIndex === 0}
-              className="px-3 py-2 border border-[#252a24] bg-[#090b09] hover:bg-[#121611] text-[#e3e1d8] text-xs font-bold uppercase tracking-wider flex items-center gap-1 disabled:opacity-40"
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-40 transition"
             >
-              <ChevronLeft className="h-4 w-4" />
-              Prev
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span>Prev</span>
             </button>
             <button
               type="button"
               onClick={handleStepNext}
               disabled={currentStepIndex === 6}
-              className="px-3 py-2 border border-[#252a24] bg-[#090b09] hover:bg-[#121611] text-[#e3e1d8] text-xs font-bold uppercase tracking-wider flex items-center gap-1 disabled:opacity-40"
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-40 transition"
             >
-              Next
-              <ChevronRight className="h-4 w-4" />
+              <span>Next</span>
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={togglePlay}
-              className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all ${
-                isPlaying
-                  ? "bg-[#592321] hover:bg-[#6e2c29] text-[#ffd6d3] border border-[#7a322f]"
-                  : "bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d]"
-              }`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
             >
               {isPlaying ? (
                 <>
                   <Pause className="h-3.5 w-3.5 fill-current" />
-                  Pause Playback
+                  <span>Pause</span>
                 </>
               ) : (
                 <>
                   <Play className="h-3.5 w-3.5 fill-current" />
-                  {currentStepIndex >= 6 ? "Replay From Start" : "Play Timeline (1.2s)"}
+                  <span>{currentStepIndex >= 6 ? "Replay" : "Play (1.2s)"}</span>
                 </>
               )}
             </button>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Job Selector & Metric Header Strip */}
-      <div className="border border-[#252a24] bg-[#090b09] p-5 space-y-4">
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-2xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#e3e1d8] flex items-center gap-2">
-              <Database className="h-4 w-4 text-[#a4b58a]" />
-              Select Stored Reconciliation Job:
+            <span className="text-xs font-medium text-muted-foreground">
+              Stored reconciliation job:
             </span>
-            <select
+            <Dropdown
               value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="bg-[#060806] border border-[#252a24] text-[#e3e1d8] font-mono text-xs px-3 py-2 focus:border-[#a4b58a] focus:outline-none"
-            >
-              {jobs.map((j) => (
-                <option key={j.jobId} value={j.jobId}>
-                  {j.jobId} · {j.matchRatePct}% Match · {j.batchSize} records · {new Date(j.createdAt).toLocaleDateString()}
-                </option>
-              ))}
-            </select>
+              onValueChange={setSelectedJobId}
+              options={jobs.map((j) => ({
+                value: j.jobId,
+                label: `${j.jobId} (${j.batchSize} recs · ${formatDateOnly(j.createdAt)})`,
+                badge: `${j.matchRatePct}%`,
+              }))}
+              triggerClassName="min-w-[280px] font-mono text-sm"
+              data-testid="forensics-job-dropdown"
+            />
           </div>
 
           {timeline && (
             <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
               <div>
-                <span className="text-[10px] text-[#687063] block">BATCH SIZE</span>
-                <strong className="text-[#e3e1d8]">{timeline.batchSize} records</strong>
+                <span className="text-[11px] text-muted-foreground block font-sans">Batch size</span>
+                <strong className="text-foreground">{timeline.batchSize} records</strong>
               </div>
-              <div className="h-6 w-px bg-[#252a24]" />
+              <div className="h-6 w-px bg-[#1e1e1e]" />
               <div>
-                <span className="text-[10px] text-[#687063] block">MATCH RATE</span>
-                <strong className="text-[#a4b58a]">{timeline.summary.matchRatePct}%</strong>
+                <span className="text-[11px] text-muted-foreground block font-sans">Match rate</span>
+                <strong className="text-foreground">{timeline.summary.matchRatePct}%</strong>
               </div>
-              <div className="h-6 w-px bg-[#252a24]" />
+              <div className="h-6 w-px bg-[#1e1e1e]" />
               <div>
-                <span className="text-[10px] text-[#687063] block">EXCEPTIONS</span>
-                <strong className={timeline.summary.exception > 0 ? "text-[#d9776f]" : "text-[#a4b58a]"}>
-                  {timeline.summary.exception} item(s) ({timeline.summary.formattedDiscrepancy})
+                <span className="text-[11px] text-muted-foreground block font-sans">Exceptions</span>
+                <strong className={timeline.summary.exception > 0 ? "text-[#ef4444]" : "text-foreground"}>
+                  {timeline.summary.exception} ({timeline.summary.formattedDiscrepancy})
                 </strong>
               </div>
             </div>
@@ -264,38 +233,38 @@ export default function ForensicsPage() {
         </div>
 
         {/* 7-Step Progress Bar */}
-        <div className="space-y-1.5 pt-2 border-t border-[#1f241d]">
-          <div className="flex items-center justify-between text-[10px] font-mono font-bold text-[#687063]">
-            <span>PHASE {currentStepIndex + 1} OF 7: {activeStep?.title.toUpperCase()}</span>
-            <span>{Math.round(((currentStepIndex + 1) / 7) * 100)}% COMPLETE</span>
+        <div className="space-y-1.5 pt-2 border-t border-border">
+          <div className="flex items-center justify-between text-xs font-mono text-muted-foreground/70">
+            <span>Phase {currentStepIndex + 1} of 7: {activeStep?.title}</span>
+            <span>{Math.round(((currentStepIndex + 1) / 7) * 100)}% Complete</span>
           </div>
-          <div className="h-1.5 w-full bg-[#11140f] overflow-hidden">
+          <div className="h-1.5 w-full bg-[#181818] rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#a4b58a] transition-all duration-300"
+              className="h-full bg-primary text-primary-foreground rounded-full transition-all duration-300"
               style={{ width: `${((currentStepIndex + 1) / 7) * 100}%` }}
             />
           </div>
         </div>
       </div>
 
-      {/* Main Split Layout: Left Vertical Timeline (5 cols) & Right Deep Inspector (7 cols) */}
+      {/* Main Split Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: 7 Chronological Steps List */}
-        <div className="lg:col-span-5 space-y-2.5">
-          <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#687063] px-1">
-            Chronological Forensics Pipeline Steps:
-          </div>
+        {/* Left Column: 7 Chronological Steps */}
+        <div className="lg:col-span-5 space-y-2">
+          <SectionHeader
+            title="Forensics timeline"
+            description="Select any phase to view execution state."
+            className="border-b-0 pb-0"
+          />
 
           {!timeline ? (
-            <div className="border border-[#252a24] bg-[#090b09] p-8 text-center space-y-3">
-              <RefreshCw className="h-5 w-5 animate-spin text-[#a4b58a] mx-auto" />
-              <div className="text-xs font-mono text-[#8c9288]">Reconstructing Forensics Timeline...</div>
+            <div className="rounded-lg border border-border bg-card p-8 text-center space-y-3">
+              <RefreshCw className="h-5 w-5 animate-spin text-foreground mx-auto" />
+              <div className="text-xs font-mono text-muted-foreground">Reconstructing Forensics Timeline...</div>
             </div>
           ) : (
             timeline.steps.map((step, idx) => {
               const isActive = idx === currentStepIndex;
-              const isPast = idx < currentStepIndex;
-              const Icon = PHASE_ICONS[step.phase] || FileCheck;
 
               return (
                 <button
@@ -305,53 +274,31 @@ export default function ForensicsPage() {
                     setIsPlaying(false);
                     setCurrentStepIndex(idx);
                   }}
-                  className={`w-full text-left p-4 border transition-all flex items-start gap-3.5 ${
+                  className={`w-full text-left p-3.5 rounded-lg border transition-all flex items-start gap-3 ${
                     isActive
-                      ? "border-[#3e5532] bg-[#142211] text-[#f0eee6]"
-                      : isPast
-                      ? "border-[#252a24] bg-[#0a0d0a] text-[#8c9288] hover:border-[#384234]"
-                      : "border-[#1f241d] bg-[#060806] text-[#555b52] hover:border-[#252a24]"
+                      ? "border-[#ededed] bg-accent text-foreground"
+                      : "border-border bg-card text-muted-foreground hover:border-border"
                   }`}
                 >
-                  <div
-                    className={`p-2 border shrink-0 mt-0.5 ${
-                      isActive
-                        ? "border-[#3e5532] bg-[#1a2b16] text-[#a4b58a]"
-                        : isPast
-                        ? "border-[#252a24] bg-[#11140f] text-[#8c9288]"
-                        : "border-[#1c201b] bg-[#090b09] text-[#444a41]"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
-
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-mono font-bold opacity-75">
-                          STEP 0{step.stepNumber}
+                        <span className="text-[10px] font-mono font-medium text-muted-foreground/70">
+                          0{step.stepNumber}
                         </span>
-                        <span
-                          className={`px-1.5 py-0.2 text-[8px] font-mono font-bold border ${
-                            step.status === "VERIFIED"
-                              ? "bg-[#142211] border-[#3e5532] text-[#a4b58a]"
-                              : step.status === "AUDITED"
-                              ? "bg-[#1f1a10] border-[#4a3b1f] text-[#d9aa6f]"
-                              : "bg-[#11140f] border-[#252a24] text-[#8c9288]"
-                          }`}
-                        >
+                        <Badge variant="outline">
                           {step.status}
-                        </span>
+                        </Badge>
                       </div>
-                      <span className="text-[9px] font-mono text-[#687063]">
+                      <span className="text-[11px] font-mono text-muted-foreground/70">
                         {step.durationMs}ms
                       </span>
                     </div>
 
-                    <h3 className={`text-xs font-bold mt-1 truncate ${isActive ? "text-[#e3e1d8]" : "text-[#b5bba9]"}`}>
+                    <h3 className={`text-xs font-semibold mt-1 truncate ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
                       {step.title}
                     </h3>
-                    <p className="text-[11px] text-[#8c9288] line-clamp-2 mt-0.5 leading-relaxed">
+                    <p className="text-[11px] text-muted-foreground/70 line-clamp-2 mt-0.5 leading-relaxed">
                       {step.description}
                     </p>
                   </div>
@@ -361,96 +308,87 @@ export default function ForensicsPage() {
           )}
         </div>
 
-        {/* Right Column: Deep Step Inspector & Snapshot */}
+        {/* Right Column: Deep Step Inspector */}
         <div className="lg:col-span-7 space-y-4">
           {activeStep ? (
-            <div className="border border-[#2a2e29] bg-[#060806] p-6 space-y-5">
+            <div className="rounded-lg border border-border bg-card p-6 space-y-5">
               {/* Step Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#252a24] pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 border border-[#3e5532] bg-[#142211] text-[#a4b58a]">
-                    <StepIcon className="h-6 w-6 text-[#a4b58a]" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">
+                      Phase {activeStep.stepNumber}: {activeStep.phase}
+                    </Badge>
+                    <span className="text-xs font-mono text-muted-foreground/70">
+                      {activeStep.durationMs}ms
+                    </span>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-[#182614] border border-[#3e5532] text-[#a4b58a]">
-                        PHASE {activeStep.stepNumber}: {activeStep.phase}
-                      </span>
-                      <span className="text-[10px] font-mono text-[#687063]">
-                        {activeStep.durationMs}ms execution
-                      </span>
-                    </div>
-                    <h2 className="text-base font-bold text-[#e3e1d8] mt-1">
-                      {activeStep.title}
-                    </h2>
-                  </div>
+                  <h2 className="text-base font-semibold text-foreground mt-1">
+                    {activeStep.title}
+                  </h2>
                 </div>
 
-                <div className="text-right font-mono text-[10px] text-[#687063]">
-                  <div>STATUS: {activeStep.status}</div>
-                  <div>TIMESTAMP: {new Date(activeStep.timestamp).toLocaleTimeString()}</div>
+                <div className="text-right font-mono text-xs text-muted-foreground/70">
+                  <div>Status: {activeStep.status}</div>
+                  <div>{formatAuditTime(activeStep.timestamp)}</div>
                 </div>
               </div>
 
               {/* Step Description */}
-              <p className="text-xs text-[#8c9288] leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 {activeStep.description}
               </p>
 
               {/* Data Snapshot Views by Phase */}
               <div className="space-y-3">
-                <div className="text-[10px] font-mono font-bold text-[#687063] uppercase">
-                  Data Snapshot &amp; Execution Artifacts
+                <div className="text-xs font-semibold text-foreground">
+                  Execution Snapshot
                 </div>
 
                 {/* PHASE 1: Input Ingestion Table */}
                 {activeStep.phase === "INPUT_INGESTION" && (
-                  <div className="space-y-2">
-                    <div className="border border-[#252a24] bg-[#090b09] overflow-x-auto">
-                      <table className="w-full text-left font-mono text-[11px]">
-                        <thead className="bg-[#0d100d] border-b border-[#252a24] text-[9px] text-[#687063] uppercase">
-                          <tr>
-                            <th className="p-2">Source</th>
-                            <th className="p-2">Record ID</th>
-                            <th className="p-2">Reference</th>
-                            <th className="p-2">Amount (Paise)</th>
-                            <th className="p-2">Formatted</th>
+                  <div className="rounded border border-border bg-background overflow-x-auto">
+                    <table className="w-full text-left font-mono text-xs">
+                      <thead className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                        <tr>
+                          <th className="p-2.5 font-medium">Source</th>
+                          <th className="p-2.5 font-medium">Record ID</th>
+                          <th className="p-2.5 font-medium">Reference</th>
+                          <th className="p-2.5 font-medium text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {((activeStep.dataSnapshot.sampleRecords as Array<Record<string, unknown>>) || []).map((r, i) => (
+                          <tr key={i} className="hover:bg-accent/40">
+                            <td className="p-2.5 text-foreground font-medium">{String(r.source)}</td>
+                            <td className="p-2.5 text-muted-foreground">{String(r.id)}</td>
+                            <td className="p-2.5 text-muted-foreground/70">{String(r.referenceId || "-")}</td>
+                            <td className="p-2.5 text-foreground font-medium text-right">{String(r.formattedAmount)}</td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#1f241d]">
-                          {((activeStep.dataSnapshot.sampleRecords as Array<Record<string, unknown>>) || []).map((r, i) => (
-                            <tr key={i} className="hover:bg-[#11160f]">
-                              <td className="p-2 text-[#a4b58a] font-bold">{String(r.source)}</td>
-                              <td className="p-2 text-[#e3e1d8]">{String(r.id)}</td>
-                              <td className="p-2 text-[#8c9288]">{String(r.referenceId || "-")}</td>
-                              <td className="p-2 text-[#687063]">{String(r.amountPaise)}</td>
-                              <td className="p-2 text-[#e3e1d8] font-bold">{String(r.formattedAmount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
                 {/* PHASE 2: Index Building */}
                 {activeStep.phase === "INDEX_BUILDING" && (
                   <div className="grid grid-cols-2 gap-3 font-mono text-xs">
-                    <div className="p-3 border border-[#252a24] bg-[#090b09] space-y-1">
-                      <span className="text-[9px] text-[#687063] uppercase font-bold">Partition Keys</span>
-                      <div className="text-[#a4b58a] font-bold">paymentId, referenceId, utr</div>
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <span className="text-xs text-muted-foreground">Partition keys</span>
+                      <div className="text-foreground font-medium">paymentId, referenceId, utr</div>
                     </div>
-                    <div className="p-3 border border-[#252a24] bg-[#090b09] space-y-1">
-                      <span className="text-[9px] text-[#687063] uppercase font-bold">Temporal Window</span>
-                      <div className="text-[#e3e1d8] font-bold">72 Hours Sliding Bound</div>
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <span className="text-xs text-muted-foreground">Temporal window</span>
+                      <div className="text-foreground font-medium">72 Hours Sliding Bound</div>
                     </div>
-                    <div className="p-3 border border-[#252a24] bg-[#090b09] space-y-1">
-                      <span className="text-[9px] text-[#687063] uppercase font-bold">Candidate Pairs</span>
-                      <div className="text-[#e3e1d8] font-bold">{String(activeStep.dataSnapshot.candidatePairsGenerated || 40)} pairs</div>
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <span className="text-xs text-muted-foreground">Candidate pairs</span>
+                      <div className="text-foreground font-medium">{String(activeStep.dataSnapshot.candidatePairsGenerated || 40)} pairs</div>
                     </div>
-                    <div className="p-3 border border-[#252a24] bg-[#090b09] space-y-1">
-                      <span className="text-[9px] text-[#687063] uppercase font-bold">Search Strategy</span>
-                      <div className="text-[#a4b58a] font-bold">HASH_MAP_PARTITIONED</div>
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <span className="text-xs text-muted-foreground">Search strategy</span>
+                      <div className="text-foreground font-medium">HASH_MAP_PARTITIONED</div>
                     </div>
                   </div>
                 )}
@@ -459,30 +397,30 @@ export default function ForensicsPage() {
                 {activeStep.phase === "MATCHING_RESULTS" && (
                   <div className="space-y-3">
                     <div className="grid grid-cols-3 gap-3 font-mono text-xs text-center">
-                      <div className="p-3 border border-[#3e5532] bg-[#142211]">
-                        <span className="text-[9px] text-[#687063] uppercase">Auto-Matched</span>
-                        <div className="text-base font-bold text-[#a4b58a]">{String(activeStep.dataSnapshot.autoMatchedCount)}</div>
+                      <div className="p-3 rounded-md border border-border bg-background">
+                        <span className="text-xs text-muted-foreground">Auto-matched</span>
+                        <div className="text-lg font-semibold text-foreground">{String(activeStep.dataSnapshot.autoMatchedCount)}</div>
                       </div>
-                      <div className="p-3 border border-[#252a24] bg-[#090b09]">
-                        <span className="text-[9px] text-[#687063] uppercase">Suggested</span>
-                        <div className="text-base font-bold text-[#e3e1d8]">{String(activeStep.dataSnapshot.suggestedCount)}</div>
+                      <div className="p-3 rounded-md border border-border bg-background">
+                        <span className="text-xs text-muted-foreground">Suggested</span>
+                        <div className="text-lg font-semibold text-foreground">{String(activeStep.dataSnapshot.suggestedCount)}</div>
                       </div>
-                      <div className="p-3 border border-[#592321] bg-[#1c0f0e]">
-                        <span className="text-[9px] text-[#687063] uppercase">Exceptions</span>
-                        <div className="text-base font-bold text-[#e89088]">{String(activeStep.dataSnapshot.exceptionCount)}</div>
+                      <div className="p-3 rounded-md border border-border bg-background">
+                        <span className="text-xs text-muted-foreground">Exceptions</span>
+                        <div className="text-lg font-semibold text-[#ef4444]">{String(activeStep.dataSnapshot.exceptionCount)}</div>
                       </div>
                     </div>
 
                     {Array.isArray(activeStep.dataSnapshot.exceptions) && (activeStep.dataSnapshot.exceptions as Array<Record<string, unknown>>).length > 0 && (
-                      <div className="border border-[#252a24] bg-[#090b09] p-3 space-y-2 font-mono text-xs">
-                        <span className="text-[9px] font-bold uppercase text-[#687063]">Isolated Exception Item:</span>
+                      <div className="rounded-md border border-border bg-background p-3 space-y-2 font-mono text-xs">
+                        <span className="text-xs text-muted-foreground">Isolated exception:</span>
                         {((activeStep.dataSnapshot.exceptions as Array<Record<string, unknown>>)).map((exc, i) => (
-                          <div key={i} className="flex items-center justify-between p-2 border border-[#3d1a19] bg-[#130b0a]">
+                          <div key={i} className="flex items-center justify-between p-2 rounded border border-border bg-card">
                             <div>
-                              <span className="text-[#e89088] font-bold">{String(exc.id)}</span> · <span className="text-[#8c9288]">{String(exc.type)}</span>
-                              <div className="text-[10px] text-[#8c9288] mt-0.5">{String(exc.description)}</div>
+                              <span className="text-foreground font-semibold">{String(exc.id)}</span> · <span className="text-muted-foreground">{String(exc.type)}</span>
+                              <div className="text-[11px] text-muted-foreground/70 mt-0.5">{String(exc.description)}</div>
                             </div>
-                            <span className="text-[#e89088] font-bold">{String(exc.varianceFormatted)}</span>
+                            <span className="text-[#ef4444] font-semibold">{String(exc.varianceFormatted)}</span>
                           </div>
                         ))}
                       </div>
@@ -490,32 +428,32 @@ export default function ForensicsPage() {
                   </div>
                 )}
 
-                {/* PHASE 4: AI Investigation & Non-LLM Checks */}
+                {/* PHASE 4: AI Investigation */}
                 {activeStep.phase === "AI_INVESTIGATION" && (
                   <div className="space-y-3 font-mono text-xs">
-                    <div className="p-3 border border-[#252a24] bg-[#090b09] space-y-1.5">
-                      <span className="text-[9px] font-bold uppercase text-[#687063]">Formulated Structured Claim:</span>
-                      <p className="text-[#e3e1d8] text-[11px] leading-relaxed">
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <span className="text-[10px] uppercase text-muted-foreground/70">Structured Advisory Claim:</span>
+                      <p className="text-foreground leading-relaxed font-sans text-xs">
                         &quot;{String(activeStep.dataSnapshot.claimStatement)}&quot;
                       </p>
-                      <div className="text-[10px] text-[#8c9288]">
-                        Cited Evidence: <strong className="text-[#a4b58a]">{JSON.stringify(activeStep.dataSnapshot.citedEvidenceIds)}</strong> · Model: {String(activeStep.dataSnapshot.modelInvoked)}
+                      <div className="text-[11px] text-muted-foreground/70 pt-1">
+                        Evidence: <strong className="text-foreground">{JSON.stringify(activeStep.dataSnapshot.citedEvidenceIds)}</strong>
                       </div>
                     </div>
 
-                    <div className="border border-[#252a24] bg-[#090b09] p-3 space-y-2">
-                      <span className="text-[9px] font-bold uppercase text-[#687063]">Deterministic Non-LLM Verification Checks:</span>
+                    <div className="rounded-md border border-border bg-background p-3 space-y-2">
+                      <span className="text-[10px] uppercase text-muted-foreground/70">Mechanical Non-LLM Verifications:</span>
                       <div className="space-y-1">
                         {((activeStep.dataSnapshot.nonLlmChecks as Array<{ check: string; status: string; detail: string }>) || []).map((chk, i) => (
-                          <div key={i} className="flex items-center justify-between p-1.5 border border-[#1f241d] bg-[#060806] text-[10px]">
+                          <div key={i} className="flex items-center justify-between p-2 rounded border border-border bg-card text-xs">
                             <div className="flex items-center gap-2">
-                              <CheckCircle2 className="h-3 w-3 text-[#a4b58a]" />
-                              <span className="text-[#e3e1d8] font-bold">{chk.check}</span>
-                              <span className="text-[#8c9288]">{chk.detail}</span>
+                              <CheckCircle2 className="h-3.5 w-3.5 text-[#10b981]" />
+                              <span className="text-foreground font-medium">{chk.check}</span>
+                              <span className="text-muted-foreground/70">{chk.detail}</span>
                             </div>
-                            <span className="px-1.5 py-0.2 text-[8px] bg-[#142211] border border-[#3e5532] text-[#a4b58a] font-bold">
+                            <Badge variant="success">
                               {chk.status}
-                            </span>
+                            </Badge>
                           </div>
                         ))}
                       </div>
@@ -526,16 +464,16 @@ export default function ForensicsPage() {
                 {/* PHASE 5: Maker / Checker */}
                 {activeStep.phase === "MAKER_CHECKER" && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs">
-                    <div className="p-3 border border-[#252a24] bg-[#090b09] space-y-1.5">
-                      <span className="text-[9px] font-bold uppercase text-[#687063]">Maker (Reviewer Proposal)</span>
-                      <div className="text-[#e3e1d8] font-bold">reviewer_finance_ops</div>
-                      <div className="text-[10px] text-[#8c9288]">Action: PROPOSE_JOURNAL_ADJUSTMENT</div>
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <span className="text-xs text-muted-foreground">Maker (Reviewer Proposal)</span>
+                      <div className="text-foreground font-medium">reviewer_finance_ops</div>
+                      <div className="text-[11px] text-muted-foreground/70">Action: PROPOSE_JOURNAL_ADJUSTMENT</div>
                     </div>
 
-                    <div className="p-3 border border-[#3e5532] bg-[#142211] space-y-1.5">
-                      <span className="text-[9px] font-bold uppercase text-[#a4b58a]">Checker (Controller Sign-off)</span>
-                      <div className="text-[#f0eee6] font-bold">controller_cfo_01 (ADMIN)</div>
-                      <div className="text-[10px] text-[#a4b58a]">Verdict: AUTHORIZED (Level 3 Clearance)</div>
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <span className="text-xs text-muted-foreground">Checker (Controller Sign-off)</span>
+                      <div className="text-foreground font-medium">controller_cfo_01 (Admin)</div>
+                      <div className="text-[11px] text-[#10b981]">Verdict: AUTHORIZED (Level 3)</div>
                     </div>
                   </div>
                 )}
@@ -543,32 +481,32 @@ export default function ForensicsPage() {
                 {/* PHASE 6: Ledger Posting */}
                 {activeStep.phase === "LEDGER_POSTING" && (
                   <div className="space-y-3 font-mono text-xs">
-                    <div className="border border-[#252a24] bg-[#090b09] overflow-x-auto">
-                      <table className="w-full text-left text-[11px]">
-                        <thead className="bg-[#0d100d] border-b border-[#252a24] text-[9px] text-[#687063] uppercase">
+                    <div className="rounded border border-border bg-background overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
                           <tr>
-                            <th className="p-2">Account Name</th>
-                            <th className="p-2">Debit (₹)</th>
-                            <th className="p-2">Credit (₹)</th>
-                            <th className="p-2">Note</th>
+                            <th className="p-2.5 font-medium">Account</th>
+                            <th className="p-2.5 font-medium">Debit</th>
+                            <th className="p-2.5 font-medium">Credit</th>
+                            <th className="p-2.5 font-medium">Note</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#1f241d]">
+                        <tbody className="divide-y divide-border">
                           {((activeStep.dataSnapshot.journalEntries as Array<Record<string, unknown>>) || []).map((j, i) => (
-                            <tr key={i} className="hover:bg-[#11160f]">
-                              <td className="p-2 text-[#e3e1d8] font-bold">{String(j.account)}</td>
-                              <td className="p-2 text-[#a4b58a]">{Number(j.debitPaise) > 0 ? `₹${(Number(j.debitPaise) / 100).toFixed(2)}` : "-"}</td>
-                              <td className="p-2 text-[#d9aa6f]">{Number(j.creditPaise) > 0 ? `₹${(Number(j.creditPaise) / 100).toFixed(2)}` : "-"}</td>
-                              <td className="p-2 text-[#8c9288] text-[10px]">{String(j.note)}</td>
+                            <tr key={i} className="hover:bg-accent/40">
+                              <td className="p-2.5 text-foreground font-medium">{String(j.account)}</td>
+                              <td className="p-2.5 text-foreground">{Number(j.debitPaise) > 0 ? `₹${(Number(j.debitPaise) / 100).toFixed(2)}` : "-"}</td>
+                              <td className="p-2.5 text-foreground">{Number(j.creditPaise) > 0 ? `₹${(Number(j.creditPaise) / 100).toFixed(2)}` : "-"}</td>
+                              <td className="p-2.5 text-muted-foreground/70 text-[11px]">{String(j.note)}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
 
-                    <div className="p-2.5 border border-[#3e5532] bg-[#142211] flex items-center justify-between text-[11px]">
-                      <span className="text-[#a4b58a] font-bold">Money Conservation Invariant:</span>
-                      <span className="text-[#f0eee6] font-bold">Debits ₹200.00 == Credits ₹200.00 (0 Paise Drift)</span>
+                    <div className="p-3 rounded-md border border-border bg-background flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Money Conservation Invariant:</span>
+                      <span className="text-foreground font-semibold">Debits ₹200.00 == Credits ₹200.00 (0 Drift)</span>
                     </div>
                   </div>
                 )}
@@ -576,32 +514,32 @@ export default function ForensicsPage() {
                 {/* PHASE 7: Decision Receipt */}
                 {activeStep.phase === "DECISION_RECEIPT" && (
                   <div className="space-y-3 font-mono text-xs">
-                    <div className="p-3 border border-[#252a24] bg-[#090b09] space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-bold uppercase text-[#687063]">Merkle DAG Root Hash:</span>
-                        <span className="text-[9px] text-[#a4b58a]">ALGORITHM: SHA256-MERKLE-DAG</span>
+                    <div className="p-3 rounded-md border border-border bg-background space-y-1">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Merkle DAG Root Hash</span>
+                        <span>SHA256-MERKLE-DAG</span>
                       </div>
-                      <div className="text-[10px] text-[#a4b58a] break-all bg-[#060806] p-2 border border-[#1f241d]">
+                      <div className="text-[11px] text-foreground break-all bg-card p-2 rounded border border-border">
                         {String(activeStep.dataSnapshot.rootHash || timeline?.receipt?.rootHash || "")}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-3 border border-[#3e5532] bg-[#142211]">
+                    <div className="flex items-center justify-between p-3 rounded-md border border-border bg-background">
                       <div>
-                        <div className="text-xs font-bold text-[#f0eee6]">
-                          {offlineVerified ? "OFFLINE VERIFIED (0 LLMs, 0 DBs)" : "Standalone Verifier Ready"}
+                        <div className="text-xs font-semibold text-foreground">
+                          {offlineVerified ? "Offline Verified (0 LLMs, 0 DBs)" : "Standalone Verifier Ready"}
                         </div>
-                        <div className="text-[10px] text-[#a4b58a] opacity-80 mt-0.5">
-                          Cryptographic SHA-256 Lineage &amp; Merkle Root Match Confirmed
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          Cryptographic SHA-256 Lineage Match Confirmed
                         </div>
                       </div>
 
                       <button
                         type="button"
                         onClick={handleVerifyOffline}
-                        className="px-3 py-1.5 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider"
+                        className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-[#ffffff] transition"
                       >
-                        {offlineVerified ? "Re-Verify Offline" : "Run Offline Verifier"}
+                        {offlineVerified ? "Re-verify" : "Verify offline"}
                       </button>
                     </div>
                   </div>
@@ -610,31 +548,30 @@ export default function ForensicsPage() {
 
               {/* Cryptographic SHA-256 Audit Seal */}
               {activeStep.auditProof && (
-                <div className="border border-[#1f241d] bg-[#090b09] p-3 flex items-center justify-between gap-3 font-mono">
+                <div className="rounded-md border border-border bg-background p-3 flex items-center justify-between gap-3 font-mono">
                   <div className="min-w-0 flex-1">
-                    <span className="text-[8px] font-bold uppercase tracking-wider text-[#687063] block">
-                      Phase {activeStep.stepNumber} Cryptographic Audit Seal (SHA-256):
+                    <span className="text-[10px] uppercase text-muted-foreground/70 block">
+                      Phase {activeStep.stepNumber} Audit Seal (SHA-256):
                     </span>
-                    <div className="text-[10px] text-[#a4b58a] truncate mt-0.5">
+                    <div className="text-xs text-foreground truncate mt-0.5">
                       {activeStep.auditProof.hash}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => copyHash(activeStep.auditProof?.hash || "")}
-                    className="px-2.5 py-1 border border-[#252a24] bg-[#060806] hover:bg-[#121611] text-[#8c9288] text-[10px] flex items-center gap-1 shrink-0"
+                    className="h-7 px-2.5 rounded border border-border bg-card hover:bg-accent text-foreground text-xs flex items-center gap-1 shrink-0 transition"
                   >
-                    {copiedHash ? <Check className="h-3 w-3 text-[#a4b58a]" /> : <Copy className="h-3 w-3" />}
-                    {copiedHash ? "Copied" : "Copy Hash"}
+                    {copiedHash ? <Check className="h-3 w-3 text-[#10b981]" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                    <span>{copiedHash ? "Copied" : "Copy"}</span>
                   </button>
                 </div>
               )}
             </div>
           ) : (
-            <div className="border border-dashed border-[#252a24] bg-[#090b09] p-12 text-center space-y-3">
-              <History className="h-6 w-6 text-[#a4b58a] mx-auto" />
-              <h3 className="text-sm font-bold text-[#e3e1d8]">Forensics Step Ready</h3>
-              <p className="text-xs text-[#8c9288]">Select any step on the left to inspect detailed execution state.</p>
+            <div className="rounded-lg border border-dashed border-border bg-card p-12 text-center space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Forensics Step Ready</h3>
+              <p className="text-xs text-muted-foreground">Select any step on the left to inspect detailed execution state.</p>
             </div>
           )}
         </div>

@@ -10,18 +10,19 @@ import {
 import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
-  Bot,
+  Cpu,
   Check,
   CheckCircle2,
   Database,
-  Fingerprint,
   Loader2,
-  MessageSquareText,
-  Search,
   Send,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import { apiErrorMessage } from "@/lib/api/error-message";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
 
 interface ChatItem {
   id: string;
@@ -85,7 +86,6 @@ function FinanceChatContent() {
 
   useEffect(() => {
     if (!scrollRef.current) return;
-
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, sending]);
 
@@ -123,16 +123,11 @@ function FinanceChatContent() {
           }),
         });
 
-        const data = (await response.json()) as {
-          success?: boolean;
-          reply?: string;
-          evidenceCited?: string[];
-          error?: string;
-        };
+        const data = await response.json();
 
         if (!response.ok) {
           setError(
-            data.error || "The controller could not answer that question.",
+            apiErrorMessage(data, "The controller could not answer that question.")
           );
           return;
         }
@@ -160,392 +155,210 @@ function FinanceChatContent() {
   );
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border-b border-[#20241f] pb-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div className="mb-3 flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center border border-[#343a31] bg-[#10130f]">
-                <MessageSquareText className="h-3.5 w-3.5 text-[#a2aa84]" />
-              </div>
-
-              <span className="text-[8px] font-medium uppercase tracking-[0.22em] text-[#626960]">
-                Intelligence / Finance Q&A
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-[28px] font-semibold tracking-[-0.045em] text-[#eeece4]">
-                Finance Controller
-              </h1>
-
-              <span className="inline-flex items-center gap-1.5 border border-[#3c4934] bg-[#10150f] px-2.5 py-1 text-[8px] font-medium uppercase tracking-[0.14em] text-[#a8b58c]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#98ac7d]" />
-                Grounded
-              </span>
-            </div>
-
-            <p className="mt-2 max-w-2xl text-[11px] leading-5 text-[#747a71]">
-              Ask natural-language questions about the active reconciliation
-              batch. Answers are constrained to verified batch evidence.
-            </p>
-          </div>
-
-          {batchId ? (
-            <div className="border border-[#30352f] bg-[#0e110e] px-3 py-2">
-              <div className="text-[7px] font-medium uppercase tracking-[0.18em] text-[#62685f]">
-                Active batch
-              </div>
-
-              <div className="mt-1 flex items-center gap-2">
-                <Fingerprint className="h-3 w-3 text-[#6e7665]" />
-
-                <span className="font-mono text-[9px] text-[#a5a99f]">
-                  {batchId.slice(0, 18)}...
-                </span>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </header>
-
-      {/* Controller trust strip */}
-      <section className="grid gap-px overflow-hidden border border-[#2a2e29] bg-[#2a2e29] md:grid-cols-3">
-        <div className="bg-[#0d100d] p-4">
+      <PageHeader
+        tag="Finance Intelligence"
+        title="Finance controller terminal"
+        description="Query natural-language metrics and root causes across the active reconciliation batch. Responses are strictly constrained to verified cryptographic evidence."
+        badge={
           <div className="flex items-center gap-2">
-            <Database className="h-3.5 w-3.5 text-[#9ca581]" />
-
-            <span className="text-[8px] font-medium uppercase tracking-[0.17em] text-[#666d63]">
-              Source
-            </span>
+            <Badge variant="success">Grounded</Badge>
+            {batchId ? <Badge variant="outline">{batchId.slice(0, 14)}...</Badge> : null}
           </div>
+        }
+      />
 
-          <div className="mt-2 text-[11px] text-[#c5c4bc]">
-            Verified batch records
+      {/* Controller Trust Strip */}
+      <div className="grid gap-3 sm:grid-cols-3 text-xs">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="flex items-center gap-1.5 font-semibold text-foreground">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            <span>Verified Source Context</span>
           </div>
-
-          <div className="mt-1 text-[9px] text-[#5e645b]">
-            Answers cannot invent source data.
-          </div>
+          <p className="text-[11px] text-muted-foreground">Answers cite deterministic database records and vouchers.</p>
         </div>
 
-        <div className="bg-[#0d100d] p-4">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-3.5 w-3.5 text-[#9ca581]" />
-
-            <span className="text-[8px] font-medium uppercase tracking-[0.17em] text-[#666d63]">
-              Safety boundary
-            </span>
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="flex items-center gap-1.5 font-semibold text-foreground">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            <span>Safety Boundary</span>
           </div>
-
-          <div className="mt-2 text-[11px] text-[#c5c4bc]">
-            Evidence paths validated
-          </div>
-
-          <div className="mt-1 text-[9px] text-[#5e645b]">
-            Unsupported claims are rejected.
-          </div>
+          <p className="text-[11px] text-muted-foreground">Zero hallucinated adjustments. Unsupported claims rejected.</p>
         </div>
 
-        <div className="bg-[#0d100d] p-4">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-3.5 w-3.5 text-[#9ca581]" />
-
-            <span className="text-[8px] font-medium uppercase tracking-[0.17em] text-[#666d63]">
-              Control principle
-            </span>
+        <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+          <div className="flex items-center gap-1.5 font-semibold text-foreground">
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            <span>Advisory Invariant</span>
           </div>
-
-          <div className="mt-2 text-[11px] text-[#c5c4bc]">
-            AI explains. The engine decides.
-          </div>
-
-          <div className="mt-1 text-[9px] text-[#5e645b]">
-            Financial truth remains deterministic.
-          </div>
+          <p className="text-[11px] text-muted-foreground">AI provides analysis; mathematical ledger controls mutations.</p>
         </div>
-      </section>
+      </div>
 
-      {/* Suggested questions */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="border-b border-[#252a24] px-5 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-                Controller shortcuts
-              </div>
+      {/* Suggested Questions */}
+      <section className="rounded-lg border border-border bg-card p-5 space-y-3">
+        <SectionHeader
+          title="Recommended queries"
+          description="Click any prompt to run an instant grounded audit"
+          className="border-b-0 pb-0"
+        />
 
-              <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
-                Start with a financial question
-              </div>
-            </div>
-
-            <Search className="h-3.5 w-3.5 text-[#555c53]" />
-          </div>
-        </div>
-
-        <div className="grid gap-px bg-[#252a24] md:grid-cols-2 xl:grid-cols-5">
-          {SUGGESTED_QUESTIONS.map((question, index) => (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {SUGGESTED_QUESTIONS.map((question) => (
             <button
               key={question}
               type="button"
               disabled={sending || !batchId}
               onClick={() => handleSend(question)}
-              className="group bg-[#0a0d0a] p-4 text-left transition hover:bg-[#10140f] disabled:cursor-not-allowed disabled:opacity-40"
+              className="group rounded-md border border-border bg-background p-3 text-left transition hover:border-[#444444] disabled:opacity-40"
             >
-              <div className="flex items-start justify-between gap-3">
-                <span className="font-mono text-[8px] text-[#50574e]">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-
-                <ArrowRight className="h-3.5 w-3.5 text-[#4e554c] transition-transform group-hover:translate-x-1 group-hover:text-[#949e7d]" />
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs text-muted-foreground group-hover:text-foreground transition">
+                  {question}
+                </p>
+                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/70 group-hover:text-foreground shrink-0 mt-0.5 transition-transform group-hover:translate-x-0.5" />
               </div>
-
-              <p className="mt-4 text-[10px] leading-5 text-[#9a9d95] transition group-hover:text-[#c9c8c1]">
-                {question}
-              </p>
             </button>
           ))}
         </div>
       </section>
 
-      {/* Conversation */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="flex items-center justify-between border-b border-[#252a24] px-5 py-4">
-          <div>
-            <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-              Controller session
-            </div>
+      {/* Conversation Thread */}
+      <section className="rounded-lg border border-border bg-card overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <SectionHeader
+            title="Investigation session"
+            description="Cryptographically grounded exchange"
+            className="border-b-0 pb-0"
+          />
 
-            <div className="mt-1 text-[13px] font-semibold text-[#dddcd4]">
-              Financial Q&A
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-[8px] uppercase tracking-[0.14em] text-[#555c53]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#8ea177]" />
+          <span className="text-xs font-mono text-muted-foreground/70">
             {messages.length} messages
-          </div>
+          </span>
         </div>
 
         <div
           ref={scrollRef}
-          className="h-[540px] overflow-y-auto bg-[#090c09]"
+          className="h-[480px] overflow-y-auto bg-background p-5 space-y-4 text-xs"
         >
           {messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-6">
-              <div className="max-w-lg text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center border border-[#343a31] bg-[#10130f]">
-                  <Bot className="h-6 w-6 text-[#9ca681]" />
-                </div>
-
-                <div className="mt-5 text-[14px] font-semibold text-[#d8d6ce]">
-                  Ask the controller about this batch
-                </div>
-
-                <p className="mx-auto mt-2 max-w-md text-[10px] leading-5 text-[#656b62]">
-                  The controller answers from validated reconciliation data,
-                  cites the evidence it used, and falls back safely when a
-                  grounded answer cannot be produced.
+            <div className="flex h-full flex-col items-center justify-center text-center space-y-3 p-6">
+              <Cpu className="h-8 w-8 text-muted-foreground" />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Ask the finance controller</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mt-1">
+                  Query reconciliation metrics, fee breakdowns, orphan credits, or discrepancy root causes.
                 </p>
-
-                <div className="mt-5 flex flex-wrap justify-center gap-2">
-                  {[
-                    "Grounded answers",
-                    "Evidence cited",
-                    "No financial writes",
-                  ].map((item) => (
-                    <span
-                      key={item}
-                      className="border border-[#2e352c] bg-[#0e120e] px-2.5 py-1.5 text-[7px] uppercase tracking-[0.14em] text-[#737a70]"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
               </div>
             </div>
           ) : (
-            <div className="space-y-5 p-5">
-              {messages.map((message) => {
-                const assistant = message.role === "assistant";
+            messages.map((message) => {
+              const assistant = message.role === "assistant";
 
-                return (
+              return (
+                <div
+                  key={message.id}
+                  className={`flex gap-3 ${
+                    assistant ? "max-w-2xl" : "ml-auto max-w-xl justify-end"
+                  }`}
+                >
+                  {assistant && (
+                    <div className="h-7 w-7 rounded border border-border bg-card flex items-center justify-center shrink-0">
+                      <Cpu className="h-3.5 w-3.5 text-foreground" />
+                    </div>
+                  )}
+
                   <div
-                    key={message.id}
-                    className={`flex gap-3 ${
+                    className={`rounded-lg border p-4 space-y-2 ${
                       assistant
-                        ? "max-w-[900px]"
-                        : "ml-auto max-w-[760px] justify-end"
+                        ? "border-border bg-card text-foreground"
+                        : "border-border bg-secondary text-foreground"
                     }`}
                   >
-                    {assistant ? (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#414936] bg-[#11160f]">
-                        <Bot className="h-3.5 w-3.5 text-[#a1ad87]" />
-                      </div>
-                    ) : null}
-
-                    <div
-                      className={`min-w-0 ${
-                        assistant
-                          ? "border border-[#292f28] bg-[#0e120e]"
-                          : "border border-[#394132] bg-[#131811]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-4 border-b border-[#222720] px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          {assistant ? (
-                            <span className="text-[9px] font-semibold uppercase tracking-[0.13em] text-[#a8b28f]">
-                              SettleMate Controller
-                            </span>
-                          ) : (
-                            <>
-                              <UserRound className="h-3 w-3 text-[#767d73]" />
-
-                              <span className="text-[9px] font-semibold uppercase tracking-[0.13em] text-[#a5a89f]">
-                                You
-                              </span>
-                            </>
-                          )}
-                        </div>
-
-                        {assistant ? (
-                          <span className="text-[7px] uppercase tracking-[0.13em] text-[#4f564d]">
-                            Grounded response
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div className="px-4 py-4">
-                        <p className="whitespace-pre-wrap text-[11px] leading-6 text-[#c3c3bb]">
-                          {message.content}
-                        </p>
-
-                        {assistant &&
-                        message.evidenceCited &&
-                        message.evidenceCited.length > 0 ? (
-                          <details className="mt-5 border-t border-[#222720] pt-3">
-                            <summary className="flex cursor-pointer list-none items-center gap-2 text-[8px] font-medium uppercase tracking-[0.15em] text-[#8f9a79]">
-                              <Database className="h-3 w-3" />
-                              Evidence used
-                            </summary>
-
-                            <div className="mt-3 space-y-2">
-                              {message.evidenceCited.map(
-                                (evidence, index) => (
-                                  <div
-                                    key={`${evidence}-${index}`}
-                                    className="flex items-start gap-2.5 border-b border-[#1d221d] pb-2 last:border-0"
-                                  >
-                                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-[#8ea077]" />
-
-                                    <span className="break-all font-mono text-[8px] leading-5 text-[#737a71]">
-                                      {evidence}
-                                    </span>
-                                  </div>
-                                ),
-                              )}
-                            </div>
-                          </details>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {!assistant ? (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#363d31] bg-[#11150f]">
-                        <UserRound className="h-3.5 w-3.5 text-[#8b9678]" />
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-
-              {sending ? (
-                <div className="flex max-w-[900px] gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#414936] bg-[#11160f]">
-                    <Bot className="h-3.5 w-3.5 text-[#a1ad87]" />
-                  </div>
-
-                  <div className="border border-[#292f28] bg-[#0e120e] px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#9dab83]" />
-
-                      <span className="text-[9px] uppercase tracking-[0.14em] text-[#737a70]">
-                        Gathering verified evidence
+                    <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground border-b border-border pb-1.5">
+                      <span className="font-semibold text-foreground">
+                        {assistant ? "SettleMate Controller" : "You"}
                       </span>
+                      {assistant && <span className="text-[11px] text-muted-foreground/70">Grounded response</span>}
                     </div>
+
+                    <p className="whitespace-pre-wrap leading-relaxed">
+                      {message.content}
+                    </p>
+
+                    {assistant && message.evidenceCited && message.evidenceCited.length > 0 && (
+                      <div className="border-t border-border pt-2 space-y-1">
+                        <span className="text-xs text-muted-foreground">Evidence cited:</span>
+                        <div className="space-y-1 font-mono text-[11px] text-muted-foreground">
+                          {message.evidenceCited.map((ev, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5">
+                              <Check className="h-3 w-3 text-[#10b981] shrink-0" />
+                              <span className="truncate">{ev}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {!assistant && (
+                    <div className="h-7 w-7 rounded border border-border bg-secondary flex items-center justify-center shrink-0">
+                      <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
-              ) : null}
+              );
+            })
+          )}
+
+          {sending && (
+            <div className="flex gap-3 max-w-2xl">
+              <div className="h-7 w-7 rounded border border-border bg-card flex items-center justify-center shrink-0">
+                <Cpu className="h-3.5 w-3.5 text-foreground" />
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground" />
+                <span>Gathering verified batch evidence...</span>
+              </div>
             </div>
           )}
         </div>
 
         {/* Composer */}
-        <div className="border-t border-[#252a24] bg-[#0d100d] p-4">
-          {error ? (
-            <div className="mb-3 flex items-center justify-between gap-3 border border-[#513935] bg-[#160f0d] px-3 py-2.5">
-              <span className="text-[9px] leading-5 text-[#b3786e]">
-                {error}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setError(null)}
-                className="text-[8px] uppercase tracking-[0.12em] text-[#74645e] hover:text-[#aaa19d]"
-              >
+        <div className="border-t border-border bg-card p-4 space-y-2">
+          {error && (
+            <div className="flex items-center justify-between rounded border border-[#3b1818] bg-[#140a0a] px-3 py-1.5 text-xs text-[#ef4444]">
+              <span>{error}</span>
+              <button type="button" onClick={() => setError(null)} className="text-muted-foreground hover:text-foreground">
                 Dismiss
               </button>
             </div>
-          ) : null}
+          )}
 
-          <div
-            className={`flex min-h-[50px] items-center border bg-[#090c09] transition ${
-              inputQuery
-                ? "border-[#697657]"
-                : "border-[#30352f]"
-            }`}
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center">
-              <MessageSquareText className="h-4 w-4 text-[#626a5b]" />
-            </div>
-
+          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5">
             <input
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
                   void handleSend();
                 }
               }}
               disabled={sending || !batchId}
-              placeholder="Ask about payments, settlements, exceptions..."
-              className="min-w-0 flex-1 bg-transparent px-1 text-[11px] text-[#d2d1c9] outline-none placeholder:text-[#4f564d]"
+              placeholder="Ask about payments, settlements, exceptions, fees..."
+              className="flex-1 bg-transparent text-xs text-foreground placeholder-[#666666] focus:outline-none"
             />
 
             <button
               type="button"
               onClick={() => void handleSend()}
               disabled={sending || !inputQuery.trim() || !batchId}
-              className="mr-2 flex h-9 items-center gap-2 border border-[#4b533d] bg-[#151b11] px-3 text-[9px] font-semibold uppercase tracking-[0.13em] text-[#b3c08f] transition hover:bg-[#1a2115] disabled:cursor-not-allowed disabled:opacity-30"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-30 transition"
             >
-              {sending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-              Send
+              {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              <span>Send</span>
             </button>
-          </div>
-
-          <div className="mt-2 flex items-center justify-between text-[8px] uppercase tracking-[0.14em] text-[#4e554c]">
-            <span>Enter to send</span>
-
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck className="h-3 w-3" />
-              Grounded financial answers
-            </span>
           </div>
         </div>
       </section>
@@ -558,7 +371,7 @@ export default function ChatPage() {
     <Suspense
       fallback={
         <div className="flex min-h-[70vh] items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[#a5b47f]" />
+          <Loader2 className="h-5 w-5 animate-spin text-foreground" />
         </div>
       }
     >

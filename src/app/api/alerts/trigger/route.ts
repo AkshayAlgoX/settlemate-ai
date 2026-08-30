@@ -7,6 +7,7 @@ import {
   applySecurityHeaders,
   handleCorsPreflight,
   rateLimitGuard,
+  safeErrorResponse,
   sanitizeObject,
 } from "@/lib/security/api-security";
 import {
@@ -73,16 +74,9 @@ async function handlePost(req: NextRequest) {
       })
     );
   } catch (err) {
-    return applySecurityHeaders(
-      NextResponse.json(
-        {
-          success: false,
-          error: (err as Error).message || "Alert trigger failed",
-          processedAt: new Date().toISOString(),
-        },
-        { status: 500 }
-      )
-    );
+    // safeErrorResponse masks 5xx detail. Returning `(err as Error).message`
+    // handed the caller alert-engine internals and dispatch target details.
+    return safeErrorResponse(err, 500, "ALERT_TRIGGER_ERROR");
   }
 }
 

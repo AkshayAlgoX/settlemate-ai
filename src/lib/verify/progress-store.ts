@@ -4,9 +4,9 @@
 
 import { randomUUID } from "node:crypto";
 import {
-  VerifyProgressRepository,
-  type StoredVerifyProgressJob,
-} from "@/lib/storage/sqlite-db";
+  UnifiedProgressRepository as VerifyProgressRepository,
+  type UnifiedVerifyProgressJob as StoredVerifyProgressJob,
+} from "@/lib/storage/unified-store";
 
 export interface SuiteProgress {
   suiteId: string;

@@ -1,17 +1,18 @@
 "use client";
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
-  Check,
   CheckCircle2,
   Eye,
   EyeOff,
-  Fingerprint,
   LockKeyhole,
   UserRound,
 } from "lucide-react";
+import { apiErrorMessage } from "@/lib/api/error-message";
+import { BrandMark } from "@/components/layout/sidebar";
 
 type DemoRole = "admin" | "reviewer";
 
@@ -20,41 +21,25 @@ const DEMO_USERS = {
     username: "admin",
     password: "admin123",
     title: "Administrator",
-    description: "Investigation + approval authority",
+    description: "Full investigation, approval authority & policy promotion",
   },
   reviewer: {
     username: "reviewer",
     password: "review123",
     title: "Reviewer",
-    description: "Investigation + escalation authority",
+    description: "Exception investigation, variance review & escalation",
   },
 } as const;
-
-function SettleMateMark({ small = false }: { small?: boolean }) {
-  return (
-    <div
-      className={`relative flex items-center justify-center border border-[#b7a97a]/30 bg-[#b7a97a]/[0.06] ${
-        small ? "h-9 w-9" : "h-10 w-10"
-      }`}
-    >
-      <div className="relative h-[18px] w-[18px]">
-        <span className="absolute left-[2px] top-0 h-[18px] w-[4px] bg-[#c8bd98]" />
-        <span className="absolute left-[7px] top-0 h-[8px] w-[9px] border-t-[4px] border-r-[4px] border-[#c8bd98]" />
-        <span className="absolute bottom-0 right-[2px] h-[18px] w-[4px] bg-[#c8bd98]" />
-        <span className="absolute bottom-0 right-[7px] h-[8px] w-[9px] border-b-[4px] border-l-[4px] border-[#c8bd98]" />
-      </div>
-    </div>
-  );
-}
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/";
+  const next = searchParams.get("next") || "/dashboard";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedRole, setSelectedRole] = useState<DemoRole>("admin");
+  const [selectedRole, setSelectedRole] = useState<DemoRole | null>("admin");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,11 +48,22 @@ function LoginForm() {
     fetch("/api/auth/me")
       .then((response) => {
         if (response.ok) {
-          router.replace("/");
+          router.replace("/dashboard");
         }
       })
       .catch(() => {});
   }, [router]);
+
+  // Handle Escape key to close confirmation modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showConfirmModal && !loading) {
+        setShowConfirmModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showConfirmModal, loading]);
 
   const signIn = async (credentials: {
     username: string;
@@ -88,7 +84,7 @@ function LoginForm() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "Unable to authenticate.");
+        setError(apiErrorMessage(data, "Unable to authenticate."));
         return;
       }
 
@@ -103,318 +99,239 @@ function LoginForm() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    await signIn({
-      username,
-      password,
-    });
+    await signIn({ username, password });
   };
 
-  const handleDemoAccess = async (role: DemoRole) => {
-    const demo = DEMO_USERS[role];
-
+  const handleRoleSelect = (role: DemoRole) => {
     setSelectedRole(role);
+    const demo = DEMO_USERS[role];
     setUsername(demo.username);
     setPassword(demo.password);
+  };
 
-    await signIn({
-      username: demo.username,
-      password: demo.password,
-    });
+  const handleConfirmDemoSignIn = async () => {
+    if (!selectedRole) return;
+    const demo = DEMO_USERS[selectedRole];
+    setShowConfirmModal(false);
+    await signIn({ username: demo.username, password: demo.password });
   };
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-[#090a09] text-[#f1efe7]">
-      {/* Restrained grid */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.035]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
-          backgroundSize: "52px 52px",
-        }}
-      />
+    <div className="min-h-screen w-full bg-background text-foreground font-sans antialiased flex flex-col justify-between items-center relative overflow-hidden">
+      {/* Subtle ambient radial background */}
+      <div className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
+        <div className="h-[480px] w-[480px] sm:h-[600px] sm:w-[600px] rounded-full bg-primary/[0.03] dark:bg-primary/[0.05] blur-3xl" />
+      </div>
 
-      {/* Very subtle ambient depth */}
-      <div className="pointer-events-none absolute left-[18%] top-[28%] h-[300px] w-[300px] rounded-full bg-[#496044]/[0.07] blur-[120px]" />
-
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1440px] flex-col px-6 py-5 sm:px-9 lg:px-12">
-        {/* HEADER */}
-        <header className="flex items-center justify-between border-b border-white/[0.075] pb-5">
-          <div className="flex items-center gap-3">
-            <SettleMateMark small />
-
-            <div>
-              <div className="text-[14px] font-semibold tracking-[-0.01em]">
-                SettleMate AI
-              </div>
-
-              <div className="mt-0.5 text-[9px] font-medium uppercase tracking-[0.24em] text-white/35">
-                Finance Control Plane
-              </div>
+      {/* Minimal Header — Spans matching wide canvas */}
+      <header
+        className="w-full max-w-[1680px] mx-auto py-5 sm:py-6 flex items-center justify-between border-b border-border/40"
+        style={{ paddingInline: "clamp(24px, 4.5vw, 80px)" }}
+      >
+        <Link href="/" className="flex items-center gap-2.5 group hover:opacity-90 transition cursor-pointer">
+          <BrandMark className="h-8 w-8 text-[11px]" />
+          <div>
+            <div className="text-sm font-semibold tracking-tight text-foreground">
+              SettleMate AI
+            </div>
+            <div className="text-[10px] font-mono text-muted-foreground">
+              Finance Control Plane
             </div>
           </div>
+        </Link>
 
-          <div className="hidden items-center gap-2 sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#9caf83]" />
+        <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/60 px-2.5 py-1 text-[11px] font-mono text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+          <span>Demo Environment</span>
+        </div>
+      </header>
 
-            <span className="text-[9px] font-medium uppercase tracking-[0.22em] text-white/35">
-              Secure demo environment
-            </span>
-          </div>
-        </header>
-
-        {/* MAIN */}
-        <main className="grid flex-1 items-center gap-12 py-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-20 xl:gap-28">
-          {/* LEFT */}
-          <section className="max-w-[650px]">
-            <div className="mb-6 inline-flex items-center gap-2 border border-white/[0.09] bg-white/[0.018] px-3 py-2">
-              <Fingerprint className="h-3.5 w-3.5 text-[#a9a47b]" />
-
-              <span className="text-[9px] font-medium uppercase tracking-[0.19em] text-white/45">
-                Financial reconciliation control plane
-              </span>
-            </div>
-
-            <h1 className="max-w-[620px] text-[clamp(2.9rem,5vw,4.65rem)] font-semibold leading-[0.98] tracking-[-0.055em]">
-              Financial reconciliation
-              <span className="mt-1.5 block text-white/38">
-                you can trust.
-              </span>
+      {/* Focused Authentication Main */}
+      <main className="flex-1 flex items-center justify-center w-full px-4 py-8 sm:py-12">
+        <div className="w-full max-w-[440px] sm:max-w-[460px] rounded-xl border border-border bg-card p-6 sm:p-8 space-y-6 shadow-xs transition">
+          <div className="space-y-1.5">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+              Sign in
             </h1>
-
-            <p className="mt-7 max-w-[580px] text-[15px] leading-7 text-white/48">
-              Deterministic payment matching, controlled AI investigation,
-              human approval, and complete audit provenance — in one
-              financial control plane.
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Access the finance control plane with role credentials or quick demo logins.
             </p>
+          </div>
 
-            {/* PRINCIPLES */}
-            <div className="mt-8 grid max-w-[570px] grid-cols-1 gap-x-8 gap-y-3.5 sm:grid-cols-2">
-              {[
-                "Deterministic financial matching",
-                "Grounded AI explanations",
-                "Human approval for decisions",
-                "Complete audit provenance",
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-2.5">
-                  <div className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-[#879c70]/30 bg-[#879c70]/[0.06]">
-                    <Check className="h-2.5 w-2.5 text-[#9caf83]" />
-                  </div>
-
-                  <span className="text-[12px] text-white/58">{item}</span>
-                </div>
-              ))}
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground block">
+                Username
+              </label>
+              <div className="relative">
+                <UserRound className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="admin or reviewer"
+                  required
+                  className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring transition"
+                />
+              </div>
             </div>
 
-            {/* CONTROL STRIP */}
-            <div className="mt-10 max-w-[620px] border-y border-white/[0.075]">
-              <div className="grid grid-cols-4">
-                {[
-                  ["01", "Deterministic"],
-                  ["02", "Grounded AI"],
-                  ["03", "Human control"],
-                  ["04", "Auditable"],
-                ].map(([number, label], index) => (
-                  <div
-                    key={number}
-                    className={`py-4 ${
-                      index > 0
-                        ? "border-l border-white/[0.075] pl-4"
-                        : ""
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground block">
+                Password
+              </label>
+              <div className="relative">
+                <LockKeyhole className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  required
+                  className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-10 text-xs text-foreground placeholder:text-muted-foreground focus:border-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition cursor-pointer"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-10 rounded-lg bg-primary text-primary-foreground font-medium text-xs hover:opacity-90 disabled:opacity-50 transition flex items-center justify-center gap-2 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring outline-none"
+            >
+              <span>{loading ? "Signing in..." : "Sign in"}</span>
+              {!loading && <ArrowRight className="h-3.5 w-3.5" />}
+            </button>
+          </form>
+
+          {/* Demo Roles Selection & Confirmation */}
+          <div className="space-y-3 pt-3.5 border-t border-border">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
+              Quick demo access
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {(Object.entries(DEMO_USERS) as [DemoRole, (typeof DEMO_USERS)[DemoRole]][]).map(([role, demo]) => {
+                const active = selectedRole === role;
+
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => handleRoleSelect(role)}
+                    className={`rounded-lg border p-3 text-left transition flex flex-col justify-between gap-1 text-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-ring outline-none ${
+                      active
+                        ? "border-foreground/40 bg-secondary text-foreground shadow-2xs"
+                        : "border-border bg-background hover:bg-secondary/40 text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <div className="text-[8px] tracking-[0.18em] text-white/20">
-                      {number}
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-semibold text-foreground">{demo.title}</span>
+                      {active ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-foreground" />
+                      ) : (
+                        <span className="h-3.5 w-3.5 rounded-full border border-border" />
+                      )}
                     </div>
-
-                    <div className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.11em] text-white/38">
-                      {label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* LOGIN */}
-          <section className="w-full max-w-[440px]">
-            <div className="border border-white/[0.10] bg-[#10130f]/95 shadow-[0_25px_80px_rgba(0,0,0,0.42)]">
-              {/* LOGIN HEADER */}
-              <div className="border-b border-white/[0.075] px-6 py-6 sm:px-7">
-                <div className="flex items-center justify-between">
-                  <SettleMateMark />
-
-                  <span className="border border-white/[0.09] px-2.5 py-1 text-[8px] font-medium uppercase tracking-[0.18em] text-white/30">
-                    Secure access
-                  </span>
-                </div>
-
-                <h2 className="mt-6 text-[21px] font-semibold tracking-[-0.025em]">
-                  Access control plane
-                </h2>
-
-                <p className="mt-2 max-w-[350px] text-[12px] leading-5 text-white/38">
-                  Authenticate to investigate reconciliation exceptions and
-                  perform authorized financial actions.
-                </p>
-              </div>
-
-              <div className="px-6 py-6 sm:px-7">
-                <form onSubmit={handleSubmit} className="space-y-4.5">
-                  {/* USERNAME */}
-                  <div>
-                    <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.16em] text-white/45">
-                      Username
-                    </label>
-
-                    <div className="relative">
-                      <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/20" />
-
-                      <input
-                        value={username}
-                        onChange={(event) => setUsername(event.target.value)}
-                        autoComplete="username"
-                        placeholder="Enter username"
-                        className="h-12 w-full border border-white/[0.11] bg-[#0b0d0b] pl-10 pr-4 text-[13px] text-white outline-none transition placeholder:text-white/22 focus:border-[#a3ab7a]/55 focus:ring-1 focus:ring-[#a3ab7a]/10"
-                      />
-                    </div>
-                  </div>
-
-                  {/* PASSWORD */}
-                  <div>
-                    <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.16em] text-white/45">
-                      Password
-                    </label>
-
-                    <div className="relative">
-                      <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/20" />
-
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        autoComplete="current-password"
-                        placeholder="Enter password"
-                        className="h-12 w-full border border-white/[0.11] bg-[#0b0d0b] pl-10 pr-10 text-[13px] text-white outline-none transition placeholder:text-white/22 focus:border-[#a3ab7a]/55 focus:ring-1 focus:ring-[#a3ab7a]/10"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((value) => !value)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/20 transition hover:text-white/55"
-                        aria-label={
-                          showPassword ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-3.5 w-3.5" />
-                        ) : (
-                          <Eye className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {error && (
-                    <div className="border border-red-400/20 bg-red-400/[0.05] px-3.5 py-2.5 text-[11px] leading-5 text-red-300">
-                      {error}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="group flex h-11 w-full items-center justify-center gap-2 bg-[#d7d2bf] text-[12px] font-semibold text-[#11120f] transition hover:bg-[#e5dfcb] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {loading ? "Authenticating..." : "Sign in"}
-
-                    {!loading && (
-                      <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                    )}
+                    <span className="text-[11px] text-muted-foreground line-clamp-2">
+                      {demo.description}
+                    </span>
                   </button>
-                </form>
-
-                {/* DEMO ACCESS */}
-                <div className="my-6 flex items-center gap-3">
-                  <div className="h-px flex-1 bg-white/[0.07]" />
-
-                  <span className="text-[8px] uppercase tracking-[0.19em] text-white/22">
-                    Demo access
-                  </span>
-
-                  <div className="h-px flex-1 bg-white/[0.07]" />
-                </div>
-
-                <div className="space-y-2">
-                  {(
-                    Object.entries(DEMO_USERS) as [
-                      DemoRole,
-                      (typeof DEMO_USERS)[DemoRole],
-                    ][]
-                  ).map(([role, demo]) => {
-                    const active = selectedRole === role;
-
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        disabled={loading}
-                        onClick={() => handleDemoAccess(role)}
-                        className={`group flex w-full items-center justify-between border px-4 py-4 text-left transition ${
-                          active
-                            ? "border-[#8d9d70]/35 bg-[#8d9d70]/[0.055]"
-                            : "border-white/[0.075] bg-white/[0.012] hover:border-white/[0.14] hover:bg-white/[0.025]"
-                        } disabled:opacity-50`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-8 w-8 items-center justify-center border ${
-                              active
-                                ? "border-[#8d9d70]/25 bg-[#8d9d70]/[0.06]"
-                                : "border-white/[0.07] bg-black/20"
-                            }`}
-                          >
-                            <UserRound
-                              className={`h-3.5 w-3.5 ${
-                                active
-                                  ? "text-[#a7b789]"
-                                  : "text-white/25"
-                              }`}
-                            />
-                          </div>
-
-                          <div>
-                            <div className="text-[13px] font-medium text-[#d8d6ce]">
-                              {demo.title}
-                            </div>
-
-                            <div className="mt-0.5 text-[9px] text-white/42">
-                              {demo.description}
-                            </div>
-                          </div>
-                        </div>
-
-                        {active ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-[#a7b789]" />
-                        ) : (
-                          <ArrowRight className="h-3.5 w-3.5 text-white/15 transition-transform group-hover:translate-x-0.5 group-hover:text-white/40" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <p className="mt-4 text-center text-[9px] leading-4 text-white/22">
-                  Demo access is configured server-side.
-                </p>
-              </div>
+                );
+              })}
             </div>
-          </section>
-        </main>
 
-        <div className="h-4" />
-      </div>
+            <button
+              type="button"
+              disabled={!selectedRole || loading}
+              onClick={() => setShowConfirmModal(true)}
+              className="w-full h-9 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground font-medium text-xs disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring outline-none mt-1.5"
+            >
+              <span>{loading ? "Signing in..." : `Continue as ${selectedRole ? DEMO_USERS[selectedRole].title : "..."}`}</span>
+              {!loading && <ArrowRight className="h-3 w-3" />}
+            </button>
+          </div>
+        </div>
+      </main>
+
+      {/* Minimal Footer — Spans matching wide canvas */}
+      <footer
+        className="w-full max-w-[1680px] mx-auto py-4 sm:py-5 border-t border-border/40 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground"
+        style={{ paddingInline: "clamp(24px, 4.5vw, 80px)" }}
+      >
+        <span>SettleMate AI &copy; 2026 · Autonomous Financial Control Plane</span>
+        <span>Deterministic Reconciliation Engine</span>
+      </footer>
+
+      {/* Quick Demo Confirmation Dialog */}
+      {showConfirmModal && selectedRole && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="demo-confirm-dialog-title"
+          aria-describedby="demo-confirm-dialog-desc"
+          data-testid="demo-confirmation-modal"
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in-0 duration-100 font-sans"
+        >
+          {/* Backdrop click handler */}
+          <div
+            className="fixed inset-0"
+            onClick={() => !loading && setShowConfirmModal(false)}
+          />
+
+          {/* Dialog Card */}
+          <div className="relative z-50 w-full max-w-sm rounded-xl border border-border bg-popover p-6 shadow-2xl space-y-4 text-popover-foreground">
+            <div className="space-y-1.5">
+              <h3
+                id="demo-confirm-dialog-title"
+                className="text-base font-semibold text-foreground tracking-tight"
+              >
+                Continue as {DEMO_USERS[selectedRole].title}?
+              </h3>
+              <p
+                id="demo-confirm-dialog-desc"
+                className="text-xs text-muted-foreground leading-relaxed"
+              >
+                You&apos;re entering the SettleMate demo environment with {DEMO_USERS[selectedRole].title} permissions.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+              <button
+                type="button"
+                data-testid="demo-cancel-button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={loading}
+                className="h-9 rounded-lg border border-border bg-secondary px-3.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring outline-none transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="demo-continue-button"
+                onClick={handleConfirmDemoSignIn}
+                disabled={loading}
+                className="h-9 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring outline-none transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>{loading ? "Authenticating..." : "Continue"}</span>
+                {!loading && <ArrowRight className="h-3 w-3" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

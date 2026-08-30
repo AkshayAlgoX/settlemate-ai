@@ -2,20 +2,18 @@
 
 import React, { useState, useMemo } from "react";
 import {
-  TrendingUp,
-  DollarSign,
-  Clock,
-  Users,
-  ShieldCheck,
-  ArrowUpRight,
-  Sliders,
-  CheckCircle2,
-  AlertTriangle,
-  Sparkles,
-  BarChart3,
-  Percent,
+  ExternalLink,
 } from "lucide-react";
 import { calculateBusinessImpact } from "@/lib/business-impact/calculator";
+import { Dropdown } from "@/components/ui/dropdown";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+
+const CURRENCY_OPTIONS = [
+  { value: "USD", label: "USD ($) - US Dollars" },
+  { value: "INR", label: "INR (₹) - Indian Rupees" },
+];
 
 export default function BusinessImpactPage() {
   const [volume, setVolume] = useState<number>(500000);
@@ -23,8 +21,6 @@ export default function BusinessImpactPage() {
   const [reviewTime, setReviewTime] = useState<number>(12);
   const [hourlyWage, setHourlyWage] = useState<number>(45);
   const [currency, setCurrency] = useState<"USD" | "INR">("USD");
-
-  const symbol = currency === "USD" ? "$" : "₹";
 
   const results = useMemo(() => {
     return calculateBusinessImpact({
@@ -43,265 +39,230 @@ export default function BusinessImpactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Header Banner */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-950/60 via-slate-900 to-indigo-950/50 border border-emerald-500/20 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
-                <TrendingUp className="w-3.5 h-3.5" />
-                Track 04 Practical Finance-Ops Value · 💼 00P
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-                Business Impact & ROI Calculator
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-2xl">
-                Translate deterministic multi-pass reconciliation, non-LLM claim verification, and zero-drift invariants into tangible labor savings, ROI, and enterprise risk reduction.
-              </p>
+    <div className="space-y-10 pb-12">
+      {/* Header Banner */}
+      <PageHeader
+        tag="Finance Operations Value"
+        title="Business impact & ROI"
+        description="Quantifying deterministic reconciliation, non-LLM claim verification, and zero-drift invariants in tangible cost savings and risk reduction."
+        badge={<Badge variant="outline">Impact Model</Badge>}
+        actions={
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Currency:</span>
+              <Dropdown
+                value={currency}
+                onValueChange={(val) => setCurrency(val as "USD" | "INR")}
+                options={CURRENCY_OPTIONS}
+                triggerClassName="min-w-[140px]"
+                data-testid="business-impact-currency-dropdown"
+              />
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center gap-2"
-              >
-                Currency: <span className="text-emerald-400 font-mono">{currency} ({symbol})</span>
-              </button>
+            <a
+              href="/api/report/generate"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
+            >
+              <span>Export audit pack</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+        }
+      />
 
-              <a
-                href="/api/report/generate"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
-              >
-                Export Audit Pack <ArrowUpRight className="w-3.5 h-3.5" />
-              </a>
+      {/* 4 Primary Value Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 rounded-lg border border-border bg-card space-y-1">
+          <div className="text-2xl sm:text-3xl font-semibold font-mono text-foreground">
+            {formatCurrency(results.annualCostSavings)}
+          </div>
+          <div className="text-xs font-medium text-foreground">Annualized cost saved</div>
+          <div className="text-[11px] text-muted-foreground/70">
+            {formatCurrency(results.monthlyCostSavings)} / month saved
+          </div>
+        </div>
+
+        <div className="p-5 rounded-lg border border-border bg-card space-y-1">
+          <div className="text-2xl sm:text-3xl font-semibold font-mono text-foreground">
+            {results.monthlyHoursSaved.toLocaleString()} <span className="text-sm font-normal text-muted-foreground/70">hrs</span>
+          </div>
+          <div className="text-xs font-medium text-foreground">Monthly labor saved</div>
+          <div className="text-[11px] text-muted-foreground/70">
+            {results.annualHoursSaved.toLocaleString()} hrs / year saved
+          </div>
+        </div>
+
+        <div className="p-5 rounded-lg border border-border bg-card space-y-1">
+          <div className="text-2xl sm:text-3xl font-semibold font-mono text-foreground">
+            {results.fteRepurposed} <span className="text-sm font-normal text-muted-foreground/70">FTEs</span>
+          </div>
+          <div className="text-xs font-medium text-foreground">Analyst FTE repurposed</div>
+          <div className="text-[11px] text-muted-foreground/70">
+            Shifted to strategic investigations
+          </div>
+        </div>
+
+        <div className="p-5 rounded-lg border border-border bg-card space-y-1">
+          <div className="text-2xl sm:text-3xl font-semibold font-mono text-foreground">
+            {results.automatedResolutionRatePct}%
+          </div>
+          <div className="text-xs font-medium text-foreground">Automated resolution</div>
+          <div className="text-[11px] text-muted-foreground/70">
+            Only {results.manualReviewRatePct}% require manual review
+          </div>
+        </div>
+      </div>
+
+      {/* Interactive Parameter Controls & Comparison Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Controls Form */}
+        <div className="lg:col-span-5 p-6 rounded-lg border border-border bg-card space-y-6">
+          <SectionHeader
+            title="Enterprise operating parameters"
+          />
+
+          {/* Slider 1: Monthly Volume */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Monthly transaction volume:</span>
+              <span className="font-mono font-semibold text-foreground">{volume.toLocaleString()} txns</span>
+            </div>
+            <input
+              type="range"
+              min="25000"
+              max="2000000"
+              step="25000"
+              value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              className="w-full h-1 bg-[#181818] rounded-none appearance-none cursor-pointer accent-[#ededed]"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground/70 font-mono">
+              <span>25k (Mid-market)</span>
+              <span>500k</span>
+              <span>2M (High-scale)</span>
+            </div>
+          </div>
+
+          {/* Slider 2: Exception Rate */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Historical exception rate:</span>
+              <span className="font-mono font-semibold text-foreground">{exceptionRate}% ({results.totalMonthlyExceptions.toLocaleString()} txns)</span>
+            </div>
+            <input
+              type="range"
+              min="1.0"
+              max="15.0"
+              step="0.5"
+              value={exceptionRate}
+              onChange={(e) => setExceptionRate(Number(e.target.value))}
+              className="w-full h-1 bg-[#181818] rounded-none appearance-none cursor-pointer accent-[#ededed]"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground/70 font-mono">
+              <span>1% (Clean)</span>
+              <span>5% (Typical)</span>
+              <span>15% (Fragmented)</span>
+            </div>
+          </div>
+
+          {/* Slider 3: Review Time */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Manual investigation time:</span>
+              <span className="font-mono font-semibold text-foreground">{reviewTime} minutes</span>
+            </div>
+            <input
+              type="range"
+              min="5"
+              max="30"
+              step="1"
+              value={reviewTime}
+              onChange={(e) => setReviewTime(Number(e.target.value))}
+              className="w-full h-1 bg-[#181818] rounded-none appearance-none cursor-pointer accent-[#ededed]"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground/70 font-mono">
+              <span>5 mins (Quick)</span>
+              <span>12 mins (Standard)</span>
+              <span>30 mins (Complex)</span>
+            </div>
+          </div>
+
+          {/* Slider 4: Hourly Wage */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Analyst hourly rate:</span>
+              <span className="font-mono font-semibold text-foreground">{formatCurrency(hourlyWage * (currency === "INR" ? 80 : 1))}/hr</span>
+            </div>
+            <input
+              type="range"
+              min="20"
+              max="120"
+              step="5"
+              value={hourlyWage}
+              onChange={(e) => setHourlyWage(Number(e.target.value))}
+              className="w-full h-1 bg-[#181818] rounded-none appearance-none cursor-pointer accent-[#ededed]"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground/70 font-mono">
+              <span>$20/hr</span>
+              <span>$45/hr</span>
+              <span>$120/hr</span>
             </div>
           </div>
         </div>
 
-        {/* 4 Primary Value Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-emerald-500/30 shadow-lg space-y-2">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Annualized Cost Saved</span>
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-emerald-400 font-mono">
-              {formatCurrency(results.annualCostSavings)}
-            </div>
-            <div className="text-xs text-slate-400">
-              <span className="text-emerald-400 font-semibold">{formatCurrency(results.monthlyCostSavings)}</span> / month saved
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-indigo-500/30 shadow-lg space-y-2">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Monthly Labor Saved</span>
-              <Clock className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-indigo-300 font-mono">
-              {results.monthlyHoursSaved.toLocaleString()} <span className="text-sm font-normal">hrs</span>
-            </div>
-            <div className="text-xs text-slate-400">
-              <span className="text-indigo-400 font-semibold">{results.annualHoursSaved.toLocaleString()}</span> hrs / year saved
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-cyan-500/30 shadow-lg space-y-2">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Analyst FTE Repurposed</span>
-              <Users className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-cyan-400 font-mono">
-              {results.fteRepurposed} <span className="text-sm font-normal">FTEs</span>
-            </div>
-            <div className="text-xs text-slate-400">
-              Shifted to strategic investigations
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-amber-500/30 shadow-lg space-y-2">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Automated Resolution</span>
-              <Percent className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-amber-400 font-mono">
-              {results.automatedResolutionRatePct}%
-            </div>
-            <div className="text-xs text-slate-400">
-              Only <span className="text-amber-300 font-semibold">{results.manualReviewRatePct}%</span> need manual review
-            </div>
-          </div>
-        </div>
-
-        {/* Interactive Parameter Controls & Comparison Breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Controls Form */}
-          <div className="lg:col-span-5 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-6">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Sliders className="w-4 h-4 text-emerald-400" />
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                Enterprise Operating Parameters
-              </h2>
-            </div>
-
-            {/* Slider 1: Monthly Volume */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-semibold">Monthly Transaction Volume:</span>
-                <span className="font-mono font-bold text-emerald-400">{volume.toLocaleString()} txns</span>
-              </div>
-              <input
-                type="range"
-                min="25000"
-                max="2000000"
-                step="25000"
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        {/* Value Attribution Breakdown */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="p-6 rounded-lg border border-border bg-card space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <SectionHeader
+                title="Benchmark proportions & impact lineage"
+                className="border-b-0 pb-0"
               />
-              <div className="flex justify-between text-[10px] text-slate-500">
-                <span>25k (Mid-market)</span>
-                <span>500k</span>
-                <span>2M (High-scale)</span>
-              </div>
+              <span className="text-xs font-mono text-foreground">98.1% Accuracy</span>
             </div>
 
-            {/* Slider 2: Exception Rate */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-semibold">Historical Exception Rate:</span>
-                <span className="font-mono font-bold text-indigo-400">{exceptionRate}% ({results.totalMonthlyExceptions.toLocaleString()} txns)</span>
-              </div>
-              <input
-                type="range"
-                min="1.0"
-                max="15.0"
-                step="0.5"
-                value={exceptionRate}
-                onChange={(e) => setExceptionRate(Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500">
-                <span>1% (Clean)</span>
-                <span>5% (Typical)</span>
-                <span>15% (Fragmented)</span>
-              </div>
-            </div>
-
-            {/* Slider 3: Review Time */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-semibold">Manual Investigation Time / Exception:</span>
-                <span className="font-mono font-bold text-cyan-400">{reviewTime} minutes</span>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="30"
-                step="1"
-                value={reviewTime}
-                onChange={(e) => setReviewTime(Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500">
-                <span>5 mins (Quick)</span>
-                <span>12 mins (Standard)</span>
-                <span>30 mins (Complex)</span>
-              </div>
-            </div>
-
-            {/* Slider 4: Hourly Wage */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-semibold">Finance Ops Analyst Hourly Rate:</span>
-                <span className="font-mono font-bold text-amber-400">{formatCurrency(hourlyWage * (currency === "INR" ? 80 : 1))}/hr</span>
-              </div>
-              <input
-                type="range"
-                min="20"
-                max="120"
-                step="5"
-                value={hourlyWage}
-                onChange={(e) => setHourlyWage(Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500">
-                <span>$20/hr</span>
-                <span>$45/hr (Avg)</span>
-                <span>$120/hr (Senior)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Value Attribution Breakdown */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-emerald-400" />
-                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Official Benchmark Proportions & Impact Lineage
-                  </h2>
+            <div className="space-y-3 text-xs">
+              <div className="p-3.5 rounded-md border border-border bg-background space-y-0.5">
+                <div className="font-medium text-foreground">
+                  Deterministic Multi-Pass Pass-Through (39.2% Auto-Match)
                 </div>
-                <span className="text-xs font-mono text-emerald-400">98.1% Accuracy</span>
+                <div className="text-muted-foreground">
+                  103 of 263 benchmark transactions match immediately via 1:1, 1:N, and N:1 amount-indexed rules with 0 latency overhead and 0 LLM costs.
+                </div>
               </div>
 
-              <div className="space-y-3 text-xs">
-                <div className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-start gap-3">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-slate-200">
-                      Deterministic Multi-Pass Pass-Through (39.2% Auto-Match)
-                    </div>
-                    <div className="text-slate-400">
-                      103 of 263 benchmark transactions match immediately via 1:1, 1:N, and N:1 amount-indexed rules with 0 latency overhead and 0 LLM costs.
-                    </div>
-                  </div>
+              <div className="p-3.5 rounded-md border border-border bg-background space-y-0.5">
+                <div className="font-medium text-foreground">
+                  Grounded AI Evidence Resolution (52.1% Grounded Autopilot)
                 </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-start gap-3">
-                  <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-slate-200">
-                      Grounded AI Evidence Resolution (52.1% Grounded Autopilot)
-                    </div>
-                    <div className="text-slate-400">
-                      137 of 160 exceptions are resolved automatically by AI agents querying the Context Vault and passing mechanical non-LLM verification gates (134k+ claims/s).
-                    </div>
-                  </div>
+                <div className="text-muted-foreground">
+                  137 of 160 exceptions are resolved automatically by AI agents querying Context Vault and passing mechanical non-LLM verification gates (134k+ claims/s).
                 </div>
+              </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-start gap-3">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-slate-200">
-                      Targeted Maker / Checker Escalation (8.7% Human Review)
-                    </div>
-                    <div className="text-slate-400">
-                      Only 23 genuinely ambiguous transactions require human touch, slashing operational backlogs by 91.3%.
-                    </div>
-                  </div>
+              <div className="p-3.5 rounded-md border border-border bg-background space-y-0.5">
+                <div className="font-medium text-foreground">
+                  Targeted Maker / Checker Escalation (8.7% Human Review)
                 </div>
+                <div className="text-muted-foreground">
+                  Only 23 genuinely ambiguous transactions require human touch, slashing operational backlogs by 91.3%.
+                </div>
+              </div>
 
-                <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-start gap-3">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-emerald-300">
-                      Zero Clerical Error & Invariant Protection Guarantee
-                    </div>
-                    <div className="text-emerald-400/80">
-                      SettleMate eliminates estimated <span className="font-bold text-white font-mono">{results.preventedClericalErrorsMonthly.toLocaleString()}</span> monthly manual entry errors while preserving strict paise-level balance conservation (0 false financial writes).
-                    </div>
-                  </div>
+              <div className="p-3.5 rounded-md border border-border bg-background space-y-0.5">
+                <div className="font-medium text-foreground">
+                  Zero Clerical Error & Invariant Protection Guarantee
+                </div>
+                <div className="text-muted-foreground">
+                  SettleMate eliminates estimated <span className="font-medium text-foreground font-mono">{results.preventedClericalErrorsMonthly.toLocaleString()}</span> monthly manual entry errors while preserving strict paise-level balance conservation (0 false financial writes).
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

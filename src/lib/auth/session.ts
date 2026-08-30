@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 // ── Lightweight demo auth boundary (no external framework) ──
@@ -25,6 +25,7 @@ export interface SessionUser {
   sub: string;
   name: string;
   role: Role;
+  tenantId?: string;
   exp: number; // unix seconds
 }
 
@@ -58,15 +59,54 @@ export function getDemoUsers(): DemoUser[] {
   ];
 }
 
+// A per-process random salt used ONLY to normalise credentials to fixed-length
+// digests before comparison. It never leaves the process and is never persisted,
+// so it needs no configuration — and keeping it distinct from AUTH_SECRET
+// preserves key separation: the session-signing key is not reused for a second
+// purpose, and credential comparison keeps working even when AUTH_SECRET is
+// absent (which is a signing concern, handled separately by getAuthSecret).
+const CREDENTIAL_COMPARE_SALT = randomBytes(32);
+
+function credentialDigest(value: string): Buffer {
+  return createHmac("sha256", CREDENTIAL_COMPARE_SALT).update(value, "utf8").digest();
+}
+
+/**
+ * Constant-time credential comparison.
+ *
+ * Both sides are HMAC'd to a fixed 32-byte digest before comparing. That matters
+ * twice: timingSafeEqual throws outright when the two buffers differ in length,
+ * and guarding it with an explicit length check would itself leak the secret's
+ * length. After hashing, every comparison does byte-for-byte identical work
+ * regardless of the inputs.
+ */
+function credentialsEqual(expected: string, presented: string): boolean {
+  return timingSafeEqual(credentialDigest(expected), credentialDigest(presented));
+}
+
 export function authenticateUser(username: string, password: string): SessionUser | null {
-  const match = getDemoUsers().find(
-    (u) => u.username === username && u.password === password
-  );
+  let match: DemoUser | null = null;
+
+  // Deliberately exhaustive and non-short-circuiting: every candidate is checked
+  // against BOTH digests, and the loop never breaks early. `find()` with
+  // `u.username === username && u.password === password` leaked two ways — it
+  // returned as soon as it hit a match, and `&&` skipped the password compare
+  // entirely for a non-existent username. Either lets an attacker enumerate
+  // valid usernames by response time before ever guessing a password.
+  for (const user of getDemoUsers()) {
+    const usernameMatches = credentialsEqual(user.username, username);
+    const passwordMatches = credentialsEqual(user.password, password);
+    if (usernameMatches && passwordMatches) {
+      match = user;
+    }
+  }
+
   if (!match) return null;
   return {
     sub: match.username,
     name: match.name,
     role: match.role,
+    tenantId: "tenant_default_sandbox",
     exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
   };
 }
@@ -129,7 +169,13 @@ export function verifySessionToken(token: string): SessionUser | null {
     if (typeof parsed.role !== "string" || !isRole(parsed.role)) return null;
     if (typeof parsed.exp !== "number") return null;
     if (parsed.exp < Math.floor(Date.now() / 1000)) return null;
-    return parsed as SessionUser;
+    return {
+      sub: parsed.sub,
+      name: parsed.name,
+      role: parsed.role,
+      tenantId: parsed.tenantId || "tenant_default_sandbox",
+      exp: parsed.exp,
+    };
   } catch {
     return null;
   }

@@ -4,15 +4,14 @@
 
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
-  JobRepository,
-  DecisionReceiptRepository,
-  WebhookRepository,
-  transaction,
-  type StoredReconciliationJob,
-  type StoredDecisionReceipt,
-  type StoredWebhookRegistration,
-  type StoredWebhookDeliveryLog,
-} from "@/lib/storage/sqlite-db";
+  UnifiedJobRepository as JobRepository,
+  UnifiedReceiptRepository as DecisionReceiptRepository,
+  UnifiedWebhookRepository as WebhookRepository,
+  type UnifiedJob as StoredReconciliationJob,
+  type UnifiedDecisionReceipt as StoredDecisionReceipt,
+  type UnifiedWebhookRegistration as StoredWebhookRegistration,
+  type UnifiedWebhookDeliveryLog as StoredWebhookDeliveryLog,
+} from "@/lib/storage/unified-store";
 import { evaluateOutboundUrl } from "@/lib/security/ssrf-guard";
 import { metrics } from "@/lib/observability/metrics";
 import { logger } from "@/lib/observability/logger";
@@ -115,14 +114,11 @@ class V1Store {
         }
       : null;
 
-    // Persist the job and its decision receipt as one atomic unit so a crash can
-    // never leave a completed job without its receipt (or vice versa).
-    transaction(() => {
-      JobRepository.save(stored);
-      if (storedReceipt) {
-        DecisionReceiptRepository.save(storedReceipt);
-      }
-    });
+    // Persist the job and its decision receipt via unified repository
+    JobRepository.save(stored);
+    if (storedReceipt) {
+      DecisionReceiptRepository.save(storedReceipt);
+    }
   }
 
   getJob(jobId: string): V1ReconciliationJob | undefined {
@@ -242,9 +238,9 @@ class V1Store {
       payload: row.payload ? JSON.parse(row.payload) : {},
       signature: row.signature,
       timestamp: row.timestamp,
-      status: row.status,
-      statusCode: row.statusCode,
-      attempts: row.attempts,
+      status: (row.status || (row.success ? "DELIVERED" : "FAILED")) as "DELIVERED" | "FAILED" | "SIMULATED",
+      statusCode: row.statusCode ?? 200,
+      attempts: row.attempts ?? row.attempt ?? 1,
       error: row.error,
     }));
   }

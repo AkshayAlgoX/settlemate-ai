@@ -62,9 +62,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     },
   };
 
-  // Persist Decision Receipt and Audit record in SQLite
+  // Persist Decision Receipt and Audit record in unified repository
   try {
-    const { DecisionReceiptRepository, AuditLedgerRepository } = await import("@/lib/storage/sqlite-db");
+    const {
+      UnifiedReceiptRepository: DecisionReceiptRepository,
+      UnifiedAuditLedgerRepository: AuditLedgerRepository,
+    } = await import("@/lib/storage/unified-store");
     DecisionReceiptRepository.save({
       receiptId: `rcpt_${reportData.reportId}`,
       jobId: reportData.batchId,

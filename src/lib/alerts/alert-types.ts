@@ -215,15 +215,17 @@ const DETERMINISTIC_ALERT_TEMPLATES: Array<Omit<SmartAlert, "id" | "timestamp" |
  */
 export function generateDeterministicAlert(
   index: number = 0,
-  forceHighRisk: boolean = false
+  forceHighRisk: boolean = false,
+  customTimestamp?: string,
+  customId?: string
 ): SmartAlert {
   const templates = forceHighRisk
     ? DETERMINISTIC_ALERT_TEMPLATES.filter((t) => t.severity === "HIGH")
     : DETERMINISTIC_ALERT_TEMPLATES;
 
   const template = templates[index % templates.length];
-  const now = new Date().toISOString();
-  const alertId = `alt_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString().slice(-4)}`;
+  const now = customTimestamp || "2026-08-28T10:00:00.000Z";
+  const alertId = customId || `alt_det_${String(index).padStart(4, "0")}`;
 
   return {
     ...template,

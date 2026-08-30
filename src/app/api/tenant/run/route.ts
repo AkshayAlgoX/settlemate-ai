@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rateLimitGuard, applySecurityHeaders } from "@/lib/security/api-security";
+import { rateLimitGuard, applySecurityHeaders, safeErrorResponse } from "@/lib/security/api-security";
 import { createHash } from "node:crypto";
 
 export interface TenantConfig {
@@ -196,10 +196,8 @@ export async function POST(req: NextRequest) {
 
     return applySecurityHeaders(res);
   } catch (err) {
-    const errorRes = NextResponse.json(
-      { success: false, error: { message: (err as Error).message } },
-      { status: 500 }
-    );
-    return applySecurityHeaders(errorRes);
+    // safeErrorResponse masks 5xx detail. This route is multi-tenant, so an
+    // unmasked message risked echoing one tenant's data shape to another.
+    return safeErrorResponse(err, 500, "TENANT_RUN_ERROR");
   }
 }

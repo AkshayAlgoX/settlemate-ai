@@ -5,7 +5,9 @@
 [![Coverage](https://img.shields.io/badge/Coverage-97.7%25%20Statements-blue)](scripts/test-coverage.ts)
 [![Tests](https://img.shields.io/badge/Tests-52%2F52%20Passing-brightgreen)](package.json)
 [![Accuracy](https://img.shields.io/badge/Official%20Accuracy-98.1%25-success)](scripts/evaluate.ts)
-[![Invariant Drift](https://img.shields.io/badge/Ledger%20Drift-%E2%82%B90.00%20(Zero)-emerald)](src/lib/reconciliation/invariants.ts)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAkshayAlgoX%2Fsettlemate-ai)
+[![OpenAPI 3.0.3](https://img.shields.io/badge/OpenAPI-3.0.3-green)](src/app/api-docs/page.tsx)
+[![Postman Collection](https://img.shields.io/badge/Postman-Collection%20Ready-orange)](postman-collection.json)
 
 > **Executive Summary:** High-volume payment reconciliation across fragmented source systems (orders, payments, settlements, bank credits, refunds, chargebacks) is historically error-prone and vulnerable to silent ledger drift. SettleMate AI establishes a strict architectural boundary: **AI assists financial operations, but never controls financial truth.**
 >

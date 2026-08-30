@@ -5,9 +5,22 @@ import { DistributedOrchestrator } from "@/lib/reconciliation/distributed/orches
 import { InMemoryDistributedQueue } from "@/lib/reconciliation/distributed/queue";
 import { InMemoryStorageAdapter } from "@/lib/reconciliation/distributed/storage";
 import { generateStreamingPartitions } from "@/lib/reconciliation/distributed/stream-generator";
+import { getSession } from "@/lib/auth/session";
 
 export async function POST(req: NextRequest) {
   try {
+    // Server-side RBAC: Generating a batch mutates database state and requires ADMIN.
+    const session = getSession(req);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (session.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Forbidden: ADMIN role required to generate batches" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const size = body.size || 250;
 

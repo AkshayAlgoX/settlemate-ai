@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/session";
 
 export interface RateLimiterConfig {
   maxTokens: number; // Max burst / capacity (e.g. 100)
@@ -300,6 +301,43 @@ export function rateLimitGuard(
 }
 
 /**
+ * API-key guard helper for /api/v1/* route handlers.
+ *
+ * The v1 surface is a MACHINE API authenticated by `sk_` key, distinct from the
+ * dashboard's session-cookie boundary in proxy.ts. Because proxy.ts deliberately
+ * lets /api/v1/* through so this key check can run, every v1 route that returns
+ * or mutates tenant data MUST call this. Mirrors rateLimitGuard's shape so a
+ * handler reads: rate limit -> key auth -> work.
+ */
+export function apiKeyGuard(
+  req: NextRequest
+): { allowed: boolean; response?: NextResponse; key?: string } {
+  const rawKey = req.headers.get("x-api-key") || req.headers.get("authorization");
+  const auth = validateApiKey(rawKey);
+
+  if (!auth.valid) {
+    return {
+      allowed: false,
+      response: applySecurityHeaders(
+        NextResponse.json(
+          {
+            error: {
+              code: "UNAUTHORIZED",
+              message:
+                auth.error || "Valid API key starting with 'sk_' (length > 20) required",
+            },
+          },
+          { status: 401 }
+        ),
+        { "WWW-Authenticate": 'Bearer realm="settlemate-api-v1"' }
+      ),
+    };
+  }
+
+  return { allowed: true, key: auth.key };
+}
+
+/**
  * Validates request payload size against a strict byte limit (default: 1MB).
  */
 export function validateBodySize(
@@ -396,4 +434,44 @@ export function safeErrorResponse(
   );
 
   return applySecurityHeaders(response);
+}
+
+/**
+ * Extracts and verifies tenant identity from request session or API key,
+ * validating against any attempted cross-tenant overrides.
+ */
+export function extractTenantIdentity(
+  req: NextRequest,
+  requestedTenantId?: string | null
+): { tenantId: string; role: string; errorResponse?: NextResponse } {
+  const session = getSession(req);
+
+  let activeTenantId = "tenant_default_sandbox";
+  let activeRole = "SERVICE";
+
+  if (session) {
+    activeTenantId = session.tenantId || "tenant_default_sandbox";
+    activeRole = session.role;
+  }
+
+  // Cross-tenant tampering defense: if the request attempts to specify another tenant
+  if (requestedTenantId && requestedTenantId !== activeTenantId) {
+    const errorResponse = NextResponse.json(
+      {
+        error: {
+          code: "FORBIDDEN_CROSS_TENANT_ACCESS",
+          message: `Access Denied: authenticated tenant '${activeTenantId}' cannot access or mutate records for tenant '${requestedTenantId}'.`,
+          timestamp: new Date().toISOString(),
+        },
+      },
+      { status: 403 }
+    );
+    return {
+      tenantId: activeTenantId,
+      role: activeRole,
+      errorResponse: applySecurityHeaders(errorResponse),
+    };
+  }
+
+  return { tenantId: activeTenantId, role: activeRole };
 }

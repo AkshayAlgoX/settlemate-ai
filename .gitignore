@@ -50,6 +50,8 @@ prisma/dev.db-journal
 
 dev.db
 dev.db-journal
+dev.db-wal
+dev.db-shm
 data/
 data/*.db
 data/*.db-wal
@@ -62,3 +64,9 @@ data/*.db-shm
 .aider*
 .storage_vault/
 .storage_staging/
+
+# Local QA inspection reports and browser screenshots
+canvas-geometry-report.json
+login-geometry-report.json
+rendered-inspection-report.json
+rendered-screenshots/

@@ -1,34 +1,15 @@
 "use client";
 
-/*
- * SettleMate AI — Risk & Exposure Command Center (/risk-dashboard)
- *
- * A finance-controller view that aggregates every unresolved reconciliation
- * exception into a single real-time exposure picture: total amount at risk,
- * high-risk count, tolerance-stacking exposure, and a 0–100 risk score, plus a
- * category-grouped exception table with root cause + recommended action.
- *
- * Data comes from POST /api/risk/exposure (combined Scenario Lab dataset by
- * default, or a stored batch by id). This page is presentation-only: all money
- * arrives pre-formatted from the server (exact integer paise) and every derived
- * number here is a plain count — no floating-point money math on the client.
- */
-
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  AlertTriangle,
   RefreshCw,
   Download,
-  ShieldAlert,
-  Layers,
-  Gauge,
-  IndianRupee,
-  Clock,
-  Copy,
-  Globe,
   BookOpen,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
 
 type RiskCategory = "HIGH" | "MEDIUM" | "LOW";
 type RiskBand = "LOW" | "MODERATE" | "ELEVATED" | "CRITICAL";
@@ -84,30 +65,21 @@ interface RiskResponse {
 
 const CATEGORY_ORDER: RiskCategory[] = ["HIGH", "MEDIUM", "LOW"];
 
-/** Olive/amber/red styling for a risk band or per-exception category. */
-function bandStyle(band: RiskBand | RiskCategory): { text: string; border: string; bg: string } {
-  switch (band) {
+function getBadgeVariant(risk: RiskCategory | RiskBand) {
+  switch (risk) {
     case "CRITICAL":
     case "HIGH":
-      return { text: "text-[#d9776f]", border: "border-[#6e2b26]", bg: "bg-[#1a0f0e]" };
+      return "destructive";
     case "ELEVATED":
     case "MEDIUM":
-      return { text: "text-[#d3a24b]", border: "border-[#5c4a1d]", bg: "bg-[#17120633]" };
+      return "warning";
     case "MODERATE":
-      return { text: "text-[#a4b58a]", border: "border-[#3e4d36]", bg: "bg-[#11160f]" };
+      return "secondary";
     default:
-      return { text: "text-[#8c9288]", border: "border-[#252a24]", bg: "bg-[#0d100d]" };
+      return "outline";
   }
 }
 
-function scoreArc(score: number): string {
-  if (score >= 75) return "#d9776f";
-  if (score >= 50) return "#d3a24b";
-  if (score >= 25) return "#a4b58a";
-  return "#687063";
-}
-
-/** Fetch + validate the exposure report. No React state — callers own the state. */
 async function fetchExposure(): Promise<RiskResponse> {
   const res = await fetch("/api/risk/exposure", {
     method: "POST",
@@ -138,9 +110,6 @@ export default function RiskDashboardPage() {
     }
   }, []);
 
-  // Initial load. setState happens only in the async .then/.catch/.finally
-  // callbacks (never synchronously in the effect body), so this stays clear of
-  // react-hooks/set-state-in-effect; `loading` already defaults to true.
   useEffect(() => {
     let active = true;
     fetchExposure()
@@ -175,176 +144,140 @@ export default function RiskDashboardPage() {
   const report = data?.report;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#a4b58a]">
-              <AlertTriangle className="h-4 w-4 text-[#a4b58a]" />
-              Risk &amp; Exposure Command Center
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#e3e1d8]">
-              Real-Time Financial Risk &amp; Unresolved Exposure
-            </h1>
-            <p className="mt-1 max-w-3xl text-xs text-[#8c9288]">
-              Aggregated view of unresolved reconciliation exceptions, tolerance-stacking breaches, and exception
-              severity — scored deterministically in exact integer paise. Use it to triage where the money is at risk
-              and which controller action clears it fastest.
-            </p>
-            {data && (
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-mono text-[#687063]">
-                <span>
-                  SOURCE: <span className="text-[#a4b58a]">{data.datasetLabel}</span>
-                </span>
-                <span>
-                  GENERATED: <span className="text-[#a4b58a]">{new Date(data.generatedAt).toLocaleString()}</span>
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
+      <PageHeader
+        tag="Security & Audit"
+        title="Risk & exposure dashboard"
+        description="Aggregated real-time exposure across unresolved exceptions, tolerance-stacking breaches, and severity tiers in exact integer paise."
+        badge={data ? <Badge variant="outline">{data.datasetLabel}</Badge> : undefined}
+        actions={
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={exportReport}
               disabled={!data || loading}
-              className="flex items-center gap-2 border border-[#252a24] bg-[#090b09] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[#8c9288] hover:bg-[#121611] disabled:opacity-40"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-40 transition"
             >
-              <Download className="h-4 w-4" />
-              Export Risk Report
+              <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>Export report</span>
             </button>
             <button
               type="button"
               onClick={runAnalysis}
               disabled={loading}
-              className="flex items-center gap-2 bg-[#a4b58a] px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-[#0d100d] hover:bg-[#b8c99e] disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3.5 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] disabled:opacity-50 transition"
             >
               {loading ? (
                 <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Analyzing…
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Analyzing...</span>
                 </>
               ) : (
                 <>
-                  <RefreshCw className="h-4 w-4" />
-                  Run Fresh Analysis
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Run analysis</span>
                 </>
               )}
             </button>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {error && (
-        <div className="border border-[#6e2b26] bg-[#1a0f0e] p-4 text-xs font-mono text-[#d9776f]">
+        <div className="rounded-md border border-[#3b1818] bg-[#140a0a] p-4 text-xs font-mono text-[#ef4444]">
           Risk analysis failed: {error}
         </div>
       )}
 
       {loading && !report && (
-        <div className="flex items-center justify-center gap-3 border border-[#252a24] bg-[#090b09] p-16 text-sm text-[#8c9288]">
-          <RefreshCw className="h-5 w-5 animate-spin text-[#a4b58a]" />
-          Computing aggregated risk exposure…
+        <div className="flex items-center justify-center gap-3 rounded-lg border border-border bg-card p-16 text-sm text-muted-foreground">
+          <RefreshCw className="h-4 w-4 animate-spin text-foreground" />
+          <span>Computing aggregated risk exposure...</span>
         </div>
       )}
 
       {report && (
         <>
           {/* Primary KPI cards */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* Total Unresolved Amount */}
-            <div className="border border-[#252a24] bg-[#0d100d] p-5">
-              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-                <IndianRupee className="h-3.5 w-3.5" />
-                Total Unresolved Amount
-              </div>
-              <div className="mt-2 font-mono text-2xl font-bold text-[#e3e1d8]">
+            <div className="rounded-lg border border-border bg-card p-5 space-y-1">
+              <div className="font-mono text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
                 {report.totals.unresolvedAmountFormatted}
               </div>
-              <div className="mt-1 text-[10px] text-[#687063]">
-                across {report.totals.unresolvedCount} unresolved exception
-                {report.totals.unresolvedCount === 1 ? "" : "s"}
+              <div className="text-xs font-medium text-foreground">
+                Total unresolved amount
+              </div>
+              <div className="text-[11px] text-muted-foreground/70">
+                across {report.totals.unresolvedCount} unresolved exception{report.totals.unresolvedCount === 1 ? "" : "s"}
               </div>
             </div>
 
             {/* High-Risk Exceptions */}
-            <div className={`border p-5 ${bandStyle("HIGH").border} ${bandStyle("HIGH").bg}`}>
-              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-[#823a35]">
-                <ShieldAlert className="h-3.5 w-3.5" />
-                High-Risk Exceptions
+            <div className="rounded-lg border border-border bg-card p-5 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="font-mono text-2xl sm:text-3xl font-semibold tracking-tight text-[#ef4444]">
+                  {report.byCategory.HIGH.count}
+                </div>
+                <Badge variant="destructive">Critical</Badge>
               </div>
-              <div className="mt-2 font-mono text-2xl font-bold text-[#d9776f]">{report.byCategory.HIGH.count}</div>
-              <div className="mt-1 text-[10px] text-[#8c7370]">
+              <div className="text-xs font-medium text-foreground">
+                High-risk exceptions
+              </div>
+              <div className="text-[11px] text-muted-foreground/70">
                 {report.byCategory.HIGH.amountFormatted} &middot; variance &gt; ₹50,000
               </div>
             </div>
 
             {/* Tolerance Stacking Exposure */}
-            <div
-              className={`border p-5 ${
-                report.toleranceStacking.breached ? `${bandStyle("HIGH").border} ${bandStyle("HIGH").bg}` : "border-[#252a24] bg-[#0d100d]"
-              }`}
-            >
-              <div
-                className={`flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider ${
-                  report.toleranceStacking.breached ? "text-[#823a35]" : "text-[#687063]"
-                }`}
-              >
-                <Layers className="h-3.5 w-3.5" />
-                Tolerance Stacking Exposure
-              </div>
-              <div
-                className={`mt-2 font-mono text-2xl font-bold ${
-                  report.toleranceStacking.breached ? "text-[#d9776f]" : "text-[#e3e1d8]"
-                }`}
-              >
-                {report.toleranceStacking.exposureFormatted}
-              </div>
-              <div className="mt-1 text-[10px] text-[#687063]">
-                {report.toleranceStacking.smallVarianceCount} small variance
-                {report.toleranceStacking.smallVarianceCount === 1 ? "" : "s"} ·{" "}
+            <div className="rounded-lg border border-border bg-card p-5 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="font-mono text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
+                  {report.toleranceStacking.exposureFormatted}
+                </div>
                 {report.toleranceStacking.breached ? (
-                  <span className="text-[#d9776f]">BREACHED</span>
+                  <Badge variant="destructive">Breached</Badge>
                 ) : (
-                  <span className="text-[#a4b58a]">within tolerance</span>
+                  <Badge variant="outline">Nominal</Badge>
                 )}
+              </div>
+              <div className="text-xs font-medium text-foreground">
+                Tolerance stacking
+              </div>
+              <div className="text-[11px] text-muted-foreground/70">
+                {report.toleranceStacking.smallVarianceCount} small variance{report.toleranceStacking.smallVarianceCount === 1 ? "" : "s"}
               </div>
             </div>
 
             {/* Overall Risk Score */}
-            <div className={`border p-5 ${bandStyle(report.riskBand).border} ${bandStyle(report.riskBand).bg}`}>
-              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-                <Gauge className="h-3.5 w-3.5" />
-                Overall Risk Score
+            <div className="rounded-lg border border-border bg-card p-5 space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-baseline gap-1">
+                  <span className="font-mono text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
+                    {report.riskScore}
+                  </span>
+                  <span className="text-xs text-muted-foreground/70 font-mono">/ 100</span>
+                </div>
+                <Badge variant={getBadgeVariant(report.riskBand)}>{report.riskBand}</Badge>
               </div>
-              <div className="mt-2 flex items-end gap-2">
-                <span className="font-mono text-3xl font-bold" style={{ color: scoreArc(report.riskScore) }}>
-                  {report.riskScore}
-                </span>
-                <span className="mb-1 text-[10px] font-mono text-[#687063]">/ 100</span>
+              <div className="text-xs font-medium text-foreground">
+                Overall risk score
               </div>
-              {/* Score bar */}
-              <div className="mt-2 h-1.5 w-full overflow-hidden bg-[#1c211a]">
-                <div
-                  className="h-full transition-all"
-                  style={{ width: `${report.riskScore}%`, backgroundColor: scoreArc(report.riskScore) }}
-                />
-              </div>
-              <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wider" style={{ color: scoreArc(report.riskScore) }}>
-                {report.riskBand}
+              <div className="text-[11px] text-muted-foreground/70">
+                Weighted composite score
               </div>
             </div>
           </div>
 
           {/* Secondary risk signals */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SignalCard icon={Clock} label="SLA Breaches" count={report.slaBreaches.count} amount={report.slaBreaches.amountAffectedFormatted} />
-            <SignalCard icon={Copy} label="Duplicate Credit Risks" count={report.duplicateCreditRisks.count} amount={report.duplicateCreditRisks.amountFormatted} />
-            <SignalCard icon={Globe} label="Cross-Currency Risks" count={report.crossCurrencyRisks.count} amount={report.crossCurrencyRisks.amountFormatted} />
-            <div className="border border-[#252a24] bg-[#0d100d] p-4">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-[#687063]">Score Composition</div>
-              <div className="mt-2 space-y-1 font-mono text-[10px] text-[#8c9288]">
+            <SignalCard label="SLA Breaches" count={report.slaBreaches.count} amount={report.slaBreaches.amountAffectedFormatted} />
+            <SignalCard label="Duplicate Credit Risks" count={report.duplicateCreditRisks.count} amount={report.duplicateCreditRisks.amountFormatted} />
+            <SignalCard label="Cross-Currency Risks" count={report.crossCurrencyRisks.count} amount={report.crossCurrencyRisks.amountFormatted} />
+            <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+              <div className="text-xs font-semibold text-foreground">Score Composition</div>
+              <div className="space-y-1.5 font-mono text-[11px] text-muted-foreground">
                 <ScoreBar label="Severity" value={report.scoreBreakdown.severity} max={40} />
                 <ScoreBar label="Amount" value={report.scoreBreakdown.amount} max={30} />
                 <ScoreBar label="Count" value={report.scoreBreakdown.count} max={15} />
@@ -353,92 +286,72 @@ export default function RiskDashboardPage() {
             </div>
           </div>
 
-          {/* Tolerance stacking detail */}
-          <div
-            className={`border p-5 ${
-              report.toleranceStacking.breached ? "border-[#6e2b26] bg-[#1a0f0e]" : "border-[#3e4d36] bg-[#0d100d]"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Layers className={`h-4 w-4 ${report.toleranceStacking.breached ? "text-[#d9776f]" : "text-[#a4b58a]"}`} />
-              <h2 className={`text-sm font-bold ${report.toleranceStacking.breached ? "text-[#d9776f]" : "text-[#e3e1d8]"}`}>
-                Tolerance Stacking {report.toleranceStacking.breached ? "— BREACH DETECTED" : "— Within Limits"}
-              </h2>
-            </div>
-            <p className="mt-2 text-xs text-[#a9aea3]">{report.toleranceStacking.reason}</p>
-            <p className="mt-1 text-[10px] font-mono text-[#687063]">
-              &ldquo;Death by a thousand pauses&rdquo;: individually-immaterial variances (each ≤ ₹1,000) that
-              collectively cross a material line. Cumulative exposure {report.toleranceStacking.exposureFormatted} from{" "}
-              {report.toleranceStacking.smallVarianceCount} small variance
-              {report.toleranceStacking.smallVarianceCount === 1 ? "" : "s"}.
-            </p>
-          </div>
-
           {/* Exceptions grouped by risk category */}
-          <div className="border border-[#252a24] bg-[#090b09]">
-            <div className="flex items-center justify-between border-b border-[#252a24] px-5 py-3">
-              <h2 className="text-sm font-bold text-[#e3e1d8]">Unresolved Exceptions by Risk Category</h2>
-              <span className="font-mono text-[10px] text-[#687063]">{report.exceptions.length} total</span>
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border p-5">
+              <SectionHeader
+                title="Unresolved exceptions by risk category"
+                className="border-b-0 pb-0"
+              />
+              <span className="font-mono text-xs text-muted-foreground/70">{report.exceptions.length} total</span>
             </div>
 
             {report.exceptions.length === 0 ? (
-              <div className="p-10 text-center text-sm text-[#687063]">
+              <div className="p-10 text-center text-xs text-muted-foreground/70">
                 No unresolved exceptions in this dataset — exposure is clear.
               </div>
             ) : (
               CATEGORY_ORDER.map((cat) => {
                 const rows = report.exceptions.filter((e) => e.riskLevel === cat);
                 if (rows.length === 0) return null;
-                const style = bandStyle(cat);
                 const bucket = report.byCategory[cat];
                 return (
-                  <div key={cat} className="border-b border-[#161a15] last:border-b-0">
-                    <div className={`flex items-center justify-between px-5 py-2.5 ${style.bg}`}>
+                  <div key={cat} className="border-b border-border last:border-b-0">
+                    <div className="flex items-center justify-between px-5 py-2.5 bg-background border-b border-border">
                       <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 text-[9px] font-mono font-bold ${style.text} border ${style.border}`}>
-                          {cat} RISK
-                        </span>
-                        <span className="text-[10px] font-mono text-[#687063]">
+                        <Badge variant={getBadgeVariant(cat)}>
+                          {cat} Risk
+                        </Badge>
+                        <span className="text-xs text-muted-foreground/70">
                           {bucket.count} exception{bucket.count === 1 ? "" : "s"}
                         </span>
                       </div>
-                      <span className={`font-mono text-xs font-bold ${style.text}`}>{bucket.amountFormatted}</span>
+                      <span className="font-mono text-xs font-semibold text-foreground">{bucket.amountFormatted}</span>
                     </div>
 
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs">
                         <thead>
-                          <tr className="border-b border-[#161a15] text-[9px] uppercase tracking-wider text-[#565d51]">
-                            <th className="px-5 py-2 font-bold">Exception ID</th>
-                            <th className="px-3 py-2 font-bold">Type</th>
-                            <th className="px-3 py-2 text-right font-bold">Variance</th>
-                            <th className="px-3 py-2 font-bold">Risk</th>
-                            <th className="px-3 py-2 font-bold">Root Cause</th>
-                            <th className="px-3 py-2 font-bold">Recommended Action</th>
-                            <th className="px-5 py-2 font-bold">Playbook</th>
+                          <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                            <th className="px-5 py-2.5 font-medium">Exception ID</th>
+                            <th className="px-3 py-2.5 font-medium">Type</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Variance</th>
+                            <th className="px-3 py-2.5 font-medium">Risk</th>
+                            <th className="px-3 py-2.5 font-medium">Root Cause</th>
+                            <th className="px-3 py-2.5 font-medium">Recommended Action</th>
+                            <th className="px-5 py-2.5 font-medium">Playbook</th>
                           </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-border">
                           {rows.map((ex) => (
-                            <tr key={ex.id} className="border-b border-[#101410] align-top last:border-b-0 hover:bg-[#0d100d]">
-                              <td className="px-5 py-3 font-mono text-[11px] text-[#c9cabf]">{ex.id}</td>
-                              <td className="px-3 py-3 font-mono text-[10px] text-[#8c9288]">{ex.type}</td>
-                              <td className="px-3 py-3 text-right font-mono font-bold text-[#e3e1d8]">{ex.varianceFormatted}</td>
+                            <tr key={ex.id} className="align-top hover:bg-accent/40">
+                              <td className="px-5 py-3 font-mono text-xs text-foreground">{ex.id}</td>
+                              <td className="px-3 py-3 font-mono text-[11px] text-muted-foreground">{ex.type}</td>
+                              <td className="px-3 py-3 text-right font-mono font-medium text-foreground">{ex.varianceFormatted}</td>
                               <td className="px-3 py-3">
-                                <span className={`px-2 py-0.5 text-[9px] font-mono font-bold ${style.text} border ${style.border}`}>
+                                <Badge variant={getBadgeVariant(ex.riskLevel)}>
                                   {ex.riskLevel}
-                                </span>
+                                </Badge>
                               </td>
-                              <td className="max-w-[16rem] px-3 py-3 text-[11px] text-[#a9aea3]">{ex.rootCause}</td>
-                              <td className="max-w-[16rem] px-3 py-3 text-[11px] text-[#a9aea3]">{ex.recommendedAction}</td>
+                              <td className="max-w-[16rem] px-3 py-3 text-xs text-muted-foreground">{ex.rootCause}</td>
+                              <td className="max-w-[16rem] px-3 py-3 text-xs text-muted-foreground">{ex.recommendedAction}</td>
                               <td className="px-5 py-3">
                                 <Link
                                   href="/playbook"
-                                  className="inline-flex items-center gap-1 text-[10px] font-mono text-[#a4b58a] hover:text-[#c2d3a6]"
-                                  title={`Resolution playbook: ${ex.playbookType}`}
+                                  className="inline-flex items-center gap-1 text-xs text-foreground hover:underline"
                                 >
-                                  <BookOpen className="h-3 w-3" />
-                                  {ex.playbookType}
+                                  <BookOpen className="h-3 w-3 text-muted-foreground" />
+                                  <span>{ex.playbookType}</span>
                                 </Link>
                               </td>
                             </tr>
@@ -458,25 +371,21 @@ export default function RiskDashboardPage() {
 }
 
 function SignalCard({
-  icon: Icon,
   label,
   count,
   amount,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
   label: string;
   count: number;
   amount: string;
 }) {
-  const active = count > 0;
   return (
-    <div className={`border p-4 ${active ? "border-[#5c4a1d] bg-[#0d100d]" : "border-[#252a24] bg-[#0d100d]"}`}>
-      <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-        <Icon className="h-3.5 w-3.5" />
+    <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+      <div className="text-xs text-muted-foreground">
         {label}
       </div>
-      <div className={`mt-2 font-mono text-2xl font-bold ${active ? "text-[#d3a24b]" : "text-[#e3e1d8]"}`}>{count}</div>
-      <div className="mt-1 text-[10px] text-[#687063]">{amount} affected</div>
+      <div className="font-mono text-xl font-semibold text-foreground">{count}</div>
+      <div className="text-[11px] text-muted-foreground/70">{amount} affected</div>
     </div>
   );
 }
@@ -485,11 +394,11 @@ function ScoreBar({ label, value, max }: { label: string; value: number; max: nu
   const pct = max > 0 ? Math.min(100, Math.round((value * 100) / max)) : 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-[#687063]">{label}</span>
-      <span className="h-1.5 flex-1 overflow-hidden bg-[#1c211a]">
-        <span className="block h-full bg-[#a4b58a]" style={{ width: `${pct}%` }} />
+      <span className="w-16 shrink-0 text-muted-foreground/70">{label}</span>
+      <span className="h-1 flex-1 overflow-hidden bg-[#181818] rounded-full">
+        <span className="block h-full bg-primary text-primary-foreground rounded-full" style={{ width: `${pct}%` }} />
       </span>
-      <span className="w-10 shrink-0 text-right text-[#8c9288]">
+      <span className="w-10 shrink-0 text-right text-muted-foreground">
         {value}/{max}
       </span>
     </div>

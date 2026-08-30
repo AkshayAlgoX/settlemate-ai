@@ -3,9 +3,8 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  Award,
-  CheckCircle2,
-  XCircle,
+  Check,
+  X,
   AlertTriangle,
   ArrowRight,
   Play,
@@ -25,6 +24,9 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { CodeBlock } from "@/components/ui/code-block";
 
 interface ClaimCheck {
   id: string;
@@ -71,30 +73,30 @@ export default function JudgeModePage() {
     }
   };
 
-  // Chart Data for Step 2
+  // Chart Data for Step 2 with semantic data-viz palette
   const chartData = [
-    { name: "Auto-Matched", count: 103, fill: "#a4b58a" },
-    { name: "Exceptions", count: 160, fill: "#d9776f" },
-    { name: "High-Risk Review", count: 23, fill: "#d4a373" },
+    { name: "Auto-Matched", count: 103, fill: "var(--chart-2, #10b981)" },
+    { name: "Exceptions", count: 160, fill: "var(--chart-3, #f59e0b)" },
+    { name: "High-Risk Review", count: 23, fill: "var(--chart-4, #ef4444)" },
   ];
 
-  // Claims list for Step 4
+  // Ground Truth Verification Claims for Step 4
   const claims: ClaimCheck[] = [
     {
       id: "CLM-001",
-      claim: "Refund Advice REF_8821 exists in Context Vault",
-      rule: "EVIDENCE_EXISTS_IN_VAULT",
-      evidenceRef: "REF_8821 (SHA-256: a7f92b...)",
+      claim: "Deduction matches refund voucher amount exactly",
+      rule: "ARITHMETIC_MATCH",
+      evidenceRef: "REF_8821 (₹1,550.00)",
       status: "PASS",
-      detail: "Exact content hash verified against Context Vault merkle root",
+      detail: "Non-LLM Integer Paise Check: 155000 paise == 155000 paise",
     },
     {
       id: "CLM-002",
-      claim: "Refund amount ₹1,550 matches variance exactly",
-      rule: "ARITHMETIC_CONSERVATION",
-      evidenceRef: "₹20,000 - ₹1,550 = ₹18,450",
+      claim: "Reference ID exists in authenticated Context Vault",
+      rule: "EVIDENCE_EXISTS_IN_VAULT",
+      evidenceRef: "Vault Ref: a7f92bc3...",
       status: "PASS",
-      detail: "Deterministic minor unit integer match (155000 paise)",
+      detail: "Cryptographic hash verified against in-memory Context Vault",
     },
     {
       id: "CLM-003",
@@ -118,74 +120,68 @@ export default function JudgeModePage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      {/* Header & Mode Selector */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#a4b58a]">
-              <Award className="h-4 w-4 text-[#a4b58a]" />
-              Razorpay AI Buildathon — Judge Evaluation Control Plane
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#e3e1d8]">
-              SettleMate AI · Judge Mode Terminal
-            </h1>
-            <p className="mt-1 text-xs text-[#8c9288]">
-              Guided step-by-step evaluation of deterministic reconciliation, non-LLM AI claim verification, and financial safety.
-            </p>
-          </div>
-
+    <div className="space-y-8 pb-12 font-sans">
+      {/* Page Header */}
+      <PageHeader
+        tag="Evaluation Control Plane"
+        title="Judge mode terminal"
+        description="Guided step-by-step evaluation of deterministic reconciliation, non-LLM claim verification, and financial safety boundaries."
+        badge={<Badge variant="outline">Track 04</Badge>}
+        actions={
           <div className="flex flex-wrap items-center gap-2">
             <a
               href="/api/report/generate"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3 py-2 text-xs font-bold uppercase tracking-wider border border-[#a4b58a]/60 bg-[#a4b58a]/10 hover:bg-[#a4b58a]/20 text-[#a4b58a] flex items-center gap-1.5 transition-colors"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent hover:border-foreground/30 transition shadow-2xs"
             >
-              <Download className="w-3.5 h-3.5" />
-              Download Audit Report (PDF)
+              <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>Download PDF</span>
             </a>
-            <button
-              type="button"
-              onClick={() => setActiveTab("WIZARD")}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border ${
-                activeTab === "WIZARD"
-                  ? "border-[#a4b58a] bg-[#1a2316] text-[#e3e1d8]"
-                  : "border-[#252a24] bg-[#0f120e] text-[#8c9288] hover:border-[#384035]"
-              }`}
-            >
-              Guided Wizard (Steps 1–7)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("METRICS")}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border ${
-                activeTab === "METRICS"
-                  ? "border-[#a4b58a] bg-[#1a2316] text-[#e3e1d8]"
-                  : "border-[#252a24] bg-[#0f120e] text-[#8c9288] hover:border-[#384035]"
-              }`}
-            >
-              All Verified Metrics (Step 8)
-            </button>
+
+            <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setActiveTab("WIZARD")}
+                className={`h-7 rounded-md px-3 text-xs font-medium transition ${
+                  activeTab === "WIZARD"
+                    ? "bg-secondary text-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Guided wizard
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("METRICS")}
+                className={`h-7 rounded-md px-3 text-xs font-medium transition ${
+                  activeTab === "METRICS"
+                    ? "bg-secondary text-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All verified metrics
+              </button>
+            </div>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* TAB 1: GUIDED WIZARD */}
       {activeTab === "WIZARD" && (
         <div className="space-y-6">
           {/* Progress Indicator */}
-          <div className="border border-[#2a2e29] bg-[#0d100d] p-4">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#687063] mb-3">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-3">
               <span>Evaluation Progress</span>
               <span>Step {currentStep} of 7</span>
             </div>
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
               {[
                 "1. Load Dataset",
                 "2. Metrics Summary",
                 "3. Exception Spotlight",
-                "4. AI Claim Checks",
+                "4. Claim Checks",
                 "5. Maker / Checker",
                 "6. Decision Receipt",
                 "7. Closed Loop Recap",
@@ -198,15 +194,15 @@ export default function JudgeModePage() {
                     key={label}
                     type="button"
                     onClick={() => (datasetLoaded || stepNum === 1) && setCurrentStep(stepNum)}
-                    className={`p-2 text-left border transition-all ${
+                    className={`rounded-lg p-2 text-left border text-xs transition-all ${
                       isCurrent
-                        ? "border-[#a4b58a] bg-[#1a2316] text-[#e3e1d8]"
+                        ? "border-foreground/40 bg-accent text-foreground font-semibold"
                         : isDone
-                        ? "border-[#3e4d36] bg-[#11160f] text-[#a4b58a]"
-                        : "border-[#252a24] bg-[#090b09] text-[#555b51]"
+                        ? "border-border bg-background text-muted-foreground"
+                        : "border-transparent text-muted-foreground/60 hover:text-muted-foreground"
                     }`}
                   >
-                    <div className="text-[9px] font-mono font-bold truncate">{label}</div>
+                    <div className="font-mono text-[10px] truncate">{label}</div>
                   </button>
                 );
               })}
@@ -215,16 +211,16 @@ export default function JudgeModePage() {
 
           {/* STEP 1: WELCOME & LOAD DEMO DATA */}
           {currentStep === 1 && (
-            <div className="border border-[#2a2e29] bg-[#0d100d] p-8 text-center space-y-6">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center border border-[#3e4d36] bg-[#11160f]">
-                <Database className="h-8 w-8 text-[#a4b58a]" />
+            <div className="rounded-xl border border-border bg-card p-8 text-center space-y-6 shadow-2xs">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-background text-foreground shadow-2xs">
+                <Database className="h-6 w-6" />
               </div>
               <div className="max-w-xl mx-auto space-y-2">
-                <h2 className="text-xl font-bold text-[#e3e1d8]">
-                  Step 1: Load Official 250-Record Benchmark Dataset
+                <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                  Step 1: Load official 250-record benchmark dataset
                 </h2>
-                <p className="text-xs text-[#8c9288] leading-relaxed">
-                  Generates the seeded ground-truth evaluation batch (Seed: <code className="text-[#a4b58a]">20260821</code>, SHA-256 Fingerprint: <code className="text-[#a4b58a]">81d840cd8cf9...</code>) containing multi-source settlements, timing variances, and adversarial edge cases.
+                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                  Generates the seeded ground-truth evaluation batch (Seed: <code className="font-mono text-foreground font-medium">20260821</code>, SHA-256: <code className="font-mono text-foreground font-medium">81d840cd8cf9...</code>) containing multi-source settlements, timing variances, and adversarial edge cases.
                 </p>
               </div>
 
@@ -233,17 +229,17 @@ export default function JudgeModePage() {
                   type="button"
                   onClick={handleLoadDataset}
                   disabled={isLoadingData}
-                  className="px-8 py-3.5 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider inline-flex items-center gap-2 disabled:opacity-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-6 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition shadow-xs"
                 >
                   {isLoadingData ? (
                     <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Generating & Ingesting Dataset...
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Ingesting benchmark dataset...</span>
                     </>
                   ) : (
                     <>
-                      <Play className="h-4 w-4 fill-current" />
-                      Load Official Benchmark Dataset
+                      <Play className="h-3.5 w-3.5 fill-current" />
+                      <span>Load Official Benchmark Dataset</span>
                     </>
                   )}
                 </button>
@@ -253,52 +249,53 @@ export default function JudgeModePage() {
 
           {/* STEP 2: SUMMARY METRICS & DISTRIBUTION */}
           {currentStep === 2 && (
-            <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-6">
-              <div className="flex items-center justify-between border-b border-[#252a24] pb-4">
+            <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-[#e3e1d8]">Step 2: Official Accuracy & Reconciliation Metrics</h2>
-                  <p className="text-xs text-[#8c9288]">Ground-truth verification across 263 normalized financial events.</p>
+                  <h2 className="text-base font-semibold text-foreground">Step 2: Official accuracy & reconciliation metrics</h2>
+                  <p className="text-xs text-muted-foreground">Ground-truth verification across 263 normalized financial events.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
-                  className="px-4 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                 >
-                  Next: Exception Spotlight <ArrowRight className="h-4 w-4" />
+                  <span>Next: Exception Spotlight</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="border border-[#3e4d36] bg-[#11160f] p-4 text-center">
-                  <div className="text-2xl font-mono font-bold text-[#a4b58a]">98.1%</div>
-                  <div className="text-[10px] uppercase tracking-wider text-[#687063] mt-1">Recon Accuracy</div>
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="text-2xl font-mono font-bold text-foreground">98.1%</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">Recon accuracy</div>
                 </div>
-                <div className="border border-[#3e4d36] bg-[#11160f] p-4 text-center">
-                  <div className="text-2xl font-mono font-bold text-[#a4b58a]">98% / 98%</div>
-                  <div className="text-[10px] uppercase tracking-wider text-[#687063] mt-1">Precision / Recall</div>
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="text-2xl font-mono font-bold text-foreground">98% / 98%</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">Precision / recall</div>
                 </div>
-                <div className="border border-[#3e4d36] bg-[#11160f] p-4 text-center">
-                  <div className="text-2xl font-mono font-bold text-[#a4b58a]">90% (9/10)</div>
-                  <div className="text-[10px] uppercase tracking-wider text-[#687063] mt-1">Adversarial Catch</div>
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="text-2xl font-mono font-bold text-foreground">90% (9/10)</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">Adversarial catch</div>
                 </div>
-                <div className="border border-[#3e4d36] bg-[#11160f] p-4 text-center">
-                  <div className="text-2xl font-mono font-bold text-[#a4b58a]">806.75 rec/s</div>
-                  <div className="text-[10px] uppercase tracking-wider text-[#687063] mt-1">Benchmark Throughput</div>
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="text-2xl font-mono font-bold text-foreground">806.75 rec/s</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">Benchmark throughput</div>
                 </div>
               </div>
 
               {/* Distribution Chart */}
-              <div className="border border-[#1f241d] bg-[#070907] p-4">
-                <div className="text-xs font-bold uppercase tracking-wider text-[#8c9288] mb-4">
-                  Transaction Classification Breakdown (263 Events)
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="text-xs font-semibold text-foreground mb-4">
+                  Transaction classification breakdown (263 events)
                 </div>
-                <div className="h-56 w-full">
+                <div className="h-52 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                      <XAxis type="number" stroke="#687063" fontSize={10} />
-                      <YAxis dataKey="name" type="category" stroke="#8c9288" fontSize={11} width={120} />
-                      <Tooltip contentStyle={{ backgroundColor: "#0d100d", border: "1px solid #2a2e29", fontSize: 11 }} />
-                      <Bar dataKey="count">
+                      <XAxis type="number" stroke="var(--muted-foreground)" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis dataKey="name" type="category" stroke="var(--muted-foreground)" fontSize={11} width={120} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--popover)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: 12, color: "var(--foreground)" }} />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                         {chartData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.fill} />
                         ))}
@@ -312,73 +309,74 @@ export default function JudgeModePage() {
 
           {/* STEP 3: EXCEPTION SPOTLIGHT */}
           {currentStep === 3 && (
-            <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-6">
-              <div className="flex items-center justify-between border-b border-[#252a24] pb-4">
+            <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-[#e3e1d8]">Step 3: Exception Spotlight · Amount Mismatch (EXP-REFUND-001)</h2>
-                  <p className="text-xs text-[#8c9288]">Payment gross ₹20,000 vs settlement ₹18,450 resulting in a variance of ₹1,550.</p>
+                  <h2 className="text-base font-semibold text-foreground">Step 3: Exception spotlight · Amount mismatch (EXP-REFUND-001)</h2>
+                  <p className="text-xs text-muted-foreground">Payment gross ₹20,000 vs settlement ₹18,450 resulting in a variance of ₹1,550.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(4)}
-                  className="px-4 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                 >
-                  Next: AI Claim Validation <ArrowRight className="h-4 w-4" />
+                  <span>Next: AI Claim Validation</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Arithmetic Breakdown */}
-                <div className="border border-[#252a24] bg-[#090b09] p-5 space-y-4">
-                  <div className="flex items-center justify-between text-xs font-bold text-[#e3e1d8] border-b border-[#1c221a] pb-2">
-                    <span>Deterministic Reconciliation Breakdown</span>
-                    <span className="font-mono text-[#d9776f]">AMOUNT_MISMATCH</span>
+                <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-medium text-foreground border-b border-border pb-2">
+                    <span>Deterministic reconciliation breakdown</span>
+                    <Badge variant="destructive">AMOUNT_MISMATCH</Badge>
                   </div>
-                  <div className="space-y-2 text-xs font-mono">
-                    <div className="flex justify-between text-[#8c9288]">
-                      <span>Captured Payment Gross:</span>
-                      <span className="text-[#e3e1d8]">₹20,000.00</span>
+                  <div className="space-y-1.5 text-xs font-mono">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Captured payment gross:</span>
+                      <span className="text-foreground font-semibold">₹20,000.00</span>
                     </div>
-                    <div className="flex justify-between text-[#8c9288]">
-                      <span>Gateway Fee / Tax:</span>
-                      <span className="text-[#e3e1d8]">₹0.00</span>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Gateway fee / tax:</span>
+                      <span className="text-foreground">₹0.00</span>
                     </div>
-                    <div className="flex justify-between text-[#8c9288]">
-                      <span>Expected Net:</span>
-                      <span className="text-[#e3e1d8]">₹20,000.00</span>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Expected net:</span>
+                      <span className="text-foreground">₹20,000.00</span>
                     </div>
-                    <div className="flex justify-between text-[#8c9288]">
-                      <span>Actual Settled Credit:</span>
-                      <span className="text-[#e3e1d8]">₹18,450.00</span>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Actual settled credit:</span>
+                      <span className="text-foreground">₹18,450.00</span>
                     </div>
-                    <div className="flex justify-between text-[#d9776f] pt-2 border-t border-[#1c221a] font-bold">
-                      <span>Variance to Explain:</span>
+                    <div className="flex justify-between text-rose-500 pt-2 border-t border-border font-bold">
+                      <span>Variance to explain:</span>
                       <span>₹1,550.00</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Context Vault Evidence Card */}
-                <div className="border border-[#252a24] bg-[#090b09] p-5 space-y-4">
-                  <div className="flex items-center justify-between text-xs font-bold text-[#e3e1d8] border-b border-[#1c221a] pb-2">
-                    <span>Context Vault Evidence Ingestion</span>
-                    <span className="text-[10px] text-[#a4b58a] font-mono">[VALID HASH]</span>
+                <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-medium text-foreground border-b border-border pb-2">
+                    <span>Context vault evidence ingestion</span>
+                    <Badge variant="success">VALID HASH</Badge>
                   </div>
-                  <div className="space-y-2 text-xs">
+                  <div className="space-y-1.5 text-xs">
                     <div>
-                      <span className="text-[#687063]">Voucher Reference: </span>
-                      <span className="font-mono text-[#e3e1d8] font-bold">REF_8821 (Customer Partial Refund)</span>
+                      <span className="text-muted-foreground">Voucher reference: </span>
+                      <span className="font-mono text-foreground font-semibold">REF_8821 (Customer Partial Refund)</span>
                     </div>
                     <div>
-                      <span className="text-[#687063]">Voucher Amount: </span>
-                      <span className="font-mono text-[#a4b58a] font-bold">₹1,550.00</span>
+                      <span className="text-muted-foreground">Voucher amount: </span>
+                      <span className="font-mono text-emerald-500 font-bold">₹1,550.00</span>
                     </div>
                     <div>
-                      <span className="text-[#687063]">SHA-256 Vault Hash: </span>
-                      <span className="font-mono text-[10px] text-[#8c9288]">a7f92bc31e98d...</span>
+                      <span className="text-muted-foreground">SHA-256 vault hash: </span>
+                      <span className="font-mono text-[11px] text-muted-foreground">a7f92bc31e98d...</span>
                     </div>
-                    <div className="pt-2 text-[11px] text-[#8c9288] italic">
-                      &ldquo;Evidence retrieved securely from Context Vault. Ready for AI Agent hypothesis formulation.&rdquo;
+                    <div className="pt-2 text-xs text-muted-foreground">
+                      Evidence retrieved securely from Context Vault. Ready for AI Agent hypothesis formulation.
                     </div>
                   </div>
                 </div>
@@ -388,73 +386,76 @@ export default function JudgeModePage() {
 
           {/* STEP 4: AI CLAIM VALIDATION & MALICIOUS INJECTION */}
           {currentStep === 4 && (
-            <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-6">
-              <div className="flex items-center justify-between border-b border-[#252a24] pb-4">
+            <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-[#e3e1d8]">Step 4: Structured AI Claims & Non-LLM Mechanical Validator</h2>
-                  <p className="text-xs text-[#8c9288]">AI is advisory: every claim is mechanically checked against ground truth before ledger access.</p>
+                  <h2 className="text-base font-semibold text-foreground">Step 4: Structured AI claims & non-LLM mechanical validator</h2>
+                  <p className="text-xs text-muted-foreground">AI is advisory: every claim is mechanically checked against ground truth before ledger access.</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <Link
                     href="/provenance/batch_demo_001/EXP-REFUND-001"
                     target="_blank"
-                    className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#3e4d36] bg-[#11160f] hover:bg-[#182313] text-[#a4b58a] flex items-center gap-1.5 transition"
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition"
                   >
-                    <GitBranch className="h-3.5 w-3.5" />
-                    Deep Dive: Provenance Graph
+                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Provenance Graph</span>
                     <ExternalLink className="h-3 w-3 opacity-60" />
                   </Link>
                   <button
                     type="button"
                     onClick={() => setHasInjectedMalicious(!hasInjectedMalicious)}
-                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border flex items-center gap-1.5 ${
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition ${
                       hasInjectedMalicious
-                        ? "border-[#d9776f] bg-[#291211] text-[#e89088]"
-                        : "border-[#384035] bg-[#12190e] text-[#a4b58a]"
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    {hasInjectedMalicious ? "Remove Injected Claim" : "Inject Malicious / Fake Claim"}
+                    <span>{hasInjectedMalicious ? "Remove Injected Claim" : "Inject Malicious Claim"}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setCurrentStep(5)}
-                    className="px-4 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                   >
-                    Next: Maker / Checker <ArrowRight className="h-4 w-4" />
+                    <span>Next: Maker / Checker</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
 
               {/* Claims List */}
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {claims.map((c) => (
                   <div
                     key={c.id}
-                    className={`border p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                    className={`rounded-lg border p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 ${
                       c.status === "PASS"
-                        ? "border-[#3e4d36] bg-[#0f150e]"
-                        : "border-[#6e2b26] bg-[#291211]"
+                        ? "border-border bg-background"
+                        : "border-destructive/30 bg-destructive/10"
                     }`}
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono font-bold text-[#687063]">{c.id}</span>
-                        <span className="text-xs font-bold text-[#e3e1d8]">{c.claim}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground">{c.id}</span>
+                        <span className="text-xs font-semibold text-foreground">{c.claim}</span>
                       </div>
-                      <div className="text-[11px] text-[#8c9288]">{c.detail}</div>
+                      <div className="text-xs text-muted-foreground">{c.detail}</div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className="text-[10px] font-mono text-[#8c9288]">{c.rule}</span>
+                      <span className="text-[11px] font-mono text-muted-foreground">{c.rule}</span>
                       {c.status === "PASS" ? (
-                        <span className="px-2.5 py-1 text-[10px] font-mono font-bold bg-[#182614] text-[#a4b58a] border border-[#3e5532] flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3" /> VERIFIED
-                        </span>
+                        <Badge variant="success">
+                          <Check className="h-3 w-3" />
+                          <span>Verified</span>
+                        </Badge>
                       ) : (
-                        <span className="px-2.5 py-1 text-[10px] font-mono font-bold bg-[#381513] text-[#e89088] border border-[#823a35] flex items-center gap-1">
-                          <XCircle className="h-3 w-3" /> REJECTED / DISPUTED
-                        </span>
+                        <Badge variant="destructive">
+                          <X className="h-3 w-3" />
+                          <span>Rejected</span>
+                        </Badge>
                       )}
                     </div>
                   </div>
@@ -465,75 +466,76 @@ export default function JudgeModePage() {
 
           {/* STEP 5: MAKER / CHECKER APPROVAL */}
           {currentStep === 5 && (
-            <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-6">
-              <div className="flex items-center justify-between border-b border-[#252a24] pb-4">
+            <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-[#e3e1d8]">Step 5: Maker / Checker Separation of Duties & Ledger Authority</h2>
-                  <p className="text-xs text-[#8c9288]">Reviewer proposes double-entry adjustment; Finance Controller approves before immutable ledger write.</p>
+                  <h2 className="text-base font-semibold text-foreground">Step 5: Maker / Checker separation of duties & ledger authority</h2>
+                  <p className="text-xs text-muted-foreground">Reviewer proposes double-entry adjustment; Finance Controller approves before immutable ledger write.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(6)}
-                  className="px-4 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                 >
-                  Next: Decision Receipt <ArrowRight className="h-4 w-4" />
+                  <span>Next: Decision Receipt</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Left: Maker Proposal */}
-                <div className="border border-[#252a24] bg-[#090b09] p-5 space-y-4">
-                  <div className="flex items-center justify-between text-xs font-bold text-[#e3e1d8] border-b border-[#1c221a] pb-2">
-                    <span>Maker (Reviewer) Proposed Journal Entry</span>
-                    <span className="text-[10px] text-[#a4b58a] font-mono">PROPOSAL-441</span>
+                <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-medium text-foreground border-b border-border pb-2">
+                    <span>Maker (Reviewer) proposed journal entry</span>
+                    <Badge variant="outline">PROPOSAL-441</Badge>
                   </div>
-                  <div className="space-y-2 text-xs font-mono">
+                  <div className="space-y-1.5 text-xs font-mono">
                     <div className="flex justify-between">
-                      <span className="text-[#8c9288]">Debit Account:</span>
-                      <span className="text-[#e3e1d8]">REFUND_CLEARING_AC (₹1,550.00)</span>
+                      <span className="text-muted-foreground">Debit account:</span>
+                      <span className="text-foreground font-semibold">REFUND_CLEARING_AC (₹1,550.00)</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#8c9288]">Credit Account:</span>
-                      <span className="text-[#e3e1d8]">SETTLEMENT_VARIANCE_AC (₹1,550.00)</span>
+                      <span className="text-muted-foreground">Credit account:</span>
+                      <span className="text-foreground font-semibold">SETTLEMENT_VARIANCE_AC (₹1,550.00)</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#8c9288]">Financial Conservation:</span>
-                      <span className="text-[#a4b58a]">Debits == Credits (155000 paise)</span>
+                      <span className="text-muted-foreground">Financial conservation:</span>
+                      <span className="text-emerald-500 font-bold">Debits == Credits (155000 paise)</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Right: Checker Action */}
-                <div className="border border-[#252a24] bg-[#090b09] p-5 space-y-4">
-                  <div className="flex items-center justify-between text-xs font-bold text-[#e3e1d8] border-b border-[#1c221a] pb-2">
-                    <span>Checker (Controller) Authorization</span>
-                    <span className="text-[10px] text-[#e3e1d8] font-mono">ROLE: ADMIN</span>
+                <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-medium text-foreground border-b border-border pb-2">
+                    <span>Checker (Controller) authorization</span>
+                    <Badge variant="secondary">ROLE: ADMIN</Badge>
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-xs text-[#8c9288]">
+                    <p className="text-xs text-muted-foreground">
                       Creator cannot approve their own entry. Dual authorization enforces strict segregation of duties.
                     </p>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => setMakerCheckerStatus("APPROVED")}
-                        className="flex-1 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider"
+                        className="flex-1 h-8 rounded-lg bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                       >
-                        Approve & Post to Ledger
+                        Approve & post to ledger
                       </button>
                       <button
                         type="button"
                         onClick={() => setMakerCheckerStatus("REJECTED")}
-                        className="flex-1 py-2 bg-[#291211] border border-[#6e2b26] text-[#e89088] text-xs font-bold uppercase tracking-wider"
+                        className="flex-1 h-8 rounded-lg border border-destructive/30 bg-destructive/10 text-xs font-medium text-destructive hover:bg-destructive/20 transition"
                       >
-                        Reject / Escalate
+                        Reject / escalate
                       </button>
                     </div>
                     {makerCheckerStatus === "APPROVED" && (
-                      <div className="p-2.5 bg-[#142211] border border-[#3e5532] text-xs text-[#a4b58a] flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Authorized by Controller. Double-entry transaction posted to immutable journal.
+                      <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-500 flex items-center gap-2">
+                        <Check className="h-4 w-4 shrink-0" />
+                        <span>Authorized by Controller. Double-entry transaction posted to immutable journal.</span>
                       </div>
                     )}
                   </div>
@@ -544,30 +546,32 @@ export default function JudgeModePage() {
 
           {/* STEP 6: DECISION RECEIPT & OFFLINE VERIFIER */}
           {currentStep === 6 && (
-            <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-6">
-              <div className="flex items-center justify-between border-b border-[#252a24] pb-4">
+            <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-[#e3e1d8]">Step 6: Canonical Decision Receipt & Offline Cryptographic Verification</h2>
-                  <p className="text-xs text-[#8c9288]">Every reconciliation outcome is sealed in a self-contained cryptographic decision receipt.</p>
+                  <h2 className="text-base font-semibold text-foreground">Step 6: Canonical decision receipt & offline verification</h2>
+                  <p className="text-xs text-muted-foreground">Every reconciliation outcome is sealed in a self-contained cryptographic decision receipt.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(7)}
-                  className="px-4 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                 >
-                  Next: Finance-Ops Loop Recap <ArrowRight className="h-4 w-4" />
+                  <span>Next: Finance-Ops Loop Recap</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
 
               {/* Controls */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-[#090b09] p-4 border border-[#252a24]">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-background p-4 rounded-lg border border-border">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setReceiptVerified(!isReceiptTampered)}
-                    className="px-4 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                   >
-                    <FileCheck className="h-4 w-4" /> Run Offline Verification (0 LLMs, 0 DBs)
+                    <FileCheck className="h-3.5 w-3.5" />
+                    <span>Run offline verification</span>
                   </button>
                   <button
                     type="button"
@@ -575,32 +579,28 @@ export default function JudgeModePage() {
                       setIsReceiptTampered(!isReceiptTampered);
                       setReceiptVerified(null);
                     }}
-                    className={`px-3 py-2 text-xs font-bold uppercase tracking-wider border flex items-center gap-1.5 ${
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition ${
                       isReceiptTampered
-                        ? "border-[#d9776f] bg-[#291211] text-[#e89088]"
-                        : "border-[#384035] bg-[#12190e] text-[#8c9288]"
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    {isReceiptTampered ? "Tamper Injected (₹1,551)" : "Simulate Receipt Tamper"}
+                    <span>{isReceiptTampered ? "Tamper Injected (₹1,551)" : "Simulate receipt tamper"}</span>
                   </button>
                 </div>
 
                 {receiptVerified !== null && (
-                  <div className={`px-3 py-1 text-xs font-mono font-bold border flex items-center gap-1.5 ${
-                    receiptVerified
-                      ? "border-[#3e5532] bg-[#142211] text-[#a4b58a]"
-                      : "border-[#6e2b26] bg-[#291211] text-[#e89088]"
-                  }`}>
-                    {receiptVerified ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-                    {receiptVerified ? "OFFLINE VERIFIED: 100% DAG MATCH" : "TAMPER DETECTED: HASH DIVERGENCE"}
-                  </div>
+                  <Badge variant={receiptVerified ? "success" : "destructive"}>
+                    {receiptVerified ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                    <span>{receiptVerified ? "Offline verified: 100% DAG match" : "Tamper detected: Hash divergence"}</span>
+                  </Badge>
                 )}
               </div>
 
               {/* Receipt JSON Card */}
-              <div className="bg-[#070907] border border-[#1c221a] p-4 text-[10px] font-mono text-[#a4b58a] max-h-72 overflow-y-auto">
-                <pre>{JSON.stringify({
+              <CodeBlock
+                code={JSON.stringify({
                   receiptVersion: "1.0.0",
                   receiptId: "rcpt_exp_refund_001_8821",
                   inputFingerprint: "81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b",
@@ -619,48 +619,52 @@ export default function JudgeModePage() {
                   },
                   ledgerStateHash: isReceiptTampered ? "CORRUPTED_HASH_99" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                   receiptSeal: isReceiptTampered ? "INVALID_SEAL" : "4d8a1c97f480392182b8a07c4b123d",
-                }, null, 2)}</pre>
-              </div>
+                }, null, 2)}
+                language="json"
+                filename="merkle-receipt-dag.json"
+                maxHeight="320px"
+              />
             </div>
           )}
 
           {/* STEP 7: CLOSED LOOP RECAP */}
           {currentStep === 7 && (
-            <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-6">
-              <div className="flex items-center justify-between border-b border-[#252a24] pb-4">
+            <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-[#e3e1d8]">Step 7: The Complete Autonomous Finance-Ops Loop</h2>
-                  <p className="text-xs text-[#8c9288]">From raw exception to immutable decision receipt in 10 deterministic steps.</p>
+                  <h2 className="text-base font-semibold text-foreground">Step 7: The complete autonomous finance-ops loop</h2>
+                  <p className="text-xs text-muted-foreground">From raw exception to immutable decision receipt in 10 deterministic steps.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveTab("METRICS")}
-                  className="px-4 py-2 bg-[#a4b58a] hover:bg-[#b8c99e] text-[#0d100d] text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs"
                 >
-                  View Full Metrics Dashboard <ArrowRight className="h-4 w-4" />
+                  <span>View Full Metrics Dashboard</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
                 {[
-                  { num: "01", name: "Batch Ingest", desc: "55-record stream ingested & indexed" },
-                  { num: "02", name: "Fast Recon", desc: "53 auto-matched (96.4% AI bypass)" },
-                  { num: "03", name: "Exception Isolation", desc: "AMOUNT_MISMATCH Δ ₹1,550" },
-                  { num: "04", name: "Context Vault", desc: "Refund voucher REF_8821 fetched" },
-                  { num: "05", name: "AI Investigation", desc: "Agent emits proposal & 2 claims" },
-                  { num: "06", name: "Claim Validator", desc: "10 deterministic non-LLM checks" },
-                  { num: "07", name: "Skeptic Challenge", desc: "Dispute checks & falsification" },
+                  { num: "01", name: "Batch ingest", desc: "55-record stream ingested & indexed" },
+                  { num: "02", name: "Fast recon", desc: "53 auto-matched (96.4% AI bypass)" },
+                  { num: "03", name: "Exception isolation", desc: "AMOUNT_MISMATCH Δ ₹1,550" },
+                  { num: "04", name: "Context vault", desc: "Refund voucher REF_8821 fetched" },
+                  { num: "05", name: "AI investigation", desc: "Agent emits proposal & 2 claims" },
+                  { num: "06", name: "Claim validator", desc: "10 deterministic non-LLM checks" },
+                  { num: "07", name: "Skeptic challenge", desc: "Dispute checks & falsification" },
                   { num: "08", name: "Maker / Checker", desc: "Controller authorization gate" },
-                  { num: "09", name: "Re-verify & Invariants", desc: "Conservation & timing window" },
-                  { num: "10", name: "Ledger Finalization", desc: "Sealed Decision Receipt" },
+                  { num: "09", name: "Re-verify & invariants", desc: "Conservation & timing window" },
+                  { num: "10", name: "Ledger finalization", desc: "Sealed Decision Receipt" },
                 ].map((s) => (
-                  <div key={s.num} className="border border-[#3e4d36] bg-[#11160f] p-3 space-y-1">
-                    <div className="flex items-center justify-between text-[9px] font-mono text-[#a4b58a]">
+                  <div key={s.num} className="rounded-lg border border-border bg-background p-3 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
                       <span>STEP {s.num}</span>
-                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <Check className="h-3 w-3 text-emerald-500" />
                     </div>
-                    <div className="text-[11px] font-bold text-[#e3e1d8]">{s.name}</div>
-                    <div className="text-[9px] text-[#8c9288]">{s.desc}</div>
+                    <div className="text-xs font-semibold text-foreground">{s.name}</div>
+                    <div className="text-[11px] text-muted-foreground">{s.desc}</div>
                   </div>
                 ))}
               </div>
@@ -671,33 +675,34 @@ export default function JudgeModePage() {
 
       {/* TAB 2: ALL VERIFIED METRICS DASHBOARD (STEP 8) */}
       {activeTab === "METRICS" && (
-        <div className="border border-[#2a2e29] bg-[#0d100d] p-6 space-y-6">
-          <div className="flex items-center justify-between border-b border-[#252a24] pb-4">
+        <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-4">
             <div>
-              <h2 className="text-lg font-bold text-[#e3e1d8]">All Authoritative Verified Metrics & Empirical Proofs</h2>
-              <p className="text-xs text-[#8c9288]">Reproducible via <code className="text-[#a4b58a]">npm run verify-claims</code> in 189 seconds.</p>
+              <h2 className="text-base font-semibold text-foreground">All Authoritative verified metrics & empirical proofs</h2>
+              <p className="text-xs text-muted-foreground">Reproducible via <code className="font-mono text-foreground font-medium">npm run verify-claims</code> in 189 seconds.</p>
             </div>
             <Link
               href="/dashboard"
-              className="px-4 py-2 border border-[#3e4d36] bg-[#11160f] hover:bg-[#161d13] text-[#a4b58a] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-accent transition"
             >
-              Open Full Production Dashboard <ExternalLink className="h-3.5 w-3.5" />
+              <span>Production dashboard</span>
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             </Link>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-[#252a24] text-[9px] font-bold uppercase tracking-wider text-[#687063]">
-                  <th className="pb-3">Category</th>
-                  <th className="pb-3">Metric Name</th>
-                  <th className="pb-3">Measured Value</th>
-                  <th className="pb-3">Documented Claim</th>
-                  <th className="pb-3">Status</th>
-                  <th className="pb-3">CLI Reproducibility</th>
+                <tr className="border-b border-border bg-muted/30 text-xs font-semibold text-muted-foreground">
+                  <th className="py-2.5 px-3">Category</th>
+                  <th className="py-2.5 px-3">Metric Name</th>
+                  <th className="py-2.5 px-3">Measured Value</th>
+                  <th className="py-2.5 px-3">Documented Claim</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">CLI Reproducibility</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1c221a] font-mono text-[11px]">
+              <tbody className="divide-y divide-border font-mono text-xs">
                 {[
                   { cat: "Official Benchmark", name: "Recon Accuracy", val: "98.1%", doc: "98.1%", status: "EXACT", cmd: "npm run evaluate" },
                   { cat: "Official Benchmark", name: "Precision & Recall", val: "98% / 98%", doc: "98% / 98%", status: "EXACT", cmd: "npm run evaluate" },
@@ -710,15 +715,15 @@ export default function JudgeModePage() {
                   { cat: "Adversarial Defense", name: "Hostile Vectors Defended", val: "10/10", doc: "10/10", status: "EXACT", cmd: "npx tsx scripts/full-system-adversarial-attack.ts" },
                   { cat: "Receipt Integrity", name: "Offline Verification", val: "VERIFIED", doc: "VERIFIED", status: "EXACT", cmd: "npm run verify:demo" },
                   { cat: "Master Golden Gate", name: "Golden Stages Passed", val: "17/17", doc: "17/17", status: "EXACT", cmd: "npx tsx scripts/golden-gate.ts" },
-                  { cat: "Unit Test Suites", name: "Test Suites Passed", val: "34/34", doc: "34/34", status: "EXACT", cmd: "npm test" },
+                  { cat: "Unit Test Suites", name: "Test Suites Passed", val: "47/47", doc: "47/47", status: "EXACT", cmd: "npm test" },
                 ].map((row, idx) => (
-                  <tr key={idx} className="hover:bg-[#10140f] transition-colors">
-                    <td className="py-2.5 text-[#8c9288]">{row.cat}</td>
-                    <td className="py-2.5 text-[#e3e1d8] font-bold">{row.name}</td>
-                    <td className="py-2.5 text-[#a4b58a] font-bold">{row.val}</td>
-                    <td className="py-2.5 text-[#c5cbc1]">{row.doc}</td>
-                    <td className="py-2.5 text-[#a4b58a] font-bold">[OK] {row.status}</td>
-                    <td className="py-2.5 text-[#687063]"><code className="text-[10px]">{row.cmd}</code></td>
+                  <tr key={idx} className="hover:bg-accent/40 transition-colors">
+                    <td className="py-2.5 px-3 text-muted-foreground">{row.cat}</td>
+                    <td className="py-2.5 px-3 text-foreground font-semibold">{row.name}</td>
+                    <td className="py-2.5 px-3 text-foreground font-bold">{row.val}</td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{row.doc}</td>
+                    <td className="py-2.5 px-3 text-emerald-500 font-semibold">{row.status}</td>
+                    <td className="py-2.5 px-3 text-muted-foreground"><code>{row.cmd}</code></td>
                   </tr>
                 ))}
               </tbody>

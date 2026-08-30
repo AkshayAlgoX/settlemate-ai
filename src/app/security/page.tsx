@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   ShieldCheck,
-  ShieldAlert,
   Brain,
-  GitCommit,
   Database,
   FileText,
   Layers,
@@ -14,6 +12,10 @@ import {
   Loader2,
   Plus,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
+import { Badge } from "@/components/ui/badge";
+import { Dropdown } from "@/components/ui/dropdown";
 
 interface PolicyRulesUI {
   amountTolerancePaise: number;
@@ -80,7 +82,7 @@ const SECURITY_LAYERS = [
   {
     title: "Deterministic Financial Engine",
     description:
-      "The core reconciliation engine uses business rules, UTR matching, and integer-paise arithmetic. No AI, randomness, or model nondeterminism enters the financial source of truth.",
+      "The core reconciliation engine uses business rules, UTR matching, and integer-paise arithmetic. No AI or model nondeterminism enters the financial source of truth.",
     icon: Database,
     points: [
       "Exact amount matching in integer paise",
@@ -92,12 +94,12 @@ const SECURITY_LAYERS = [
   {
     title: "AI Safety Gate",
     description:
-      "AI is invoked only for exception investigation. Every response passes through structured validation before it can influence the application.",
+      "AI is invoked only for exception investigation. Every response passes through structured validation before influencing the application.",
     icon: Brain,
     points: [
       "Anomaly agent: max 5 cases per batched call",
       "Resolver agent: max 5 cases per batched call",
-      "No financial fix is auto-applied; resolver output is advisory and recorded for review",
+      "No financial fix is auto-applied; resolver output is advisory",
       "Schema rejection falls back to a deterministic template",
     ],
   },
@@ -110,14 +112,14 @@ const SECURITY_LAYERS = [
       "Confidence constrained to 0–100",
       "Status constrained to canonical enums",
       "Fix type constrained to canonical enums",
-      "Case IDs must belong to the queried exceptions",
+      "Case IDs must belong to queried exceptions",
     ],
   },
   {
     title: "Prompt Injection Defense",
     description:
-      "Bank narrations, refund reasons, chargeback descriptions, and other source text are treated strictly as data rather than executable instructions.",
-    icon: ShieldAlert,
+      "Bank narrations, refund reasons, chargeback descriptions, and other source text are treated strictly as data rather than instructions.",
+    icon: ShieldCheck,
     points: [
       "Source text explicitly quarantined as untrusted data",
       "Model instructed never to follow record-level instructions",
@@ -133,7 +135,7 @@ const SECURITY_LAYERS = [
       "AI produces SUGGESTION_ONLY status for write actions",
       "Maker (operator) submits proposed fix with rationale",
       "Checker (supervisor) approves or rejects with audit record",
-      "Audit trail records both identities, timestamps, and pre/post diff",
+      "Audit trail records identities, timestamps, and pre/post diff",
     ],
   },
   {
@@ -328,145 +330,123 @@ export default function SecurityPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="space-y-10 pb-12">
       {/* Header */}
-      <header className="border border-[#2a2e29] bg-[#0d100d] p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[8px] font-medium uppercase tracking-[0.22em] text-[#63695f]">
-              <ShieldCheck className="h-3.5 w-3.5 text-[#97a57e]" />
-              Institutional Financial Control Plane
-            </div>
-
-            <h1 className="mt-1 text-[20px] font-bold tracking-[-0.03em] text-[#e3e1d8]">
-              Security & Policy-as-Code Governance
-            </h1>
-
-            <p className="mt-1 text-[11px] text-[#71776d]">
-              Deterministic arithmetic, 100k+ streaming shadow replay promotion gates, immutable audit lineage, and fail-closed AI boundaries.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 border border-[#4a5839] bg-[#12180e] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.14em] text-[#a8b88d]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#a8b88d]" />
-              POLICY GOVERNANCE ACTIVE
-            </span>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        tag="Security & Policy"
+        title="Policy-as-code & security blueprint"
+        description="Deterministic integer arithmetic, streaming shadow replay promotion gates, immutable audit lineage, and fail-closed AI boundaries."
+        badge={<Badge variant="success">Governance active</Badge>}
+      />
 
       {feedback ? (
-        <div className={"flex items-center justify-between border px-4 py-3 " + (
+        <div className={`flex items-center justify-between rounded-lg border p-4 text-xs ${
           feedback.type === "success"
-            ? "border-[#384a32] bg-[#10160d] text-[#a8b88d]"
-            : "border-[#552e2a] bg-[#221312] text-[#e0897d]"
-        )}>
-          <div className="flex items-center gap-2 text-[10px]">
-            {feedback.type === "success" ? <Check className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+            ? "border-border bg-card text-foreground"
+            : "border-[#3b1818] bg-[#140a0a] text-[#ef4444]"
+        }`}>
+          <div className="flex items-center gap-2">
+            {feedback.type === "success" ? <Check className="h-4 w-4 text-[#10b981]" /> : <XCircle className="h-4 w-4 text-[#ef4444]" />}
             <span>{feedback.message}</span>
           </div>
-          <button type="button" onClick={() => setFeedback(null)} className="text-[9px] uppercase tracking-wider underline">
+          <button type="button" onClick={() => setFeedback(null)} className="text-xs text-muted-foreground hover:text-foreground">
             Dismiss
           </button>
         </div>
       ) : null}
 
       {/* POLICY-AS-CODE CONTROL CENTER */}
-      <section className="border border-[#2a2e29] bg-[#0d100d]">
-        <div className="flex flex-col gap-3 border-b border-[#252a24] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <GitCommit className="h-4 w-4 text-[#98a47f]" />
-            <div>
-              <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#626960]">
-                Policy-as-Code Engine
-              </div>
-              <div className="mt-0.5 text-[13px] font-semibold text-[#dddcd4]">
-                Versioned Rules & Streaming Shadow Replay
-              </div>
-            </div>
-          </div>
+      <section className="rounded-lg border border-border bg-card space-y-4">
+        <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
+          <SectionHeader
+            title="Versioned rules & shadow replay"
+            description="Replay candidate policies against real workloads before promotion."
+            className="border-b-0 pb-0"
+          />
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Sample Size Selector */}
-            <div className="flex items-center gap-1.5 border border-[#252a24] bg-[#080b08] px-2 py-1">
-              <span className="text-[8px] uppercase tracking-wider text-[#60675c]">Replay Sample:</span>
-              <select
-                value={selectedSampleSize}
-                onChange={(e) => setSelectedSampleSize(Number(e.target.value))}
-                className="bg-transparent font-mono text-[9px] text-[#dddcd4] focus:outline-none"
-              >
-                <option value={250}>250 (Benchmark)</option>
-                <option value={1000}>1,000 (Standard)</option>
-                <option value={10000}>10,000 (Production Scale)</option>
-                <option value={100000}>100,000 (Hyperscale)</option>
-              </select>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground font-medium">Replay:</span>
+              <Dropdown
+                value={String(selectedSampleSize)}
+                onValueChange={(val) => setSelectedSampleSize(Number(val))}
+                options={[
+                  { value: "250", label: "250 records", badge: "Fast" },
+                  { value: "1000", label: "1,000 records", badge: "1k" },
+                  { value: "10000", label: "10,000 records", badge: "10k" },
+                  { value: "100000", label: "100,000 records", badge: "100k" },
+                ]}
+                size="sm"
+                triggerClassName="w-[150px] font-mono text-xs"
+                data-testid="security-sample-size-dropdown"
+              />
             </div>
 
             <button
               type="button"
               onClick={() => setShowDraftForm(!showDraftForm)}
-              className="inline-flex items-center gap-1.5 border border-[#3b4533] bg-[#12160f] px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.14em] text-[#b4c399] hover:bg-[#1a2016]"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
             >
               <Plus className="h-3 w-3" />
-              {showDraftForm ? "Cancel Draft" : "New Candidate Policy"}
+              <span>{showDraftForm ? "Cancel draft" : "New candidate policy"}</span>
             </button>
           </div>
         </div>
 
         {/* Draft Policy Creator Form */}
         {showDraftForm ? (
-          <div className="border-b border-[#252a24] bg-[#0b0e0b] p-5">
-            <div className="text-[9px] font-bold uppercase tracking-wider text-[#dddcd4]">
+          <div className="border-b border-border bg-background p-5 space-y-4">
+            <div className="text-xs font-semibold text-foreground">
               Create Candidate Policy Version
             </div>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
               <div>
-                <label className="text-[7px] uppercase tracking-wider text-[#636b5e]">Version</label>
+                <label className="text-muted-foreground block mb-1">Version</label>
                 <input
                   type="text"
                   value={draftVersion}
                   onChange={(e) => setDraftVersion(e.target.value)}
-                  className="mt-1 h-9 w-full border border-[#2a2f28] bg-[#10140f] px-3 text-[11px] font-mono text-[#dcdbd3]"
+                  className="h-8 w-full border border-border rounded bg-card px-3 text-xs font-mono text-foreground"
                 />
               </div>
               <div>
-                <label className="text-[7px] uppercase tracking-wider text-[#636b5e]">Amount Tolerance (Paise)</label>
+                <label className="text-muted-foreground block mb-1">Amount Tolerance (Paise)</label>
                 <input
                   type="number"
                   value={draftTolerance}
                   onChange={(e) => setDraftTolerance(Number(e.target.value))}
-                  className="mt-1 h-9 w-full border border-[#2a2f28] bg-[#10140f] px-3 text-[11px] font-mono text-[#dcdbd3]"
+                  className="h-8 w-full border border-border rounded bg-card px-3 text-xs font-mono text-foreground"
                 />
               </div>
               <div>
-                <label className="text-[7px] uppercase tracking-wider text-[#636b5e]">Timing Window (Hours)</label>
+                <label className="text-muted-foreground block mb-1">Timing Window (Hours)</label>
                 <input
                   type="number"
                   value={draftWindow}
                   onChange={(e) => setDraftWindow(Number(e.target.value))}
-                  className="mt-1 h-9 w-full border border-[#2a2f28] bg-[#10140f] px-3 text-[11px] font-mono text-[#dcdbd3]"
+                  className="h-8 w-full border border-border rounded bg-card px-3 text-xs font-mono text-foreground"
                 />
               </div>
               <div>
-                <label className="text-[7px] uppercase tracking-wider text-[#636b5e]">Materiality Threshold (INR)</label>
+                <label className="text-muted-foreground block mb-1">Materiality Threshold (INR)</label>
                 <input
                   type="number"
                   value={draftMateriality}
                   onChange={(e) => setDraftMateriality(Number(e.target.value))}
-                  className="mt-1 h-9 w-full border border-[#2a2f28] bg-[#10140f] px-3 text-[11px] font-mono text-[#dcdbd3]"
+                  className="h-8 w-full border border-border rounded bg-card px-3 text-xs font-mono text-foreground"
                 />
               </div>
             </div>
-            <div className="mt-4 flex justify-end">
+            <div className="flex justify-end">
               <button
                 type="button"
                 disabled={actionLoading}
                 onClick={handleCreateDraft}
-                className="inline-flex items-center gap-2 border border-[#4a5839] bg-[#151c11] px-4 py-2 text-[8px] font-bold uppercase tracking-[0.14em] text-[#b8c99e] hover:bg-[#1c2617]"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition disabled:opacity-50"
               >
                 {actionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                Save Policy Draft
+                <span>Save policy draft</span>
               </button>
             </div>
           </div>
@@ -474,119 +454,115 @@ export default function SecurityPage() {
 
         {/* Active Policy Status Card */}
         {activePolicy ? (
-          <div className="grid gap-px bg-[#252a24] sm:grid-cols-2 lg:grid-cols-4">
-            <div className="bg-[#0a0d0a] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#60675c]">Active Policy Version</div>
-              <div className="mt-1 font-mono text-[16px] font-bold text-[#b4c399]">{activePolicy.version}</div>
-              <div className="mt-0.5 text-[7px] text-[#60675c]">{activePolicy.status} in production</div>
+          <div className="grid gap-px bg-[#1e1e1e] sm:grid-cols-2 lg:grid-cols-4">
+            <div className="bg-card p-4 space-y-1">
+              <div className="text-xs text-muted-foreground">Active Policy Version</div>
+              <div className="font-mono text-xl font-semibold text-foreground">{activePolicy.version}</div>
+              <div className="text-[11px] text-[#10b981]">Active in production</div>
             </div>
-            <div className="bg-[#0a0d0a] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#60675c]">Amount Tolerance</div>
-              <div className="mt-1 font-mono text-[16px] font-bold text-[#d7d5cd]">
+            <div className="bg-card p-4 space-y-1">
+              <div className="text-xs text-muted-foreground">Amount Tolerance</div>
+              <div className="font-mono text-xl font-semibold text-foreground">
                 ₹{(activePolicy.rules.amountTolerancePaise / 100).toFixed(2)}
               </div>
-              <div className="mt-0.5 text-[7px] text-[#60675c]">{activePolicy.rules.amountTolerancePaise} paise threshold</div>
+              <div className="text-[11px] text-muted-foreground/70">{activePolicy.rules.amountTolerancePaise} paise threshold</div>
             </div>
-            <div className="bg-[#0a0d0a] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#60675c]">Timing Window</div>
-              <div className="mt-1 font-mono text-[16px] font-bold text-[#d7d5cd]">
+            <div className="bg-card p-4 space-y-1">
+              <div className="text-xs text-muted-foreground">Timing Window</div>
+              <div className="font-mono text-xl font-semibold text-foreground">
                 {activePolicy.rules.toleranceWindowHours} Hours
               </div>
-              <div className="mt-0.5 text-[7px] text-[#60675c]">T+{(activePolicy.rules.toleranceWindowHours / 24).toFixed(0)} clearing window</div>
+              <div className="text-[11px] text-muted-foreground/70">T+{(activePolicy.rules.toleranceWindowHours / 24).toFixed(0)} clearing window</div>
             </div>
-            <div className="bg-[#0a0d0a] p-4">
-              <div className="text-[7px] uppercase tracking-[0.16em] text-[#60675c]">Canonical Policy Hash</div>
-              <div className="mt-1 font-mono text-[11px] text-[#a4b58a] truncate">
+            <div className="bg-card p-4 space-y-1">
+              <div className="text-xs text-muted-foreground">Canonical Hash</div>
+              <div className="font-mono text-xs text-foreground truncate mt-1">
                 {activePolicy.contentHash.slice(0, 16)}...
               </div>
-              <div className="mt-0.5 text-[7px] text-[#60675c]">SHA-256 Verified</div>
+              <div className="text-[11px] text-muted-foreground/70">SHA-256 Verified</div>
             </div>
           </div>
         ) : null}
 
         {/* Latest Shadow Replay Impact Card */}
         {latestReport ? (
-          <div className="border-t border-[#252a24] bg-[#0c141a] p-5 space-y-4">
+          <div className="border-t border-border bg-background p-5 space-y-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-[#88b0c4]">
-                  Streaming Shadow Replay: v{latestReport.candidatePolicyVersion} vs v{latestReport.baselinePolicyVersion}
+                <span className="text-xs font-semibold text-foreground">
+                  Shadow Replay: v{latestReport.candidatePolicyVersion} vs v{latestReport.baselinePolicyVersion}
                 </span>
-                <div className="mt-0.5 font-mono text-[9px] text-[#688291]">
-                  Evaluated {latestReport.recordsEvaluated.toLocaleString()} records in {latestReport.durationMs}ms ({latestReport.throughputRecsPerSec.toLocaleString()} recs/sec)
+                <div className="font-mono text-xs text-muted-foreground mt-0.5">
+                  Evaluated {latestReport.recordsEvaluated.toLocaleString()} records in {latestReport.durationMs}ms ({latestReport.throughputRecsPerSec.toLocaleString()} recs/s)
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={"px-2.5 py-1 text-[8px] font-bold uppercase tracking-wider border " + (
-                  latestReport.safetyScore === "SAFE"
-                    ? "border-[#384a56] bg-[#101b22] text-[#9fc7dc]"
-                    : latestReport.safetyScore === "CAUTION"
-                    ? "border-[#4e432a] bg-[#14120a] text-[#c9b275]"
-                    : "border-[#552e2a] bg-[#221312] text-[#e0897d]"
-                )}>
-                  SAFETY SCORE: {latestReport.safetyScore}
-                </span>
-              </div>
+              <Badge variant={latestReport.safetyScore === "SAFE" ? "success" : "warning"}>
+                Safety: {latestReport.safetyScore}
+              </Badge>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="border border-[#1f2e38] bg-[#090f14] p-3">
-                <div className="text-[7px] uppercase text-[#688291]">Auto-Match Delta</div>
-                <div className="mt-1 font-mono text-[13px] font-bold text-[#88b0c4]">
+              <div className="border border-border bg-card p-3 rounded-md">
+                <div className="text-xs text-muted-foreground">Auto-Match Delta</div>
+                <div className="font-mono text-base font-semibold text-foreground mt-0.5">
                   {latestReport.autoMatchDeltaPct >= 0 ? "+" : ""}{latestReport.autoMatchDeltaPct}%
                 </div>
-                <div className="mt-0.5 text-[7px] text-[#556975]">({latestReport.newlyMatchedCount} newly matched)</div>
+                <div className="text-[10px] text-muted-foreground/70">({latestReport.newlyMatchedCount} newly matched)</div>
               </div>
-              <div className="border border-[#1f2e38] bg-[#090f14] p-3">
-                <div className="text-[7px] uppercase text-[#688291]">Exception Delta</div>
-                <div className="mt-1 font-mono text-[13px] font-bold text-[#88b0c4]">
+              <div className="border border-border bg-card p-3 rounded-md">
+                <div className="text-xs text-muted-foreground">Exception Delta</div>
+                <div className="font-mono text-base font-semibold text-foreground mt-0.5">
                   {latestReport.exceptionDeltaPct >= 0 ? "+" : ""}{latestReport.exceptionDeltaPct}%
                 </div>
-                <div className="mt-0.5 text-[7px] text-[#556975]">({latestReport.newlyUnmatchedCount} newly unmatched)</div>
+                <div className="text-[10px] text-muted-foreground/70">({latestReport.newlyUnmatchedCount} newly unmatched)</div>
               </div>
-              <div className="border border-[#1f2e38] bg-[#090f14] p-3">
-                <div className="text-[7px] uppercase text-[#688291]">Invariant Violations</div>
-                <div className="mt-1 font-mono text-[13px] font-bold text-[#96a879]">
-                  {latestReport.invariantViolations} (Zero Tolerance)
+              <div className="border border-border bg-card p-3 rounded-md">
+                <div className="text-xs text-muted-foreground">Invariant Violations</div>
+                <div className="font-mono text-base font-semibold text-[#10b981] mt-0.5">
+                  {latestReport.invariantViolations}
                 </div>
-                <div className="mt-0.5 text-[7px] text-[#556975]">100% Conservation</div>
+                <div className="text-[10px] text-muted-foreground/70">Zero Tolerance</div>
               </div>
-              <div className="border border-[#1f2e38] bg-[#090f14] p-3">
-                <div className="text-[7px] uppercase text-[#688291]">Amount at Risk Delta</div>
-                <div className="mt-1 font-mono text-[13px] font-bold text-[#d7d5cd]">
+              <div className="border border-border bg-card p-3 rounded-md">
+                <div className="text-xs text-muted-foreground">Amount at Risk Delta</div>
+                <div className="font-mono text-base font-semibold text-foreground mt-0.5">
                   ₹{(latestReport.amountAtRiskDeltaPaise / 100).toFixed(2)}
                 </div>
-                <div className="mt-0.5 text-[7px] text-[#556975]">Deterministic Math</div>
+                <div className="text-[10px] text-muted-foreground/70">Exact Paise</div>
               </div>
             </div>
 
             {/* Record-Level Diff Drill-Down Preview */}
             {latestReport.sampleRecordDiffs && latestReport.sampleRecordDiffs.length > 0 ? (
-              <div className="border border-[#1f2e38] bg-[#080d11] p-3">
-                <div className="text-[8px] font-bold uppercase tracking-wider text-[#88b0c4] mb-2">
-                  Record-Level Impact Drill-Down ({latestReport.sampleRecordDiffs.length} Sample Diffs)
+              <div className="border border-border bg-card p-3 rounded-md">
+                <div className="text-xs font-semibold text-foreground mb-2">
+                  Sample Record Diffs ({latestReport.sampleRecordDiffs.length})
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left font-mono text-[8px]">
+                  <table className="w-full text-left font-mono text-xs">
                     <thead>
-                      <tr className="border-b border-[#1f2e38] text-[#556975]">
-                        <th className="py-1">Record ID</th>
-                        <th className="py-1">Old Decision</th>
-                        <th className="py-1">New Decision</th>
-                        <th className="py-1">Delay</th>
-                        <th className="py-1">Amount</th>
-                        <th className="py-1">Invariant</th>
+                      <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                        <th className="py-2 px-3 font-medium">Record ID</th>
+                        <th className="py-2 px-3 font-medium">Old Decision</th>
+                        <th className="py-2 px-3 font-medium">New Decision</th>
+                        <th className="py-2 px-3 font-medium">Delay</th>
+                        <th className="py-2 px-3 font-medium">Amount</th>
+                        <th className="py-2 px-3 font-medium">Invariant</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#152028] text-[#8e9da6]">
+                    <tbody className="divide-y divide-border">
                       {latestReport.sampleRecordDiffs.slice(0, 5).map((d, idx) => (
-                        <tr key={idx}>
-                          <td className="py-1 text-[#dddcd4]">{d.recordId}</td>
-                          <td className="py-1">{d.oldDecision}</td>
-                          <td className="py-1 text-[#88b0c4]">{d.newDecision}</td>
-                          <td className="py-1">{d.timeDeltaHours}h</td>
-                          <td className="py-1">₹{(d.amountPaise / 100).toFixed(2)}</td>
-                          <td className="py-1 text-[#96a879]">PASSED</td>
+                        <tr key={idx} className="hover:bg-accent/40 transition">
+                          <td className="py-2 px-3 text-foreground font-semibold">{d.recordId}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{d.oldDecision}</td>
+                          <td className="py-2 px-3 text-foreground">{d.newDecision}</td>
+                          <td className="py-2 px-3 text-muted-foreground/70">{d.timeDeltaHours}h</td>
+                          <td className="py-2 px-3 text-foreground">₹{(d.amountPaise / 100).toFixed(2)}</td>
+                          <td className="py-2 px-3">
+                            <Badge variant={d.invariantResult === "PASSED" ? "success" : "destructive"}>
+                              {d.invariantResult}
+                            </Badge>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -599,49 +575,39 @@ export default function SecurityPage() {
 
         {/* Versioned Policy Ledger Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[750px] border-collapse text-left text-[9px]">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-[#252a24] bg-[#0a0d0a] text-[7px] uppercase tracking-[0.16em] text-[#555c52]">
-                <th className="px-5 py-3 font-semibold">Policy Version</th>
-                <th className="px-5 py-3 font-semibold">Status</th>
-                <th className="px-5 py-3 font-semibold">Rules Digest</th>
-                <th className="px-5 py-3 font-semibold">Author / Approver</th>
-                <th className="px-5 py-3 font-semibold">SHA-256 Hash</th>
-                <th className="px-5 py-3 font-semibold text-right">Actions</th>
+              <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+                <th className="px-5 py-2.5 font-medium">Policy Version</th>
+                <th className="px-5 py-2.5 font-medium">Status</th>
+                <th className="px-5 py-2.5 font-medium">Rules Digest</th>
+                <th className="px-5 py-2.5 font-medium">Author / Approver</th>
+                <th className="px-5 py-2.5 font-medium">SHA-256 Hash</th>
+                <th className="px-5 py-2.5 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1e221d]">
+            <tbody className="divide-y divide-border">
               {policies.map((pol) => {
                 const isCurrentActive = pol.status === "ACTIVE";
                 return (
-                  <tr key={pol.version} className={isCurrentActive ? "bg-[#11160e]" : "hover:bg-[#10140f]"}>
-                    <td className="px-5 py-3 font-mono font-bold text-[#dddcd4]">
+                  <tr key={pol.version} className={isCurrentActive ? "bg-[#0f0f0f]/60" : "hover:bg-accent/40"}>
+                    <td className="px-5 py-3 font-mono font-semibold text-foreground">
                       v{pol.version}
                     </td>
                     <td className="px-5 py-3">
-                      <span className={"inline-flex px-2 py-0.5 text-[7px] font-bold uppercase tracking-wider border " + (
-                        pol.status === "ACTIVE"
-                          ? "border-[#4a5839] bg-[#141a0f] text-[#a8b88d]"
-                          : pol.status === "APPROVED"
-                          ? "border-[#384a56] bg-[#101b22] text-[#9fc7dc]"
-                          : pol.status === "SHADOW"
-                          ? "border-[#4e432a] bg-[#14120a] text-[#c9b275]"
-                          : pol.status === "SUPERSEDED"
-                          ? "border-[#2a2e29] bg-[#0e110e] text-[#60675c]"
-                          : "border-[#333a30] bg-[#10140f] text-[#8e958a]"
-                      )}>
+                      <Badge variant={pol.status === "ACTIVE" ? "success" : pol.status === "APPROVED" ? "outline" : "secondary"}>
                         {pol.status}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="px-5 py-3 text-[#8e958a]">
+                    <td className="px-5 py-3 text-muted-foreground">
                       <div>Tolerance: ₹{(pol.rules.amountTolerancePaise / 100).toFixed(2)}</div>
-                      <div className="text-[8px] text-[#60675c]">Window: {pol.rules.toleranceWindowHours}h</div>
+                      <div className="text-[11px] text-muted-foreground/70">Window: {pol.rules.toleranceWindowHours}h</div>
                     </td>
-                    <td className="px-5 py-3 font-mono text-[8px] text-[#788074]">
+                    <td className="px-5 py-3 font-mono text-[11px] text-muted-foreground">
                       <div>{pol.createdBy}</div>
-                      {pol.approvedBy ? <div className="text-[#a8b88d]">✓ {pol.approvedBy}</div> : null}
+                      {pol.approvedBy ? <div className="text-foreground">✓ {pol.approvedBy}</div> : null}
                     </td>
-                    <td className="px-5 py-3 font-mono text-[8px] text-[#555c52]">
+                    <td className="px-5 py-3 font-mono text-[11px] text-muted-foreground/70">
                       {pol.contentHash.slice(0, 12)}...
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -651,7 +617,7 @@ export default function SecurityPage() {
                             type="button"
                             disabled={actionLoading}
                             onClick={() => handleRunShadowReplay(pol.version)}
-                            className="border border-[#2f3d47] bg-[#0c1419] px-2.5 py-1 text-[7px] font-bold uppercase tracking-wider text-[#88b0c4] hover:bg-[#121e26]"
+                            className="h-7 px-2.5 rounded border border-border bg-card text-xs font-medium text-foreground hover:bg-accent transition"
                           >
                             Replay ({selectedSampleSize.toLocaleString()})
                           </button>
@@ -662,7 +628,7 @@ export default function SecurityPage() {
                             type="button"
                             disabled={actionLoading}
                             onClick={() => handleApprove(pol.version)}
-                            className="border border-[#384a56] bg-[#101b22] px-2.5 py-1 text-[7px] font-bold uppercase tracking-wider text-[#9fc7dc] hover:bg-[#15232c]"
+                            className="h-7 px-2.5 rounded bg-primary text-primary-foreground text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
                           >
                             Approve
                           </button>
@@ -673,7 +639,7 @@ export default function SecurityPage() {
                             type="button"
                             disabled={actionLoading}
                             onClick={() => handleActivate(pol.version)}
-                            className="border border-[#4a5839] bg-[#141a0f] px-2.5 py-1 text-[7px] font-bold uppercase tracking-wider text-[#a8b88d] hover:bg-[#1c2615]"
+                            className="h-7 px-2.5 rounded bg-primary text-primary-foreground text-xs font-medium text-primary-foreground hover:bg-[#ffffff] transition"
                           >
                             Activate
                           </button>
@@ -684,9 +650,9 @@ export default function SecurityPage() {
                             type="button"
                             disabled={actionLoading}
                             onClick={() => handleRollback(pol.version)}
-                            className="border border-[#4e432a] bg-[#14120a] px-2.5 py-1 text-[7px] font-bold uppercase tracking-wider text-[#c9b275] hover:bg-[#1f1c10]"
+                            className="h-7 px-2.5 rounded border border-border bg-card text-xs font-medium text-muted-foreground hover:text-foreground transition"
                           >
-                            Rollback To
+                            Rollback
                           </button>
                         ) : null}
                       </div>
@@ -701,50 +667,40 @@ export default function SecurityPage() {
 
       {/* Security Architecture Grid */}
       <section className="space-y-4">
-        <div className="text-[8px] font-medium uppercase tracking-[0.2em] text-[#63695f]">
-          Institutional Safety Blueprint
-        </div>
+        <SectionHeader
+          title="Institutional safety blueprint"
+          description="Six architectural defense layers protecting financial state."
+        />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {SECURITY_LAYERS.map((layer) => {
-            const Icon = layer.icon;
-            return (
-              <div
-                key={layer.title}
-                className="border border-[#2a2e29] bg-[#0d100d] p-5"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="border border-[#2a2e29] bg-[#151815] p-2 text-[#97a57e]">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <h2 className="text-[12px] font-semibold text-[#dddcd4]">
-                    {layer.title}
-                  </h2>
-                </div>
+          {SECURITY_LAYERS.map((layer) => (
+            <div
+              key={layer.title}
+              className="rounded-lg border border-border bg-card p-5 space-y-3"
+            >
+              <h2 className="text-xs font-semibold text-foreground">
+                {layer.title}
+              </h2>
 
-                <p className="mt-3 text-[11px] leading-relaxed text-[#858c80]">
-                  {layer.description}
-                </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {layer.description}
+              </p>
 
-                <div className="mt-4 border-t border-[#1e221d] pt-3">
-                  <div className="text-[7px] font-medium uppercase tracking-[0.16em] text-[#555c52]">
-                    Verification Guarantees
-                  </div>
-                  <ul className="mt-2 space-y-1.5">
-                    {layer.points.map((point) => (
-                      <li
-                        key={point}
-                        className="flex items-start gap-1.5 text-[10px] text-[#71776d]"
-                      >
-                        <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-[#555c52]" />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              <div className="border-t border-border pt-3">
+                <ul className="space-y-1.5">
+                  {layer.points.map((point) => (
+                    <li
+                      key={point}
+                      className="flex items-start gap-1.5 text-[11px] text-muted-foreground/70"
+                    >
+                      <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-[#888888]" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </section>
     </div>

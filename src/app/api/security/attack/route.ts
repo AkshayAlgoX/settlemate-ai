@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { safeErrorResponse } from "@/lib/security/api-security";
 import { DeterministicClaimValidator } from "@/lib/ai/claim-validator";
 import { AggregateRiskTracker } from "@/lib/reconciliation/aggregate-risk";
 import { OfflineReceiptVerifier } from "@/lib/ledger/receipt-verifier";
@@ -355,9 +356,9 @@ export async function POST(req: NextRequest) {
       processedAt: new Date().toISOString(),
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message || "Attack simulation failed" },
-      { status: 500 }
-    );
+    // safeErrorResponse masks 5xx detail. As with the red-team route, an
+    // adversarial-testing endpoint that echoes its own exceptions is handing an
+    // attacker a map of the validator it is meant to defend.
+    return safeErrorResponse(err, 500, "ATTACK_SIM_ERROR");
   }
 }

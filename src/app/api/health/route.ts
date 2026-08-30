@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/storage/sqlite-db";
+import { checkDatabaseConnection } from "@/lib/db";
 import { applySecurityHeaders } from "@/lib/security/api-security";
 import { logger } from "@/lib/observability/logger";
 
@@ -19,27 +19,32 @@ export const dynamic = "force-dynamic";
 interface DependencyCheck {
   status: "up" | "down";
   latencyMs: number;
+  provider?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export async function GET() {
   const checks: Record<string, DependencyCheck> = {};
   let healthy = true;
 
-  // Database connectivity: a real round-trip, not a cached handle check.
-  const dbStart = Date.now();
-  try {
-    const row = getDb().prepare("SELECT 1 AS ok").get() as { ok: number } | undefined;
-    if (!row || row.ok !== 1) throw new Error("unexpected query result");
-    checks.database = { status: "up", latencyMs: Date.now() - dbStart };
-  } catch (err) {
+  // Database connectivity: a real round-trip against the active production store (PostgreSQL or SQLite)
+  const dbHealth = await checkDatabaseConnection();
+  if (dbHealth.status === "up") {
+    checks.database = {
+      status: "up",
+      provider: dbHealth.provider,
+      latencyMs: dbHealth.latencyMs,
+    };
+  } else {
     healthy = false;
     checks.database = {
       status: "down",
-      latencyMs: Date.now() - dbStart,
-      error: err instanceof Error ? err.message : "unknown error",
+      provider: dbHealth.provider,
+      latencyMs: dbHealth.latencyMs,
+      error: "database unreachable; see server logs for detail",
     };
-    logger.error("health check failed: database unreachable", { err });
+    logger.error("health check failed: database unreachable");
   }
 
   const body = {
