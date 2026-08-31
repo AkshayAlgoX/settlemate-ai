@@ -281,11 +281,39 @@ export function initDatabase(customPath?: string): DatabaseType {
     if (!cols.includes("retry_count")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN retry_count INTEGER DEFAULT 0");
     if (!cols.includes("retryable")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN retryable INTEGER DEFAULT 0");
     if (!cols.includes("error_code")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN error_code TEXT");
+    if (!cols.includes("claimed_by")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN claimed_by TEXT");
+    if (!cols.includes("claimed_at")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN claimed_at TEXT");
+    if (!cols.includes("lease_expires_at")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN lease_expires_at TEXT");
+    if (!cols.includes("heartbeat_at")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN heartbeat_at TEXT");
+    if (!cols.includes("attempt_count")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN attempt_count INTEGER DEFAULT 0");
+    if (!cols.includes("max_attempts")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN max_attempts INTEGER DEFAULT 3");
+    if (!cols.includes("next_retry_at")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN next_retry_at TEXT");
+    if (!cols.includes("cancel_requested_at")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN cancel_requested_at TEXT");
+    if (!cols.includes("progress_current")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN progress_current INTEGER DEFAULT 0");
+    if (!cols.includes("progress_total")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN progress_total INTEGER DEFAULT 0");
     db.exec("CREATE INDEX IF NOT EXISTS idx_recon_jobs_tenant ON reconciliation_jobs(tenant_id)");
     db.exec("CREATE INDEX IF NOT EXISTS idx_recon_jobs_status ON reconciliation_jobs(status)");
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS job_items (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL,
+        tenant_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        error TEXT,
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(job_id, idempotency_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_job_items_tenant_status ON job_items(tenant_id, status);
+      CREATE INDEX IF NOT EXISTS idx_job_items_job_status ON job_items(job_id, status);
+    `);
   } catch {
     // Ignore migration error if already applied
   }
+
 
 
 
@@ -1122,4 +1150,3 @@ export const VerifyProgressRepository = {
     }
   },
 };
-

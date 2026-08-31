@@ -24,9 +24,16 @@ import {
   replayJob,
   assertValidTransition,
   calculateBackoffMs,
+  detectAndReclaimStalledJobs,
+  processItemsBoundedConcurrency,
+  requestJobCancellation,
+  cancelJob,
+  createJobItems,
+  classifyFailure,
   _clearLocalQueue,
   type DurableJobRecord,
 } from "../src/lib/workers/durable-job-worker";
+
 
 async function test(name: string, fn: () => void | Promise<void>) {
   _clearLocalQueue();
@@ -206,8 +213,9 @@ async function main() {
     // Attempt 1: Fail transiently
     const job1 = await claimNextJob("worker_retry", 30000);
     assert.ok(job1);
-    const status1 = await failJob(job1.id, "worker_retry", "Network timeout", "TRANSIENT");
+    const status1 = await failJob(job1.id, "worker_retry", "Network timeout", "TRANSIENT", 0);
     assert.equal(status1, "PENDING", "First failure must remain PENDING for retry");
+
 
     // Attempt 2: Fail again (maxRetries reached)
     const job2 = await claimNextJob("worker_retry", 30000);
@@ -267,8 +275,155 @@ async function main() {
     await completeJob(reclaimed.id, "w2", { reconciled: true, matchedCount: 100 });
   });
 
+  // 11. Stalled Job Detection & Auto-Reclaim
+  await test("TEST 11: detectAndReclaimStalledJobs re-enqueues stalled jobs with retries remaining", async () => {
+    const key = `stalled_key_${Date.now()}`;
+    const job = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: key,
+      jobType: "RECONCILIATION_BATCH",
+      payload: { batchId: "b_stalled" },
+      maxRetries: 3,
+    });
+
+    const claimed = await claimNextJob("crashed_worker_1", 1); // 1ms lease
+    assert.ok(claimed);
+    await new Promise((r) => setTimeout(r, 10)); // expire lease
+
+    const { stalledCount } = await detectAndReclaimStalledJobs(1, 0);
+    assert.ok(stalledCount >= 1, "Must detect at least 1 stalled job");
+
+
+    // The reclaimed job can be claimed again by another worker
+    const reclaimed = await claimNextJob("healthy_worker_2", 30000);
+    assert.ok(reclaimed, "Stalled job must be reclaimable");
+    assert.equal(reclaimed.id, job.id);
+  });
+
+  // 12. Bounded Concurrency Item Execution
+  await test("TEST 12: processItemsBoundedConcurrency executes items in bounded concurrency batches", async () => {
+    const job = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `bounded_test_${Date.now()}`,
+      jobType: "ITEM_BATCH",
+      payload: {},
+      progressTotal: 30,
+    });
+
+    const items = Array.from({ length: 30 }, (_, i) => ({ id: `rec_${i}`, val: i }));
+    let peakInFlight = 0;
+    let currentInFlight = 0;
+
+    const { results, cancelled } = await processItemsBoundedConcurrency(
+      job.id,
+      "worker_bounded_1",
+      items,
+      async (item) => {
+        currentInFlight++;
+        if (currentInFlight > peakInFlight) peakInFlight = currentInFlight;
+        await new Promise((r) => setTimeout(r, 5));
+        currentInFlight--;
+        return item.val * 2;
+      },
+      { concurrency: 12 }
+    );
+
+    assert.equal(cancelled, false, "Job should not be cancelled");
+    assert.equal(results.length, 30, "All 30 items must be processed");
+    assert.ok(peakInFlight <= 12, `Peak in-flight concurrency (${peakInFlight}) must not exceed limit 12`);
+    assert.ok(peakInFlight >= 2, `Concurrency (${peakInFlight}) must achieve parallelism`);
+  });
+
+  // 13. Cooperative Cancellation
+  await test("TEST 13: Cooperative cancellation stops work between safe batches without corrupting active work", async () => {
+    const job = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `cancel_test_${Date.now()}`,
+      jobType: "CANCELLATION_TEST",
+      payload: {},
+      progressTotal: 100,
+    });
+
+    const items = Array.from({ length: 100 }, (_, i) => ({ id: `rec_${i}` }));
+
+    // Request cancellation halfway through
+    setTimeout(async () => {
+      await requestJobCancellation(job.id, TENANT_A);
+    }, 20);
+
+    const { cancelled } = await processItemsBoundedConcurrency(
+      job.id,
+      "worker_cancel_1",
+      items,
+      async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return true;
+      },
+      { concurrency: 5 }
+    );
+
+    assert.equal(cancelled, true, "Worker must gracefully detect cancellation request");
+    await cancelJob(job.id, "worker_cancel_1", "Cancelled safely during item loop");
+  });
+
+  // 14. Item-Level Idempotency & Duplicate Prevention
+  await test("TEST 14: createJobItems prevents duplicate item insertions for same idempotency key", async () => {
+    const key = `item_idemp_${Date.now()}`;
+    const job = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: key,
+      jobType: "ITEM_IDEMP_TEST",
+      payload: {},
+    });
+
+    const items = [{ idempotencyKey: "item_001" }, { idempotencyKey: "item_002" }, { idempotencyKey: "item_003" }];
+    const firstInsertCount = await createJobItems(job.id, TENANT_A, items);
+    assert.equal(firstInsertCount, 3, "Initial insert must create 3 items");
+
+    // Repeat insert of same items
+    const secondInsertCount = await createJobItems(job.id, TENANT_A, items);
+    assert.equal(secondInsertCount, 0, "Duplicate item insert must be idempotent (0 created)");
+  });
+
+  // 15. Multi-Tenant Worker Isolation
+  await test("TEST 15: Tenant B cannot cancel or replay Tenant A's jobs", async () => {
+    const jobA = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `tenant_iso_job_${Date.now()}`,
+      jobType: "ISOLATION_TEST",
+      payload: {},
+    });
+
+    // Tenant B attempts to cancel Tenant A's job
+    const cancelByB = await requestJobCancellation(jobA.id, TENANT_B);
+    assert.equal(cancelByB, false, "Tenant B cannot request cancellation of Tenant A's job");
+
+    // Tenant B attempts to replay Tenant A's job
+    const replayByB = await replayJob(jobA.id, TENANT_B);
+    assert.equal(replayByB, false, "Tenant B cannot replay Tenant A's job");
+  });
+
+  // 16. Error Classification & Differentiated Retries
+  await test("TEST 16: Failure classifier distinguishes retryable transient vs non-retryable fatal errors", () => {
+    const timeoutFailure = classifyFailure(new Error("Database connection timeout exceeded"));
+    assert.equal(timeoutFailure.retryable, true, "Timeout error must be classified as retryable");
+    assert.equal(timeoutFailure.classification, "TIMEOUT");
+
+    const rateLimitFailure = classifyFailure(new Error("HTTP 429: Rate limit quota exceeded"));
+    assert.equal(rateLimitFailure.retryable, true, "429 rate limit must be classified as retryable");
+    assert.equal(rateLimitFailure.classification, "RATE_LIMIT");
+
+    const invariantFailure = classifyFailure(new Error("ControlFailureError: Invariant 1 violated"));
+    assert.equal(invariantFailure.retryable, false, "Invariant failure must NOT be retryable");
+    assert.equal(invariantFailure.classification, "INVARIANT_FAILURE");
+
+    const validationFailure = classifyFailure(new Error("Validation error: Invalid input data format"));
+    assert.equal(validationFailure.retryable, false, "Validation failure must NOT be retryable");
+    assert.equal(validationFailure.classification, "VALIDATION_FAILURE");
+  });
+
   console.log("\n=========================================================================");
-  console.log(" ✅ ALL 10 DISTRIBUTED DURABLE WORKER ORCHESTRATION TESTS PASSED");
+  console.log(" ✅ ALL 16 DISTRIBUTED DURABLE WORKER ORCHESTRATION TESTS PASSED");
   console.log("=========================================================================\n");
 }
 

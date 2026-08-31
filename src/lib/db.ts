@@ -2,14 +2,14 @@
  * SettleMate AI — Enterprise Database Client & Connection Manager
  *
  * Supports dual-environment connection adapters:
- *   - Production: PostgreSQL 16 via @prisma/adapter-pg with connection pooling
- *   - Local / Development: Local SQLite via @prisma/adapter-better-sqlite3
+ *   - Production & PostgreSQL Tests: PostgreSQL 16 via @prisma/adapter-pg with connection pooling
+ *   - Local / Development & SQLite Tests: Local SQLite via @prisma/adapter-better-sqlite3
  */
 
 import "dotenv/config";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient as DefaultPrismaClient } from "@prisma/client";
 import pg from "pg";
 
 // Enable seamless JSON serialization for BigInt database values (e.g. BankTransaction.balance)
@@ -25,28 +25,38 @@ if (typeof (BigInt.prototype as { toJSON?: unknown }).toJSON !== "function") {
 }
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  prisma: DefaultPrismaClient | undefined;
+  sqliteClient: DefaultPrismaClient | undefined;
+  postgresClient: DefaultPrismaClient | undefined;
   pgPool: pg.Pool | undefined;
 };
 
 export function isPostgres(): boolean {
   const url = process.env.DATABASE_URL || "";
   return (
+    process.env.DATABASE_PROVIDER === "postgresql" ||
     process.env.PRISMA_TARGET_PROVIDER === "postgresql" ||
-    (process.env.PRISMA_TARGET_PROVIDER !== "sqlite" &&
+    (process.env.DATABASE_PROVIDER !== "sqlite" &&
+      process.env.PRISMA_TARGET_PROVIDER !== "sqlite" &&
       (url.startsWith("postgres://") || url.startsWith("postgresql://")))
   );
 }
 
-export function createPrismaAdapter() {
-  const databaseUrl = process.env.DATABASE_URL || "";
-  const targetIsPostgres = isPostgres();
+export function createPrismaAdapter(customDatabaseUrl?: string) {
+  const databaseUrl = customDatabaseUrl || process.env.DATABASE_URL || "";
+  const targetIsPostgres =
+    process.env.DATABASE_PROVIDER === "postgresql" ||
+    process.env.PRISMA_TARGET_PROVIDER === "postgresql" ||
+    (process.env.DATABASE_PROVIDER !== "sqlite" &&
+      process.env.PRISMA_TARGET_PROVIDER !== "sqlite" &&
+      (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://")));
 
   if (targetIsPostgres) {
     const pgUrl =
-      (databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://"))
+      databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://")
         ? databaseUrl
         : "postgresql://placeholder:placeholder@localhost:5432/settlemate";
+
     const pool =
       globalForPrisma.pgPool ??
       new pg.Pool({
@@ -55,8 +65,7 @@ export function createPrismaAdapter() {
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
         ssl:
-          pgUrl.includes("sslmode=require") ||
-          pgUrl.includes("neon.tech")
+          pgUrl.includes("sslmode=require") || pgUrl.includes("neon.tech")
             ? { rejectUnauthorized: false }
             : undefined,
       });
@@ -74,14 +83,53 @@ export function createPrismaAdapter() {
   });
 }
 
-const adapter = createPrismaAdapter();
-
-export const prisma =
-  globalForPrisma.prisma ?? new PrismaClient({ adapter });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+function getPostgresPrismaClass() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PrismaClient } = require("@prisma-client-postgres");
+    return PrismaClient;
+  } catch {
+    return DefaultPrismaClient;
+  }
 }
+
+export function createPrismaClient(customDatabaseUrl?: string): DefaultPrismaClient {
+  const targetIsPostgres = isPostgres();
+
+  if (targetIsPostgres) {
+    const PostgresPrismaClient = getPostgresPrismaClass();
+    const adapter = createPrismaAdapter(customDatabaseUrl);
+    return new PostgresPrismaClient({ adapter });
+  }
+
+  const adapter = createPrismaAdapter(customDatabaseUrl);
+  return new DefaultPrismaClient({ adapter });
+}
+
+export function getActivePrisma(): DefaultPrismaClient {
+  if (isPostgres()) {
+    if (!globalForPrisma.postgresClient) {
+      globalForPrisma.postgresClient = createPrismaClient();
+    }
+    return globalForPrisma.postgresClient;
+  }
+
+  if (!globalForPrisma.sqliteClient) {
+    globalForPrisma.sqliteClient = createPrismaClient();
+  }
+  return globalForPrisma.sqliteClient;
+}
+
+export const prisma: DefaultPrismaClient = new Proxy({} as DefaultPrismaClient, {
+  get(_target, prop) {
+    const client = getActivePrisma();
+    const val = (client as unknown as Record<string, unknown>)[prop as string];
+    if (typeof val === "function") {
+      return val.bind(client);
+    }
+    return val;
+  },
+});
 
 export async function checkDatabaseConnection(): Promise<{
   provider: string;

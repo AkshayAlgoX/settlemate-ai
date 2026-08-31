@@ -1,6 +1,8 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/@prisma-client-postgres"
 }
+
 
 datasource db {
   provider = "postgresql"
@@ -45,8 +47,10 @@ model Tenant {
   webhookSubscriptions  WebhookSubscription[]
   webhookOutboxEntries  WebhookOutbox[]
   asyncJobs             AsyncJob[]
+  jobItems              JobItem[]
   domainEvents          DomainEvent[]
 }
+
 
 model User {
   id           String   @id @default(cuid())
@@ -687,27 +691,57 @@ model WebhookOutbox {
 }
 
 model AsyncJob {
-  id             String    @id @default(cuid())
-  tenantId       String    @default("tenant_default_sandbox")
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  idempotencyKey String
-  jobType        String
-  status         String    @default("PENDING")
-  payload        String    // JSON string
-  result         String?   // JSON string
-  error          String?
-  attempt        Int       @default(0)
-  maxRetries     Int       @default(3)
-  workerId       String?
-  leaseExpiresAt DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  completedAt    DateTime?
+  id                String    @id @default(cuid())
+  tenantId          String    @default("tenant_default_sandbox")
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  idempotencyKey    String
+  jobType           String
+  status            String    @default("PENDING")
+  payload           String    // JSON string
+  result            String?   // JSON string
+  error             String?
+  attempt           Int       @default(0)
+  maxRetries        Int       @default(3)
+  workerId          String?
+  claimedAt         DateTime?
+  leaseExpiresAt    DateTime?
+  heartbeatAt       DateTime?
+  nextRetryAt       DateTime?
+  cancelRequestedAt DateTime?
+  progressCurrent   Int       @default(0)
+  progressTotal     Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  completedAt       DateTime?
+
+  items             JobItem[]
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, status])
   @@index([status, leaseExpiresAt])
+  @@index([status, nextRetryAt])
+  @@index([tenantId, createdAt])
 }
+
+model JobItem {
+  id             String    @id @default(cuid())
+  jobId          String
+  job            AsyncJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tenantId       String    @default("tenant_default_sandbox")
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  idempotencyKey String
+  status         String    @default("PENDING")
+  error          String?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([jobId, idempotencyKey])
+  @@index([tenantId, status])
+  @@index([jobId, status])
+  @@index([tenantId, createdAt])
+}
+
 
 model DomainEvent {
   id        String   @id @default(cuid())
