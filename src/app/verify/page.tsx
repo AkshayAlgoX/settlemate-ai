@@ -14,6 +14,8 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { Badge } from "@/components/ui/badge";
 import { formatAuditTime } from "@/lib/format";
 
+import { safeFetch } from "@/lib/api/safe-fetch";
+
 interface SuiteResult {
   suiteId: string;
   name: string;
@@ -69,6 +71,7 @@ export default function VerificationHubPage() {
   const [liveSuiteStates, setLiveSuiteStates] = useState<Record<string, SuiteResult>>({});
   const [finalResponse, setFinalResponse] = useState<VerificationHubResponse | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -93,13 +96,45 @@ export default function VerificationHubPage() {
     }
   };
 
+  // Recover active or latest job on mount
   useEffect(() => {
-    return () => stopPolling();
+    let mounted = true;
+    safeFetch<{ success: boolean; job: VerifyJobState | null }>("/api/verify/progress")
+      .then((res) => {
+        if (!mounted || !res.ok || !res.data?.job) return;
+        const job = res.data.job;
+        if (job.status === "RUNNING" || job.status === "PENDING") {
+          setActiveJobId(job.jobId);
+          setIsRunning(true);
+          setOverallProgress(job.overallProgressPct);
+          setLiveSuiteStates(job.results);
+          startPolling(job.jobId);
+        } else if (job.status === "COMPLETED" || job.status === "FAILED") {
+          setLiveSuiteStates(job.results);
+          setOverallProgress(100);
+          setFinalResponse({
+            success: true,
+            allPassed: job.allPassed ?? false,
+            timestamp: job.completedAt || job.startedAt,
+            totalDurationMs: job.totalDurationMs || 0,
+            totalSuitesExecuted: job.completedSuites,
+            results: job.results,
+            jobId: job.jobId,
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+      stopPolling();
+    };
   }, []);
 
   const handleRunVerification = async () => {
     stopPolling();
     setIsRunning(true);
+    setActionError(null);
     setFinalResponse(null);
     setOverallProgress(0);
 
@@ -117,41 +152,44 @@ export default function VerificationHubPage() {
     setLiveSuiteStates(initialStates);
 
     try {
-      const res = await fetch("/api/verify/run", {
+      const res = await safeFetch<VerificationHubResponse & { accepted?: boolean; jobId?: string }>("/api/verify/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ suites: selectedSuites, async: true }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = res.data;
 
-      if (res.status === 202 && data.jobId) {
+      if (res.status === 202 && data?.jobId) {
         setActiveJobId(data.jobId);
         startPolling(data.jobId);
-      } else if (data.success && data.results) {
+      } else if (data?.success && data?.results) {
         setFinalResponse(data);
         setLiveSuiteStates(data.results);
         setOverallProgress(100);
         setIsRunning(false);
       } else {
-        throw new Error(apiErrorMessage(data, "Failed to start verification suite"));
+        throw new Error(res.error || apiErrorMessage(data, "Failed to start verification suite"));
       }
     } catch (err) {
       console.error("Async verification initiation failed, falling back to sync run:", err);
       try {
-        const syncRes = await fetch("/api/verify/run", {
+        const syncRes = await safeFetch<VerificationHubResponse>("/api/verify/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ suites: selectedSuites, async: false }),
         });
-        const syncData = await syncRes.json().catch(() => ({}));
-        if (syncData.success) {
+        const syncData = syncRes.data;
+        if (syncData?.success && syncData?.results) {
           setFinalResponse(syncData);
           setLiveSuiteStates(syncData.results);
           setOverallProgress(100);
+        } else {
+          setActionError(syncRes.error || "Verification run failed.");
         }
       } catch (fallbackErr) {
         console.error("Sync fallback also failed:", fallbackErr);
+        setActionError(fallbackErr instanceof Error ? fallbackErr.message : "Verification execution failed.");
       } finally {
         setIsRunning(false);
       }
@@ -159,12 +197,13 @@ export default function VerificationHubPage() {
   };
 
   const startPolling = (jobId: string) => {
+    stopPolling();
     pollingRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/verify/progress/${jobId}`);
-        if (!res.ok) return;
+        const res = await safeFetch<{ success?: boolean; job?: VerifyJobState }>(`/api/verify/progress/${jobId}`);
+        if (!res.ok || !res.data) return;
 
-        const data = (await res.json().catch(() => ({}))) as { success?: boolean; job?: VerifyJobState };
+        const data = res.data;
         if (data.success && data.job) {
           const job = data.job;
           setOverallProgress(job.overallProgressPct);
@@ -197,6 +236,7 @@ export default function VerificationHubPage() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
 
   return (
     <div className="space-y-8 pb-12 font-sans">
@@ -237,8 +277,24 @@ export default function VerificationHubPage() {
         }
       />
 
+      {/* Action Error Banner */}
+      {actionError && (
+
+        <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm flex items-center justify-between">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-xs underline hover:opacity-80"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Live Overall Progress Bar */}
       {isRunning && (
+
         <div className="p-4 rounded-xl border border-border bg-card space-y-2 shadow-2xs">
           <div className="flex items-center justify-between text-xs font-mono text-foreground">
             <span>Executing verification stream {activeJobId ? `· Job ${activeJobId}` : ""}</span>

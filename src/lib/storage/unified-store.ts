@@ -59,9 +59,17 @@ function isPostgres(): boolean {
 export interface UnifiedJob {
   jobId: string;
   tenantId?: string;
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  type?: string;
+  jobType?: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED";
   createdAt: string;
+  startedAt?: string;
+  updatedAt?: string;
   completedAt?: string;
+  progressPct?: number;
+  retryCount?: number;
+  retryable?: boolean;
+  errorCode?: string;
   webhookUrl?: string;
   batchSize: number;
   summary?: string;
@@ -103,7 +111,7 @@ export const UnifiedJobRepository = {
             id: job.jobId,
             tenantId,
             idempotencyKey: job.jobId,
-            jobType: "RECONCILIATION_BATCH",
+            jobType: job.type || job.jobType || "RECONCILIATION_BATCH",
             status: job.status,
             payload: JSON.stringify({ batchSize: job.batchSize, webhookUrl: job.webhookUrl }),
             result: JSON.stringify({
@@ -122,9 +130,17 @@ export const UnifiedJobRepository = {
     // Local SQLite cache & fallback
     nativeSqlite.JobRepository.save({
       jobId: job.jobId,
+      tenantId: job.tenantId,
+      jobType: job.type || job.jobType,
       status: job.status,
       createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      updatedAt: job.updatedAt,
       completedAt: job.completedAt,
+      progressPct: job.progressPct,
+      retryCount: job.retryCount,
+      retryable: job.retryable ? 1 : 0,
+      errorCode: job.errorCode,
       webhookUrl: job.webhookUrl,
       batchSize: job.batchSize,
       summary: job.summary,
@@ -177,6 +193,8 @@ export const UnifiedJobRepository = {
           return {
             jobId: String(found.id),
             tenantId: found.tenantId ? String(found.tenantId) : undefined,
+            type: found.jobType ? String(found.jobType) : undefined,
+            jobType: found.jobType ? String(found.jobType) : undefined,
             status: found.status as UnifiedJob["status"],
             createdAt: found.createdAt ? new Date(found.createdAt as string | Date).toISOString() : new Date().toISOString(),
             completedAt: found.completedAt ? new Date(found.completedAt as string | Date).toISOString() : undefined,
@@ -192,24 +210,48 @@ export const UnifiedJobRepository = {
         console.error("[PostgresJobRepo] getAsync error:", err);
       }
     }
-    const local = this.get(jobId);
+    const local = nativeSqlite.JobRepository.get(jobId, tenantId);
     if (!local) return null;
-    if (tenantId) {
-      const jobTenant = localTenantJobMap.get(jobId) || local.tenantId;
-      if (jobTenant && jobTenant !== tenantId) return null;
-    }
-    return local;
+    return {
+      jobId: local.jobId,
+      tenantId: local.tenantId || localTenantJobMap.get(local.jobId),
+      type: local.jobType,
+      jobType: local.jobType,
+      status: local.status,
+      createdAt: local.createdAt,
+      startedAt: local.startedAt,
+      updatedAt: local.updatedAt,
+      completedAt: local.completedAt,
+      progressPct: local.progressPct,
+      retryCount: local.retryCount,
+      retryable: Boolean(local.retryable),
+      errorCode: local.errorCode,
+      webhookUrl: local.webhookUrl,
+      batchSize: local.batchSize,
+      summary: local.summary,
+      exceptions: local.exceptions,
+      receipt: local.receipt,
+      error: local.error,
+    };
   },
 
-  get(jobId: string): UnifiedJob | null {
-    const local = nativeSqlite.JobRepository.get(jobId);
+  get(jobId: string, tenantId?: string): UnifiedJob | null {
+    const local = nativeSqlite.JobRepository.get(jobId, tenantId);
     if (local) {
       return {
         jobId: local.jobId,
-        tenantId: localTenantJobMap.get(local.jobId),
+        tenantId: local.tenantId || localTenantJobMap.get(local.jobId),
+        type: local.jobType,
+        jobType: local.jobType,
         status: local.status,
         createdAt: local.createdAt,
+        startedAt: local.startedAt,
+        updatedAt: local.updatedAt,
         completedAt: local.completedAt,
+        progressPct: local.progressPct,
+        retryCount: local.retryCount,
+        retryable: Boolean(local.retryable),
+        errorCode: local.errorCode,
         webhookUrl: local.webhookUrl,
         batchSize: local.batchSize,
         summary: local.summary,
@@ -222,12 +264,20 @@ export const UnifiedJobRepository = {
   },
 
   list(limit: number = 50, tenantId?: string): UnifiedJob[] {
-    const items = nativeSqlite.JobRepository.list(limit * 2).map((j) => ({
+    const items = nativeSqlite.JobRepository.list(limit, tenantId).map((j) => ({
       jobId: j.jobId,
-      tenantId: localTenantJobMap.get(j.jobId),
+      tenantId: j.tenantId || localTenantJobMap.get(j.jobId),
+      type: j.jobType,
+      jobType: j.jobType,
       status: j.status,
       createdAt: j.createdAt,
+      startedAt: j.startedAt,
+      updatedAt: j.updatedAt,
       completedAt: j.completedAt,
+      progressPct: j.progressPct,
+      retryCount: j.retryCount,
+      retryable: Boolean(j.retryable),
+      errorCode: j.errorCode,
       webhookUrl: j.webhookUrl,
       batchSize: j.batchSize,
       summary: j.summary,
@@ -235,19 +285,24 @@ export const UnifiedJobRepository = {
       receipt: j.receipt,
       error: j.error,
     }));
-    if (tenantId) {
-      return items.filter((j) => (j.tenantId || "tenant_default_sandbox") === tenantId).slice(0, limit);
-    }
-    return items.slice(0, limit);
+    return items;
   },
 
-  getAll(): UnifiedJob[] {
-    return nativeSqlite.JobRepository.getAll().map((j) => ({
+  getAll(tenantId?: string): UnifiedJob[] {
+    return nativeSqlite.JobRepository.getAll(tenantId).map((j) => ({
       jobId: j.jobId,
-      tenantId: localTenantJobMap.get(j.jobId),
+      tenantId: j.tenantId || localTenantJobMap.get(j.jobId),
+      type: j.jobType,
+      jobType: j.jobType,
       status: j.status,
       createdAt: j.createdAt,
+      startedAt: j.startedAt,
+      updatedAt: j.updatedAt,
       completedAt: j.completedAt,
+      progressPct: j.progressPct,
+      retryCount: j.retryCount,
+      retryable: Boolean(j.retryable),
+      errorCode: j.errorCode,
       webhookUrl: j.webhookUrl,
       batchSize: j.batchSize,
       summary: j.summary,
@@ -299,6 +354,8 @@ export const UnifiedJobRepository = {
             return {
               jobId: String(item.id),
               tenantId: item.tenantId ? String(item.tenantId) : undefined,
+              type: item.jobType ? String(item.jobType) : undefined,
+              jobType: item.jobType ? String(item.jobType) : undefined,
               status: item.status as UnifiedJob["status"],
               createdAt: item.createdAt ? new Date(item.createdAt as string | Date).toISOString() : new Date().toISOString(),
               completedAt: item.completedAt ? new Date(item.completedAt as string | Date).toISOString() : undefined,
@@ -347,6 +404,8 @@ export const UnifiedJobRepository = {
             return {
               jobId: String(item.id),
               tenantId: item.tenantId ? String(item.tenantId) : undefined,
+              type: item.jobType ? String(item.jobType) : undefined,
+              jobType: item.jobType ? String(item.jobType) : undefined,
               status: item.status as UnifiedJob["status"],
               createdAt: item.createdAt ? new Date(item.createdAt as string | Date).toISOString() : new Date().toISOString(),
               completedAt: item.completedAt ? new Date(item.completedAt as string | Date).toISOString() : undefined,
@@ -359,10 +418,36 @@ export const UnifiedJobRepository = {
         console.error("[PostgresJobRepo] getActiveJobsAsync error:", err);
       }
     }
-    return this.list(50, tenantId).filter((j) => j.status === "PENDING" || j.status === "PROCESSING");
+    return nativeSqlite.JobRepository.getActiveJobs(tenantId).map((j) => ({
+      jobId: j.jobId,
+      tenantId: j.tenantId || localTenantJobMap.get(j.jobId),
+      type: j.jobType,
+      jobType: j.jobType,
+      status: j.status,
+      createdAt: j.createdAt,
+      startedAt: j.startedAt,
+      updatedAt: j.updatedAt,
+      completedAt: j.completedAt,
+      progressPct: j.progressPct,
+      retryCount: j.retryCount,
+      retryable: Boolean(j.retryable),
+      errorCode: j.errorCode,
+      webhookUrl: j.webhookUrl,
+      batchSize: j.batchSize,
+      summary: j.summary,
+      exceptions: j.exceptions,
+      receipt: j.receipt,
+      error: j.error,
+    }));
   },
 
-  updateStatus(jobId: string, status: UnifiedJob["status"], error?: string): void {
+  updateStatus(
+    jobId: string,
+    status: UnifiedJob["status"],
+    error?: string,
+    errorCode?: string,
+    progressPct?: number
+  ): void {
     if (isPostgres()) {
       const tenantId = getRequiredTenantId();
       withTenantContext(tenantId, async (tx) => {
@@ -371,18 +456,19 @@ export const UnifiedJobRepository = {
           data: {
             status,
             error: error || null,
-            completedAt: status === "COMPLETED" || status === "FAILED" ? new Date() : undefined,
+            completedAt: status === "COMPLETED" || status === "FAILED" || status === "CANCELED" ? new Date() : undefined,
           },
         });
       }).catch((err: unknown) => console.error("[PostgresJobRepo] Update status error:", err));
     }
-    nativeSqlite.JobRepository.updateStatus(jobId, status, error);
+    nativeSqlite.JobRepository.updateStatus(jobId, status, error, errorCode, progressPct);
   },
 
   delete(jobId: string): boolean {
     return nativeSqlite.JobRepository.delete(jobId);
   },
 };
+
 
 // -----------------------------------------------------------------------------
 // 2. DECISION RECEIPT REPOSITORY
@@ -892,7 +978,12 @@ export const UnifiedProgressRepository = {
   get(jobId: string): UnifiedVerifyProgressJob | null {
     return nativeSqlite.VerifyProgressRepository.get(jobId);
   },
+
+  getAll(): UnifiedVerifyProgressJob[] {
+    return nativeSqlite.VerifyProgressRepository.getAll();
+  },
 };
+
 
 // -----------------------------------------------------------------------------
 // 7. DURABLE DOMAIN EVENT REPOSITORY

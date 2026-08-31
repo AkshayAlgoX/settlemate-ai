@@ -19,6 +19,8 @@ import {
   Zap,
 } from "lucide-react";
 import { apiErrorMessage } from "@/lib/api/error-message";
+
+import { safeFetch } from "@/lib/api/safe-fetch";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeader } from "@/components/ui/section-header";
 import { Badge } from "@/components/ui/badge";
@@ -142,6 +144,7 @@ export default function DemoPage() {
   const [activeTab, setActiveTab] = useState<"TRACK_04" | "SCALE_LAB">("TRACK_04");
   const [size, setSize] = useState(250);
   const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{
     batchId: string;
     batchName?: string;
@@ -159,7 +162,7 @@ export default function DemoPage() {
   // Durable Active Job & Recent Batches State
   const [activeJob, setActiveJob] = useState<{
     jobId: string;
-    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED";
     batchSize: number;
     createdAt: string;
     elapsedSeconds: number;
@@ -187,7 +190,7 @@ export default function DemoPage() {
   }[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
 
-  // 1. Recover active jobs and recent batches on mount / page refresh
+  // 1. Recover active jobs and recent batches on mount / page refresh / login
   useEffect(() => {
     let isMounted = true;
 
@@ -195,33 +198,27 @@ export default function DemoPage() {
       setLoadingRecent(true);
       try {
         const [jobsRes, batchesRes] = await Promise.all([
-          fetch("/api/batches/jobs"),
-          fetch("/api/batches"),
+          safeFetch<{ activeJobs?: { jobId: string; status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"; batchSize: number; createdAt: string }[] }>("/api/batches/jobs"),
+          safeFetch<{ batches?: typeof recentBatches }>("/api/batches"),
         ]);
 
-        if (jobsRes.ok) {
-          const jobsData = await jobsRes.json();
-          if (jobsData.activeJobs && jobsData.activeJobs.length > 0 && isMounted) {
-            const running = jobsData.activeJobs[0];
-            const elapsed = Math.max(
-              0,
-              Math.round((Date.now() - new Date(running.createdAt).getTime()) / 1000)
-            );
-            setActiveJob({
-              jobId: running.jobId,
-              status: running.status,
-              batchSize: running.batchSize,
-              createdAt: running.createdAt,
-              elapsedSeconds: elapsed,
-            });
-          }
+        if (jobsRes.ok && jobsRes.data?.activeJobs && jobsRes.data.activeJobs.length > 0 && isMounted) {
+          const running = jobsRes.data.activeJobs[0];
+          const elapsed = Math.max(
+            0,
+            Math.round((Date.now() - new Date(running.createdAt).getTime()) / 1000)
+          );
+          setActiveJob({
+            jobId: running.jobId,
+            status: running.status,
+            batchSize: running.batchSize,
+            createdAt: running.createdAt,
+            elapsedSeconds: elapsed,
+          });
         }
 
-        if (batchesRes.ok && isMounted) {
-          const batchesData = await batchesRes.json();
-          if (Array.isArray(batchesData.batches)) {
-            setRecentBatches(batchesData.batches);
-          }
+        if (batchesRes.ok && isMounted && Array.isArray(batchesRes.data?.batches)) {
+          setRecentBatches(batchesRes.data.batches);
         }
       } catch (err) {
         console.error("Initial data load error:", err);
@@ -237,7 +234,7 @@ export default function DemoPage() {
     };
   }, []);
 
-  // 2. Poll active durable job until completion
+  // 2. Poll active durable job until completion with visibility awareness & backoff
   const activeJobId = activeJob?.jobId;
   const activeJobStatus = activeJob?.status;
 
@@ -250,53 +247,61 @@ export default function DemoPage() {
       setActiveJob((prev) => (prev ? { ...prev, elapsedSeconds: prev.elapsedSeconds + 1 } : null));
     }, 1000);
 
-    let pollTimeout: NodeJS.Timeout;
+    let pollTimeout: NodeJS.Timeout | null = null;
     let cancelled = false;
 
     async function poll() {
       if (cancelled || !activeJobId) return;
       try {
-        const res = await fetch(`/api/batches/jobs/${activeJobId}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.job) {
-            if (data.job.status === "COMPLETED") {
-              setActiveJob((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      status: "COMPLETED",
-                      result: data.job.result,
-                    }
-                  : null
-              );
-              // Auto-refresh recent batches
-              fetch("/api/batches")
-                .then((r) => r.json())
-                .then((b) => {
-                  if (Array.isArray(b.batches)) setRecentBatches(b.batches);
-                })
-                .catch(() => {});
-              return;
-            } else if (data.job.status === "FAILED") {
-              setActiveJob((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      status: "FAILED",
-                      error: data.job.error || "Background job failed",
-                    }
-                  : null
-              );
-              return;
-            }
+        const res = await safeFetch<{
+          success: boolean;
+          job: {
+            jobId: string;
+            status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+            batchSize: number;
+            result?: { batchId: string; batchName?: string; stats?: Record<string, number> };
+            error?: string;
+          };
+        }>(`/api/batches/jobs/${activeJobId}`);
+
+        if (res.ok && res.data?.job) {
+          const job = res.data.job;
+          if (job.status === "COMPLETED") {
+            setActiveJob((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: "COMPLETED",
+                    result: job.result,
+                  }
+                : null
+            );
+            // Refresh recent batches
+            safeFetch<{ batches: typeof recentBatches }>("/api/batches").then((b) => {
+              if (b.ok && Array.isArray(b.data?.batches)) setRecentBatches(b.data.batches);
+            });
+            return;
+          } else if (job.status === "FAILED") {
+            setActiveJob((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: "FAILED",
+                    error: job.error || "Background job failed",
+                  }
+                : null
+            );
+            return;
           }
         }
       } catch (e) {
         console.warn("Job poll error:", e);
       }
+
       if (!cancelled) {
-        pollTimeout = setTimeout(poll, 1000);
+        // Slow down polling when document is hidden (background tab)
+        const delay = typeof document !== "undefined" && document.visibilityState === "hidden" ? 4000 : 1200;
+        pollTimeout = setTimeout(poll, delay);
       }
     }
 
@@ -305,7 +310,7 @@ export default function DemoPage() {
     return () => {
       cancelled = true;
       clearInterval(timer);
-      clearTimeout(pollTimeout);
+      if (pollTimeout) clearTimeout(pollTimeout);
     };
   }, [activeJobId, activeJobStatus]);
 
@@ -313,6 +318,15 @@ export default function DemoPage() {
   const isStreamingScale = selectedOption.mode === "STREAMING";
 
   const handleGenerate = async () => {
+    if (isSubmitting) return;
+
+    // If an identical background job is currently active, prevent duplicate spam
+    if (activeJob && (activeJob.status === "PROCESSING" || activeJob.status === "PENDING") && activeJob.batchSize === size) {
+      setError(`A background generation job is already active for ${size.toLocaleString()} records. Please wait for completion or monitor progress below.`);
+      return;
+    }
+
+    setIsSubmitting(true);
     setLoading(true);
     setError(null);
     setScaleResult(null);
@@ -320,27 +334,38 @@ export default function DemoPage() {
 
     try {
       if (isStreamingScale) {
-        const response = await fetch("/api/scale/run", {
+        const response = await safeFetch<ScaleRunReport & { success?: boolean; batchId?: string; runId?: string; classification?: string }>("/api/scale/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ size, workerCount: 16 }),
         });
 
-        const data = await response.json();
-        if (!response.ok || !data?.success) {
-          throw new Error(apiErrorMessage(data, "Streaming scale run failed."));
+        if (!response.ok || !response.data?.success) {
+          throw new Error(response.error || apiErrorMessage(response.data, "Streaming scale run failed."));
         }
 
-        setScaleResult(data);
+        setScaleResult({
+          batchId: response.data.batchId || "",
+          runId: response.data.runId || "",
+          report: response.data,
+          classification: response.data.classification || "REAL MEASURED",
+        });
       } else {
-        const response = await fetch("/api/batches/generate", {
+        const response = await safeFetch<{
+          accepted?: boolean;
+          jobId?: string;
+          pollUrl?: string;
+          batchId?: string;
+          stats?: Record<string, number>;
+          error?: string;
+        }>("/api/batches/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ size }),
         });
 
-        const data = await response.json();
-        if (data.accepted && data.jobId) {
+        const data = response.data;
+        if (response.status === 202 && data?.jobId) {
           // Immediately show Active Background Generation Banner without blocking the UI
           setActiveJob({
             jobId: data.jobId,
@@ -352,16 +377,16 @@ export default function DemoPage() {
           });
         } else {
           if (!response.ok || !data?.batchId) {
-            throw new Error(data?.error || "Demo batch generation failed.");
+            throw new Error(response.error || apiErrorMessage(data, "Demo batch generation failed."));
           }
-          setResult(data);
+          setResult({
+            batchId: data.batchId,
+            stats: data.stats,
+          });
           // Refresh recent batches list
-          fetch("/api/batches")
-            .then((r) => r.json())
-            .then((b) => {
-              if (Array.isArray(b.batches)) setRecentBatches(b.batches);
-            })
-            .catch(() => {});
+          safeFetch<{ batches: typeof recentBatches }>("/api/batches").then((b) => {
+            if (b.ok && Array.isArray(b.data?.batches)) setRecentBatches(b.data.batches);
+          });
         }
       }
     } catch (requestError) {
@@ -373,6 +398,7 @@ export default function DemoPage() {
       );
     } finally {
       setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -411,15 +437,23 @@ export default function DemoPage() {
     ]);
 
     try {
-      const response = await fetch(
+      const response = await safeFetch<MultiPassResponse & { inProgress?: boolean }>(
         "/api/reconcile/" + result.batchId + "/multi-pass",
         { method: "POST" }
       );
 
-      const data: MultiPassResponse = await response.json();
+      const data = response.data;
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Reconciliation failed.");
+      if (response.status === 202 && data?.inProgress) {
+        setError("Reconciliation is already running for this batch. Please wait for completion.");
+        setSteps((prev) =>
+          prev.map((step) => ({ ...step, status: "done", detail: "In progress on server" }))
+        );
+        return;
+      }
+
+      if (!response.ok || !data?.success) {
+        throw new Error(response.error || apiErrorMessage(data, "Reconciliation failed."));
       }
 
       const newSteps: ProgressStep[] = data.passes.map((pass) => ({
@@ -467,6 +501,7 @@ export default function DemoPage() {
 
   const pipelineComplete =
     steps.length > 0 && steps.every((s) => s.status === "done");
+
 
   return (
     <div className="space-y-10 pb-12">

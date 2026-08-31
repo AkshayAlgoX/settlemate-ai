@@ -1,15 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Menu, Search, HelpCircle } from "lucide-react";
+import Link from "next/link";
+
+import { Menu, Search, HelpCircle, Loader2 } from "lucide-react";
 import { AccountMenu } from "@/components/layout/account-menu";
 import type { SessionUser } from "@/components/layout/sidebar";
+import { safeFetch } from "@/lib/api/safe-fetch";
 
 interface GlobalHeaderProps {
   onOpenSidebar: () => void;
   onOpenCommandPalette: () => void;
   onOpenTour: () => void;
   onOpenLogoutModal: () => void;
+}
+
+interface ActiveJobSummary {
+  jobId: string;
+  status: string;
+  batchSize: number;
+  createdAt: string;
 }
 
 export function GlobalHeader({
@@ -19,14 +29,15 @@ export function GlobalHeader({
   onOpenLogoutModal,
 }: GlobalHeaderProps) {
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [activeJob, setActiveJob] = useState<ActiveJobSummary | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
     let mounted = true;
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
+    safeFetch<{ authenticated?: boolean; user?: SessionUser }>("/api/auth/me")
       .then((res) => {
-        if (mounted && res?.authenticated) {
-          setUser(res.user);
+        if (mounted && res.ok && res.data?.authenticated && res.data.user) {
+          setUser(res.data.user);
         }
       })
       .catch(() => {});
@@ -34,6 +45,49 @@ export function GlobalHeader({
       mounted = false;
     };
   }, []);
+
+  // Poll for global active background jobs
+  useEffect(() => {
+    let mounted = true;
+    let timer: NodeJS.Timeout | null = null;
+
+    async function checkActiveJobs() {
+      try {
+        const res = await safeFetch<{ activeJobs?: ActiveJobSummary[] }>("/api/batches/jobs");
+        if (mounted && res.ok && res.data?.activeJobs && res.data.activeJobs.length > 0) {
+          const job = res.data.activeJobs[0];
+          setActiveJob(job);
+          const elapsed = Math.max(
+            0,
+            Math.round((Date.now() - new Date(job.createdAt).getTime()) / 1000)
+          );
+          setElapsedSeconds(elapsed);
+        } else if (mounted) {
+          setActiveJob(null);
+        }
+      } catch {
+        // Silently ignore background polling errors
+      }
+    }
+
+    checkActiveJobs();
+    const interval = setInterval(checkActiveJobs, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  // Increment timer while active
+  useEffect(() => {
+    if (!activeJob) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeJob]);
 
   return (
     <header className="sticky top-0 z-30 flex h-14 sm:h-16 w-full items-center justify-between border-b border-border bg-background/80 px-4 sm:px-6 backdrop-blur-md transition-colors">
@@ -68,8 +122,21 @@ export function GlobalHeader({
         </button>
       </div>
 
-      {/* Right: Tour button, System status & Account */}
+      {/* Right: Active Job Pill, Tour button, System status & Account */}
       <div className="flex items-center gap-2.5 sm:gap-3">
+        {activeJob && (
+          <Link
+            href="/demo"
+            className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition shadow-2xs"
+            title="Durable background job in progress. Click to view in Scale Lab."
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 shrink-0" />
+            <span className="hidden sm:inline">Generating {activeJob.batchSize.toLocaleString()} recs</span>
+            <span className="inline sm:hidden">{activeJob.batchSize.toLocaleString()} recs</span>
+            <span className="font-mono text-[11px] opacity-80">({elapsedSeconds}s)</span>
+          </Link>
+        )}
+
         <button
           type="button"
           onClick={onOpenTour}
@@ -96,3 +163,4 @@ export function GlobalHeader({
     </header>
   );
 }
+

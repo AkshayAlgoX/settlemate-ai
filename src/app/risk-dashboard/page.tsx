@@ -87,25 +87,26 @@ function getBadgeVariant(risk: RiskCategory | RiskBand) {
   }
 }
 
+import { safeFetch } from "@/lib/api/safe-fetch";
+
 async function fetchExposure(batchId?: string | null): Promise<RiskResponse> {
   const payload = batchId ? { batchId } : {};
-  const res = await fetch("/api/risk/exposure", {
+  const res = await safeFetch<RiskResponse>("/api/risk/exposure", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
-  const json = await res.json().catch(() => null);
-
-  if (!res.ok || !json?.success) {
+  if (!res.ok || !res.data?.success) {
     if (res.status === 401) {
       throw new Error("UNAUTHORIZED: Session expired or authentication required. Please sign in to access the Risk & Exposure Command Center.");
     }
-    throw new Error(apiErrorMessage(json, `Request failed (${res.status})`));
+    throw new Error(res.error || apiErrorMessage(res.data, `Request failed (${res.status})`));
   }
 
-  return json as RiskResponse;
+  return res.data;
 }
+
 
 function RiskDashboardContent() {
   const router = useRouter();

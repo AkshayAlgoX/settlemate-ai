@@ -58,9 +58,17 @@ export async function GET(
       success: true,
       job: {
         jobId: job.jobId,
+        tenantId: job.tenantId,
+        type: job.type || job.jobType || "BATCH_GENERATION",
         status: job.status,
         batchSize: job.batchSize,
+        progressPct: job.progressPct ?? (job.status === "COMPLETED" ? 100 : 0),
+        retryCount: job.retryCount ?? 0,
+        retryable: job.retryable ?? (job.status === "FAILED"),
+        errorCode: job.errorCode,
         createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        updatedAt: job.updatedAt,
         completedAt: job.completedAt,
         result: resultData,
         error: job.error,
@@ -68,3 +76,4 @@ export async function GET(
     })
   );
 }
+

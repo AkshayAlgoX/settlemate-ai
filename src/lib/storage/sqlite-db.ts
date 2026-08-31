@@ -19,9 +19,17 @@ import { metrics } from "@/lib/observability/metrics";
 
 export interface StoredReconciliationJob {
   jobId: string;
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  tenantId?: string;
+  jobType?: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED";
   createdAt: string;
+  startedAt?: string;
+  updatedAt?: string;
   completedAt?: string;
+  progressPct?: number;
+  retryCount?: number;
+  retryable?: number; // 0 or 1
+  errorCode?: string;
   webhookUrl?: string;
   batchSize: number;
   summary?: string; // JSON
@@ -29,6 +37,7 @@ export interface StoredReconciliationJob {
   receipt?: string; // JSON
   error?: string;
 }
+
 
 export interface StoredDecisionReceipt {
   receiptId: string;
@@ -152,9 +161,17 @@ export function initDatabase(customPath?: string): DatabaseType {
   db.exec(`
     CREATE TABLE IF NOT EXISTS reconciliation_jobs (
       job_id TEXT PRIMARY KEY,
+      tenant_id TEXT,
+      job_type TEXT DEFAULT 'RECONCILIATION_BATCH',
       status TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      started_at TEXT,
+      updated_at TEXT,
       completed_at TEXT,
+      progress_pct INTEGER DEFAULT 0,
+      retry_count INTEGER DEFAULT 0,
+      retryable INTEGER DEFAULT 0,
+      error_code TEXT,
       webhook_url TEXT,
       batch_size INTEGER NOT NULL,
       summary TEXT,
@@ -166,6 +183,7 @@ export function initDatabase(customPath?: string): DatabaseType {
     CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON reconciliation_jobs(created_at);
 
     CREATE TABLE IF NOT EXISTS decision_receipts (
+
       receipt_id TEXT PRIMARY KEY,
       job_id TEXT,
       root_hash TEXT NOT NULL,
@@ -252,8 +270,27 @@ export function initDatabase(customPath?: string): DatabaseType {
     );
   `);
 
+  // Migrate existing tables if missing new columns
+  try {
+    const cols = (db.pragma("table_info(reconciliation_jobs)") as { name: string }[]).map((c) => c.name);
+    if (!cols.includes("tenant_id")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN tenant_id TEXT");
+    if (!cols.includes("job_type")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN job_type TEXT DEFAULT 'RECONCILIATION_BATCH'");
+    if (!cols.includes("started_at")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN started_at TEXT");
+    if (!cols.includes("updated_at")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN updated_at TEXT");
+    if (!cols.includes("progress_pct")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN progress_pct INTEGER DEFAULT 0");
+    if (!cols.includes("retry_count")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN retry_count INTEGER DEFAULT 0");
+    if (!cols.includes("retryable")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN retryable INTEGER DEFAULT 0");
+    if (!cols.includes("error_code")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN error_code TEXT");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_recon_jobs_tenant ON reconciliation_jobs(tenant_id)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_recon_jobs_status ON reconciliation_jobs(status)");
+  } catch (migErr) {
+    // Ignore migration error if already applied
+  }
+
+
   // Seed default demo webhook if table is empty
   const countStmt = db.prepare("SELECT COUNT(*) as count FROM webhook_registrations");
+
   const row = countStmt.get() as { count: number } | undefined;
   if (!row || row.count === 0) {
     const insertSeed = db.prepare(`
@@ -386,11 +423,20 @@ export const JobRepository = {
       const db = getDb();
       const stmt = db.prepare(`
         INSERT INTO reconciliation_jobs (
-          job_id, status, created_at, completed_at, webhook_url, batch_size, summary, exceptions, receipt, error
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          job_id, tenant_id, job_type, status, created_at, started_at, updated_at, completed_at,
+          progress_pct, retry_count, retryable, error_code, webhook_url, batch_size, summary, exceptions, receipt, error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(job_id) DO UPDATE SET
+          tenant_id = COALESCE(excluded.tenant_id, reconciliation_jobs.tenant_id),
+          job_type = COALESCE(excluded.job_type, reconciliation_jobs.job_type),
           status = excluded.status,
+          started_at = COALESCE(excluded.started_at, reconciliation_jobs.started_at),
+          updated_at = COALESCE(excluded.updated_at, datetime('now')),
           completed_at = excluded.completed_at,
+          progress_pct = COALESCE(excluded.progress_pct, reconciliation_jobs.progress_pct),
+          retry_count = COALESCE(excluded.retry_count, reconciliation_jobs.retry_count),
+          retryable = COALESCE(excluded.retryable, reconciliation_jobs.retryable),
+          error_code = excluded.error_code,
           summary = excluded.summary,
           exceptions = excluded.exceptions,
           receipt = excluded.receipt,
@@ -399,9 +445,17 @@ export const JobRepository = {
       withBusyRetry("job.save", () =>
         stmt.run(
           job.jobId,
+          job.tenantId || null,
+          job.jobType || "RECONCILIATION_BATCH",
           job.status,
           job.createdAt,
+          job.startedAt || null,
+          job.updatedAt || new Date().toISOString(),
           job.completedAt || null,
+          job.progressPct || 0,
+          job.retryCount || 0,
+          job.retryable ? 1 : 0,
+          job.errorCode || null,
           job.webhookUrl || null,
           job.batchSize,
           job.summary || null,
@@ -415,17 +469,27 @@ export const JobRepository = {
     }
   },
 
-  get(jobId: string): StoredReconciliationJob | null {
+  get(jobId: string, tenantId?: string): StoredReconciliationJob | null {
     try {
       const db = getDb();
-      const stmt = db.prepare("SELECT * FROM reconciliation_jobs WHERE job_id = ?");
-      const row = stmt.get(jobId) as Record<string, unknown> | undefined;
+      const stmt = tenantId
+        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE job_id = ? AND (tenant_id = ? OR tenant_id IS NULL)")
+        : db.prepare("SELECT * FROM reconciliation_jobs WHERE job_id = ?");
+      const row = (tenantId ? stmt.get(jobId, tenantId) : stmt.get(jobId)) as Record<string, unknown> | undefined;
       if (!row) return null;
       return {
         jobId: row.job_id as string,
+        tenantId: (row.tenant_id as string) || undefined,
+        jobType: (row.job_type as string) || undefined,
         status: row.status as StoredReconciliationJob["status"],
         createdAt: row.created_at as string,
+        startedAt: (row.started_at as string) || undefined,
+        updatedAt: (row.updated_at as string) || undefined,
         completedAt: (row.completed_at as string) || undefined,
+        progressPct: typeof row.progress_pct === "number" ? row.progress_pct : 0,
+        retryCount: typeof row.retry_count === "number" ? row.retry_count : 0,
+        retryable: typeof row.retryable === "number" ? row.retryable : 0,
+        errorCode: (row.error_code as string) || undefined,
         webhookUrl: (row.webhook_url as string) || undefined,
         batchSize: Number(row.batch_size),
         summary: (row.summary as string) || undefined,
@@ -439,16 +503,26 @@ export const JobRepository = {
     }
   },
 
-  getAll(): StoredReconciliationJob[] {
+  getAll(tenantId?: string): StoredReconciliationJob[] {
     try {
       const db = getDb();
-      const stmt = db.prepare("SELECT * FROM reconciliation_jobs ORDER BY created_at DESC");
-      const rows = stmt.all() as Record<string, unknown>[];
+      const stmt = tenantId
+        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE (tenant_id = ? OR tenant_id IS NULL) ORDER BY created_at DESC")
+        : db.prepare("SELECT * FROM reconciliation_jobs ORDER BY created_at DESC");
+      const rows = (tenantId ? stmt.all(tenantId) : stmt.all()) as Record<string, unknown>[];
       return rows.map((row) => ({
         jobId: row.job_id as string,
+        tenantId: (row.tenant_id as string) || undefined,
+        jobType: (row.job_type as string) || undefined,
         status: row.status as StoredReconciliationJob["status"],
         createdAt: row.created_at as string,
+        startedAt: (row.started_at as string) || undefined,
+        updatedAt: (row.updated_at as string) || undefined,
         completedAt: (row.completed_at as string) || undefined,
+        progressPct: typeof row.progress_pct === "number" ? row.progress_pct : 0,
+        retryCount: typeof row.retry_count === "number" ? row.retry_count : 0,
+        retryable: typeof row.retryable === "number" ? row.retryable : 0,
+        errorCode: (row.error_code as string) || undefined,
         webhookUrl: (row.webhook_url as string) || undefined,
         batchSize: Number(row.batch_size),
         summary: (row.summary as string) || undefined,
@@ -462,16 +536,26 @@ export const JobRepository = {
     }
   },
 
-  list(limit: number = 50): StoredReconciliationJob[] {
+  list(limit: number = 50, tenantId?: string): StoredReconciliationJob[] {
     try {
       const db = getDb();
-      const stmt = db.prepare("SELECT * FROM reconciliation_jobs ORDER BY created_at DESC LIMIT ?");
-      const rows = stmt.all(limit) as Record<string, unknown>[];
+      const stmt = tenantId
+        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE (tenant_id = ? OR tenant_id IS NULL) ORDER BY created_at DESC LIMIT ?")
+        : db.prepare("SELECT * FROM reconciliation_jobs ORDER BY created_at DESC LIMIT ?");
+      const rows = (tenantId ? stmt.all(tenantId, limit) : stmt.all(limit)) as Record<string, unknown>[];
       return rows.map((row) => ({
         jobId: row.job_id as string,
+        tenantId: (row.tenant_id as string) || undefined,
+        jobType: (row.job_type as string) || undefined,
         status: row.status as StoredReconciliationJob["status"],
         createdAt: row.created_at as string,
+        startedAt: (row.started_at as string) || undefined,
+        updatedAt: (row.updated_at as string) || undefined,
         completedAt: (row.completed_at as string) || undefined,
+        progressPct: typeof row.progress_pct === "number" ? row.progress_pct : 0,
+        retryCount: typeof row.retry_count === "number" ? row.retry_count : 0,
+        retryable: typeof row.retryable === "number" ? row.retryable : 0,
+        errorCode: (row.error_code as string) || undefined,
         webhookUrl: (row.webhook_url as string) || undefined,
         batchSize: Number(row.batch_size),
         summary: (row.summary as string) || undefined,
@@ -485,15 +569,62 @@ export const JobRepository = {
     }
   },
 
-  updateStatus(jobId: string, status: StoredReconciliationJob["status"], error?: string): void {
+  getActiveJobs(tenantId?: string): StoredReconciliationJob[] {
+    try {
+      const db = getDb();
+      const stmt = tenantId
+        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE status IN ('PENDING', 'PROCESSING', 'RUNNING', 'QUEUED') AND (tenant_id = ? OR tenant_id IS NULL) ORDER BY created_at DESC")
+        : db.prepare("SELECT * FROM reconciliation_jobs WHERE status IN ('PENDING', 'PROCESSING', 'RUNNING', 'QUEUED') ORDER BY created_at DESC");
+      const rows = (tenantId ? stmt.all(tenantId) : stmt.all()) as Record<string, unknown>[];
+      return rows.map((row) => ({
+        jobId: row.job_id as string,
+        tenantId: (row.tenant_id as string) || undefined,
+        jobType: (row.job_type as string) || undefined,
+        status: row.status as StoredReconciliationJob["status"],
+        createdAt: row.created_at as string,
+        startedAt: (row.started_at as string) || undefined,
+        updatedAt: (row.updated_at as string) || undefined,
+        completedAt: (row.completed_at as string) || undefined,
+        progressPct: typeof row.progress_pct === "number" ? row.progress_pct : 0,
+        retryCount: typeof row.retry_count === "number" ? row.retry_count : 0,
+        retryable: typeof row.retryable === "number" ? row.retryable : 0,
+        errorCode: (row.error_code as string) || undefined,
+        webhookUrl: (row.webhook_url as string) || undefined,
+        batchSize: Number(row.batch_size),
+        summary: (row.summary as string) || undefined,
+        exceptions: (row.exceptions as string) || undefined,
+        receipt: (row.receipt as string) || undefined,
+        error: (row.error as string) || undefined,
+      }));
+    } catch (err) {
+      console.error("[JobRepository] Error fetching active jobs:", err);
+      return [];
+    }
+  },
+
+  updateStatus(
+    jobId: string,
+    status: StoredReconciliationJob["status"],
+    error?: string,
+    errorCode?: string,
+    progressPct?: number
+  ): void {
     try {
       const db = getDb();
       const stmt = db.prepare(`
         UPDATE reconciliation_jobs
-        SET status = ?, error = ?, completed_at = CASE WHEN ? IN ('COMPLETED', 'FAILED') THEN datetime('now') ELSE completed_at END
+        SET
+          status = ?,
+          error = ?,
+          error_code = COALESCE(?, error_code),
+          progress_pct = COALESCE(?, progress_pct),
+          updated_at = datetime('now'),
+          completed_at = CASE WHEN ? IN ('COMPLETED', 'FAILED', 'CANCELED') THEN datetime('now') ELSE completed_at END
         WHERE job_id = ?
       `);
-      withBusyRetry("job.updateStatus", () => stmt.run(status, error || null, status, jobId));
+      withBusyRetry("job.updateStatus", () =>
+        stmt.run(status, error || null, errorCode || null, progressPct ?? null, status, jobId)
+      );
     } catch (err) {
       console.error("[JobRepository] Error updating job status:", err);
     }
@@ -511,6 +642,7 @@ export const JobRepository = {
     }
   },
 };
+
 
 // -----------------------------------------------------------------------------
 // DECISION RECEIPTS REPOSITORY
@@ -964,4 +1096,29 @@ export const VerifyProgressRepository = {
       return null;
     }
   },
+
+  getAll(): StoredVerifyProgressJob[] {
+    try {
+      const db = getDb();
+      const stmt = db.prepare("SELECT * FROM verify_progress_jobs ORDER BY started_at DESC");
+      const rows = stmt.all() as Record<string, unknown>[];
+      return rows.map((row) => ({
+        jobId: row.job_id as string,
+        status: row.status as StoredVerifyProgressJob["status"],
+        requestedSuites: row.requested_suites as string,
+        totalSuites: Number(row.total_suites),
+        completedSuites: Number(row.completed_suites),
+        overallProgressPct: Number(row.overall_progress_pct),
+        startedAt: row.started_at as string,
+        completedAt: (row.completed_at as string) || undefined,
+        totalDurationMs: row.total_duration_ms !== null ? Number(row.total_duration_ms) : undefined,
+        allPassed: row.all_passed !== null ? Number(row.all_passed) : undefined,
+        results: row.results as string,
+      }));
+    } catch (err) {
+      console.error("[VerifyProgressRepository] Error fetching progress jobs:", err);
+      return [];
+    }
+  },
 };
+

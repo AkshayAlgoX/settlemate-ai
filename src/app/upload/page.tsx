@@ -15,6 +15,8 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
 
+import { safeFetch } from "@/lib/api/safe-fetch";
+
 interface UploadResponse {
   success: boolean;
   batchId: string;
@@ -55,6 +57,7 @@ export default function UploadPage() {
   };
 
   const handleUpload = async () => {
+    if (isUploading) return;
     if (!file) {
       setError("Please select a CSV file to upload.");
       return;
@@ -70,42 +73,43 @@ export default function UploadPage() {
         formData.append("provider", provider);
       }
 
-      const res = await fetch("/api/upload", {
+      const res = await safeFetch<UploadResponse>("/api/upload", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(apiErrorMessage(data, "Failed to upload and validate CSV."));
+      if (!res.ok || !res.data?.success) {
+        throw new Error(res.error || apiErrorMessage(res.data, "Failed to upload and validate CSV."));
       }
 
-      setUploadResult(data);
+      setUploadResult(res.data);
     } catch (err) {
-      setError((err as Error).message);
+      setError(err instanceof Error ? err.message : "Failed to upload and validate CSV.");
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleReconcileNow = async () => {
+    if (isReconciling) return;
     if (!uploadResult?.batchId) return;
     setIsReconciling(true);
+    setError(null);
 
     try {
-      const res = await fetch(`/api/reconcile/${uploadResult.batchId}`, {
+      const res = await safeFetch<{ success?: boolean; error?: string }>(`/api/reconcile/${uploadResult.batchId}`, {
         method: "POST",
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(apiErrorMessage(data, "Reconciliation failed."));
+      if (!res.ok || !res.data?.success) {
+        throw new Error(res.error || apiErrorMessage(res.data, "Reconciliation failed."));
       }
       router.push(`/dashboard?batchId=${uploadResult.batchId}`);
     } catch (err) {
-      setError((err as Error).message);
+      setError(err instanceof Error ? err.message : "Reconciliation failed.");
       setIsReconciling(false);
     }
   };
+
 
   return (
     <div className="space-y-8 pb-12 font-sans">

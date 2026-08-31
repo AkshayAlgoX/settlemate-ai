@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
 import { formatDateOnly, formatAuditTime } from "@/lib/format";
 
+import { safeFetch } from "@/lib/api/safe-fetch";
+
 export default function ForensicsPage() {
   const [jobs, setJobs] = useState<StoredJobSummaryItem[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string>("");
@@ -31,20 +33,23 @@ export default function ForensicsPage() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [offlineVerified, setOfflineVerified] = useState<boolean>(false);
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
+  const [loadingJobs, setLoadingJobs] = useState<boolean>(true);
 
   const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    fetch("/api/forensics/jobs")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (mounted && data && Array.isArray(data.jobs) && data.jobs.length > 0) {
-          setJobs(data.jobs);
-          setSelectedJobId(data.jobs[0].jobId);
+    safeFetch<{ jobs?: StoredJobSummaryItem[] }>("/api/forensics/jobs")
+      .then((res) => {
+        if (mounted && res.ok && res.data && Array.isArray(res.data.jobs) && res.data.jobs.length > 0) {
+          setJobs(res.data.jobs);
+          setSelectedJobId(res.data.jobs[0].jobId);
         }
       })
-      .catch((err) => console.error("Failed to load jobs list:", err));
+      .catch((err) => console.error("Failed to load jobs list:", err))
+      .finally(() => {
+        if (mounted) setLoadingJobs(false);
+      });
 
     return () => {
       mounted = false;
@@ -55,11 +60,10 @@ export default function ForensicsPage() {
     let mounted = true;
     if (!selectedJobId) return;
 
-    fetch(`/api/forensics/${selectedJobId}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (mounted && data && data.success && data.timeline) {
-          setTimeline(data.timeline);
+    safeFetch<{ success: boolean; timeline: ForensicsTimeline }>(`/api/forensics/${selectedJobId}`)
+      .then((res) => {
+        if (mounted && res.ok && res.data?.success && res.data.timeline) {
+          setTimeline(res.data.timeline);
           setCurrentStepIndex(0);
           setIsPlaying(false);
           setOfflineVerified(false);
@@ -71,6 +75,7 @@ export default function ForensicsPage() {
       mounted = false;
     };
   }, [selectedJobId]);
+
 
   useEffect(() => {
     if (isPlaying) {

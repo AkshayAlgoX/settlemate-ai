@@ -499,38 +499,84 @@ export function sanitizeNoSqlOperators<T>(input: T): T {
 }
 
 /**
- * Creates safe, standardized error response that never leaks stack traces or server file paths.
+ * Creates safe, standardized error response adhering to the global API error contract:
+ * { error: string, code: string, retryable: boolean, retryAfterSeconds?: number, requestId: string, timestamp: string }
+ * while maintaining 100% backward compatibility for { error: { code, message, timestamp } }.
  */
 export function safeErrorResponse(
   err: unknown,
   status: number = 500,
-  defaultCode: string = "INTERNAL_SERVER_ERROR"
+  defaultCode: string = "INTERNAL_SERVER_ERROR",
+  options?: { retryable?: boolean; retryAfterSeconds?: number; requestId?: string }
 ): NextResponse {
   let message = "An unexpected internal error occurred.";
-  const code = defaultCode;
+  let code = defaultCode;
+  const requestId = options?.requestId || `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   if (err instanceof Error) {
-    if (status < 500) {
-      message = err.message;
+    const raw = err.message || "";
+    if (
+      raw.includes("timeout exceeded when trying to connect") ||
+      raw.includes("SQLITE_BUSY") ||
+      raw.includes("database is locked") ||
+      raw.includes("ECONNREFUSED") ||
+      raw.includes("ETIMEDOUT")
+    ) {
+      message = "Service is temporarily unable to reach the database.";
+      code = "DATABASE_TIMEOUT";
+    } else if (
+      raw.includes("AI investigation timed out") ||
+      raw.includes("model call timed out") ||
+      raw.includes("Anthropic") ||
+      raw.includes("Gemini") ||
+      raw.includes("OpenAI")
+    ) {
+      message = "AI investigation timed out. Your financial reconciliation is unaffected.";
+      code = "AI_TIMEOUT";
+    } else if (status < 500) {
+      message = raw;
     } else {
       // In production, mask internal server error details
       message = "An unexpected error occurred while processing the financial request.";
     }
+  } else if (typeof err === "string" && err.trim().length > 0) {
+    message = err;
   }
 
-  const response = NextResponse.json(
-    {
-      error: {
-        code,
-        message,
-        timestamp: new Date().toISOString(),
-      },
-    },
-    { status }
-  );
+  const retryable =
+    options?.retryable ??
+    (status === 429 || status === 503 || status === 504 || code === "DATABASE_TIMEOUT" || code === "AI_TIMEOUT");
 
-  return applySecurityHeaders(response);
+  const timestamp = new Date().toISOString();
+
+  const responseBody = {
+    error: {
+      code,
+      message,
+      retryable,
+      retryAfterSeconds: options?.retryAfterSeconds,
+      requestId,
+      timestamp,
+    },
+    message,
+    code,
+    retryable,
+    retryAfterSeconds: options?.retryAfterSeconds,
+    requestId,
+    timestamp,
+  };
+
+  const response = NextResponse.json(responseBody, { status });
+  const extraHeaders: Record<string, string> = {
+    "X-Request-Id": requestId,
+  };
+  if (options?.retryAfterSeconds) {
+    extraHeaders["Retry-After"] = String(options.retryAfterSeconds);
+  }
+
+  return applySecurityHeaders(response, extraHeaders);
 }
+
 
 /**
  * Extracts and verifies tenant identity from request session or API key,

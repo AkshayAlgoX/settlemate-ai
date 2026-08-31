@@ -105,26 +105,56 @@ export async function POST(req: NextRequest) {
     const isAsync = body.async === true || (size > 1000 && !body.sync);
 
     if (isAsync) {
+      // Check if an identical generation job is already active for this tenant to prevent duplicate storms
+      const activeJobs = await UnifiedJobRepository.getActiveJobsAsync(session.tenantId);
+      const existingJob = activeJobs.find(
+        (j) => j.batchSize === size && (j.status === "PENDING" || j.status === "PROCESSING")
+      );
+      if (existingJob) {
+        return NextResponse.json(
+          {
+            accepted: true,
+            jobId: existingJob.jobId,
+            status: existingJob.status,
+            size: existingJob.batchSize,
+            estimatedDurationMs: Math.round(size * 1.8),
+            pollUrl: `/api/batches/jobs/${existingJob.jobId}`,
+            message: `A background job is already generating ${size.toLocaleString()} records.`,
+          },
+          { status: 202 }
+        );
+      }
+
       const jobId = `job_gen_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const now = new Date().toISOString();
       UnifiedJobRepository.save({
         jobId,
         tenantId: session.tenantId,
+        jobType: "BATCH_GENERATION",
         status: "PROCESSING",
         batchSize: size,
-        createdAt: new Date().toISOString(),
+        progressPct: 10,
+        createdAt: now,
+        startedAt: now,
+        updatedAt: now,
       });
 
       // Execute generation in background without blocking HTTP request
       setImmediate(async () => {
         try {
           const res = await executeBatchGeneration(size, batchName);
+          const completedNow = new Date().toISOString();
           UnifiedJobRepository.save({
             jobId,
             tenantId: session.tenantId,
+            jobType: "BATCH_GENERATION",
             status: "COMPLETED",
             batchSize: size,
-            completedAt: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
+            progressPct: 100,
+            completedAt: completedNow,
+            createdAt: now,
+            startedAt: now,
+            updatedAt: completedNow,
             summary: JSON.stringify(res),
           });
         } catch (err: unknown) {
@@ -132,7 +162,9 @@ export async function POST(req: NextRequest) {
           UnifiedJobRepository.updateStatus(
             jobId,
             "FAILED",
-            err instanceof Error ? err.message : String(err)
+            err instanceof Error ? err.message : String(err),
+            "GENERATION_ERROR",
+            0
           );
         }
       });
@@ -150,6 +182,7 @@ export async function POST(req: NextRequest) {
         { status: 202 }
       );
     }
+
 
     const res = await executeBatchGeneration(size, batchName);
     return NextResponse.json(res);

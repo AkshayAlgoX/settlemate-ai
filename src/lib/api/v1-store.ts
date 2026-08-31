@@ -50,8 +50,9 @@ export interface V1DecisionReceipt {
 
 export interface V1ReconciliationJob {
   jobId: string;
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELED";
   createdAt: string;
+
   completedAt?: string;
   webhookUrl?: string;
   batchSize: number;
