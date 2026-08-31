@@ -29,8 +29,8 @@ ENV NODE_ENV=production
 # Explicitly configure PostgreSQL Prisma generation for the production container
 ENV PRISMA_TARGET_PROVIDER=postgresql
 
-# Generate Prisma Client for PostgreSQL & Build Next.js standalone application
-RUN npx prisma generate --schema=prisma/schema.postgresql.prisma
+# Generate both Prisma Clients (SQLite types for TS build & PostgreSQL for production runtime)
+RUN npx prisma generate --schema=prisma/schema.prisma && npx prisma generate --schema=prisma/schema.postgresql.prisma
 RUN npx next build
 
 # Compile production migration runner into pure Node.js JavaScript
@@ -59,6 +59,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma-client-postgres ./node_modules/@prisma-client-postgres
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy compiled migration runner and startup entrypoint
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/init-postgres.js ./scripts/init-postgres.js
