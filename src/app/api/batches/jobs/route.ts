@@ -40,21 +40,27 @@ export async function GET(req: NextRequest) {
       tenantId: string;
       status: string;
       batchSize: number;
+      progressCurrent: number;
+      progressTotal: number;
       progressPct: number;
       createdAt: string;
     }>();
 
     // Add durable active jobs
     for (const d of durableActive) {
-      const pct = d.progressTotal > 0 ? Math.min(100, Math.round((d.progressCurrent / d.progressTotal) * 100)) : 0;
-      activeMap.set(d.id, {
-        jobId: d.id,
-        tenantId: d.tenantId,
-        status: d.status,
-        batchSize: d.progressTotal || (d.payload?.size as number) || 0,
-        progressPct: pct,
-        createdAt: d.createdAt.toISOString(),
-      });
+      if ((d.status === "PENDING" || d.status === "RUNNING") && !d.cancelRequestedAt) {
+        const pct = d.progressTotal > 0 ? Math.min(100, Math.round((d.progressCurrent / d.progressTotal) * 100)) : 0;
+        activeMap.set(d.id, {
+          jobId: d.id,
+          tenantId: d.tenantId,
+          status: d.status,
+          batchSize: d.progressTotal || (d.payload?.size as number) || 0,
+          progressCurrent: d.progressCurrent,
+          progressTotal: d.progressTotal,
+          progressPct: pct,
+          createdAt: d.createdAt.toISOString(),
+        });
+      }
     }
 
     // Add unified active jobs
@@ -64,8 +70,9 @@ export async function GET(req: NextRequest) {
           jobId: u.jobId,
           tenantId: u.tenantId || session.tenantId || "tenant_default_sandbox",
           status: u.status,
-
           batchSize: u.batchSize || 0,
+          progressCurrent: 0,
+          progressTotal: u.batchSize || 0,
           progressPct: u.progressPct || 0,
           createdAt: u.createdAt || new Date().toISOString(),
         });
@@ -78,8 +85,13 @@ export async function GET(req: NextRequest) {
       tenantId: d.tenantId,
       status: d.status,
       batchSize: d.progressTotal || (d.payload?.size as number) || 0,
-      progressPct: d.progressTotal > 0 ? Math.min(100, Math.round((d.progressCurrent / d.progressTotal) * 100)) : (d.status === "COMPLETED" ? 100 : 0),
+      progressCurrent: d.progressCurrent,
+      progressTotal: d.progressTotal,
+      progressPct: d.progressTotal > 0 ? Math.round((d.progressCurrent / d.progressTotal) * 100) : (d.status === "COMPLETED" ? 100 : 0),
+      cancelRequestedAt: d.cancelRequestedAt ? d.cancelRequestedAt.toISOString() : undefined,
       createdAt: d.createdAt.toISOString(),
+      result: d.result,
+      error: d.error,
     }));
 
     return applySecurityHeaders(

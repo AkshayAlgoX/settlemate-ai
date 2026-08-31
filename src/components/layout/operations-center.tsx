@@ -19,12 +19,13 @@ export interface OperationJob {
   jobId: string;
   tenantId?: string;
   type?: string;
-  status: "PENDING" | "PROCESSING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "STALLED";
+  status: "PENDING" | "PROCESSING" | "RUNNING" | "CANCEL_REQUESTED" | "COMPLETED" | "FAILED" | "CANCELLED" | "STALLED" | "DEAD_LETTER";
   batchSize: number;
   progressPct: number;
   progressCurrent?: number;
   progressTotal?: number;
   createdAt: string;
+  cancelRequestedAt?: string;
   result?: { batchId?: string; size?: number };
   error?: string;
 }
@@ -62,16 +63,39 @@ export function OperationsCenter() {
 
       if (res.ok && res.data) {
         if (res.data.activeJobs) {
-          setActiveJobs(res.data.activeJobs);
+          // Filter out any jobs that are currently cancelling or cancelled
+          const filteredActive = res.data.activeJobs.filter(
+            (j) =>
+              (j.status === "PENDING" || j.status === "PROCESSING" || j.status === "RUNNING") &&
+              !cancellingIds.has(j.jobId)
+          );
+          setActiveJobs(filteredActive);
         }
         if (res.data.recentJobs) {
           setRecentJobs(res.data.recentJobs);
+          // Clean up cancellingIds for jobs that the server now confirms as CANCELLED or terminal
+          const terminalServerIds = res.data.recentJobs
+            .filter((j) => j.status === "CANCELLED" || j.status === "COMPLETED" || j.status === "FAILED")
+            .map((j) => j.jobId);
+          if (terminalServerIds.length > 0) {
+            setCancellingIds((prev) => {
+              const next = new Set(prev);
+              let changed = false;
+              for (const tid of terminalServerIds) {
+                if (next.has(tid)) {
+                  next.delete(tid);
+                  changed = true;
+                }
+              }
+              return changed ? next : prev;
+            });
+          }
         }
       }
     } catch {
-      // Background poll failure ignored
+      // Background poll failure is non-blocking
     }
-  }, []);
+  }, [cancellingIds]);
 
   // Poll job status periodically
   useEffect(() => {
@@ -93,20 +117,28 @@ export function OperationsCenter() {
     };
   }, [refreshJobs]);
 
-
-  // 2. Bounded Step Executor: drives fair scheduling across active jobs
+  // 2. Bounded Step Executor: drives fair scheduling strictly across active non-cancelled jobs
   useEffect(() => {
-    if (activeJobs.length === 0 || isStepping) return;
+    // Only schedule if activeJobs has valid eligible jobs and not currently stepping
+    const eligibleJobs = activeJobs.filter(
+      (job) =>
+        (job.status === "PENDING" || job.status === "PROCESSING" || job.status === "RUNNING") &&
+        !cancellingIds.has(job.jobId)
+    );
+
+    if (eligibleJobs.length === 0 || isStepping) return;
 
     let isMounted = true;
 
     async function stepActiveJobs() {
       setIsStepping(true);
       try {
-        // Fair scheduling: step each active job in round-robin sequence
-        for (const job of activeJobs) {
+        // Fair scheduling: step each eligible active job in round-robin sequence
+        for (const job of eligibleJobs) {
           if (!isMounted) break;
-          if (job.status === "COMPLETED" || job.status === "CANCELLED" || job.status === "FAILED") {
+
+          // Re-verify cancellation check before issuing step call
+          if (cancellingIds.has(job.jobId)) {
             continue;
           }
 
@@ -120,11 +152,26 @@ export function OperationsCenter() {
               }
             );
 
-            if (res.ok && res.data?.job && isMounted) {
-              const updated = res.data.job;
-              setActiveJobs((prev) =>
-                prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
-              );
+            if (isMounted) {
+              if (res.ok && res.data?.job) {
+                const updated = res.data.job;
+                if (updated.status === "CANCELLED" || updated.status === "CANCEL_REQUESTED") {
+                  setActiveJobs((prev) => prev.filter((j) => j.jobId !== updated.jobId));
+                  setRecentJobs((prev) => {
+                    const exists = prev.some((j) => j.jobId === updated.jobId);
+                    return exists
+                      ? prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
+                      : [updated, ...prev];
+                  });
+                } else {
+                  setActiveJobs((prev) =>
+                    prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
+                  );
+                }
+              } else if (!res.ok) {
+                // If 409 conflict or job cancelled on server, remove from active pool
+                setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
+              }
             }
           } catch {
             // Step error handled on next poll
@@ -136,7 +183,7 @@ export function OperationsCenter() {
       } finally {
         if (isMounted) {
           setIsStepping(false);
-          refreshJobs();
+          void refreshJobs();
         }
       }
     }
@@ -146,27 +193,31 @@ export function OperationsCenter() {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [activeJobs, isStepping, refreshJobs]);
+  }, [activeJobs, isStepping, refreshJobs, cancellingIds]);
 
-  // 3. Request job cancellation
+  // 3. Request job cancellation (Idempotent & immediate UI reflection)
   const handleCancel = async (jobId: string) => {
+    // Immediately mark as cancelling in UI and exclude from stepping
     setCancellingIds((prev) => new Set(prev).add(jobId));
+
+    // Optimistically transition status to CANCEL_REQUESTED
+    setActiveJobs((prev) => prev.filter((j) => j.jobId !== jobId));
+    setRecentJobs((prev) =>
+      prev.map((j) => (j.jobId === jobId ? { ...j, status: "CANCEL_REQUESTED" } : j))
+    );
+
     try {
       await safeFetch(`/api/batches/jobs/${jobId}/cancel`, { method: "POST" });
       await refreshJobs();
     } catch {
-      // Cancellation error
-    } finally {
-      setCancellingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(jobId);
-        return next;
-      });
+      // Server cancellation error handled on next poll
     }
   };
 
   const totalActive = activeJobs.filter(
-    (j) => j.status === "PENDING" || j.status === "PROCESSING" || j.status === "RUNNING"
+    (j) =>
+      (j.status === "PENDING" || j.status === "PROCESSING" || j.status === "RUNNING") &&
+      !cancellingIds.has(j.jobId)
   ).length;
 
   const displayList = [
@@ -230,12 +281,13 @@ export function OperationsCenter() {
               </div>
             ) : (
               displayList.map((job) => {
-                const isProcessing =
-                  job.status === "PENDING" || job.status === "PROCESSING" || job.status === "RUNNING";
-                const isCompleted = job.status === "COMPLETED";
+                const isCancelling = cancellingIds.has(job.jobId) || job.status === "CANCEL_REQUESTED";
                 const isCancelled = job.status === "CANCELLED";
-                const isFailed = job.status === "FAILED" || job.status === "STALLED";
-                const isCancelling = cancellingIds.has(job.jobId);
+                const isProcessing =
+                  (job.status === "PENDING" || job.status === "PROCESSING" || job.status === "RUNNING") &&
+                  !isCancelling;
+                const isCompleted = job.status === "COMPLETED";
+                const isFailed = job.status === "FAILED" || job.status === "STALLED" || job.status === "DEAD_LETTER";
                 const batchId = job.result?.batchId;
 
                 return (
@@ -246,23 +298,37 @@ export function OperationsCenter() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 font-medium text-foreground">
                         {isProcessing && <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />}
+                        {isCancelling && <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />}
                         {isCompleted && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
                         {isCancelled && <Ban className="h-3.5 w-3.5 text-muted-foreground" />}
                         {isFailed && <XCircle className="h-3.5 w-3.5 text-rose-500" />}
-                        <span>Generate {(job.batchSize || 250).toLocaleString()} records</span>
+                        <span>Generate {(job.batchSize || job.progressTotal || 250).toLocaleString()} records</span>
                       </div>
                       <span className="text-[10px] font-mono text-muted-foreground">
-                        {isProcessing ? `${job.progressPct}%` : job.status}
+                        {isCancelling
+                          ? "⏹ Cancelling…"
+                          : isCancelled
+                          ? "⏹ Cancelled"
+                          : isProcessing
+                          ? `${job.progressPct}%`
+                          : job.status}
                       </span>
                     </div>
 
                     {/* Progress Bar for active operations */}
-                    {isProcessing && (
+                    {(isProcessing || isCancelling) && (
                       <div className="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
                         <div
                           className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
                           style={{ width: `${Math.max(5, job.progressPct)}%` }}
                         />
+                      </div>
+                    )}
+
+                    {/* Cancelled records info */}
+                    {isCancelled && (
+                      <div className="text-[10px] text-muted-foreground font-mono">
+                        {(job.progressCurrent ?? 0).toLocaleString()} / {(job.batchSize || job.progressTotal || 0).toLocaleString()} records completed before cancellation
                       </div>
                     )}
 
@@ -275,12 +341,16 @@ export function OperationsCenter() {
                         {isProcessing && (
                           <button
                             type="button"
-                            disabled={isCancelling}
                             onClick={() => handleCancel(job.jobId)}
-                            className="rounded px-2 py-0.5 text-rose-500 hover:bg-rose-500/10 font-medium transition cursor-pointer disabled:opacity-50"
+                            className="rounded px-2 py-0.5 text-rose-500 hover:bg-rose-500/10 font-medium transition cursor-pointer"
                           >
-                            {isCancelling ? "Cancelling..." : "Cancel"}
+                            Cancel
                           </button>
+                        )}
+                        {isCancelling && (
+                          <span className="text-[10px] text-amber-500/90 font-medium italic">
+                            Cancellation requested…
+                          </span>
                         )}
                         {isCompleted && batchId && (
                           <Link
@@ -309,7 +379,7 @@ export function OperationsCenter() {
           <div className="mt-2.5 pt-2 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground px-1">
             <span className="flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              $0 Free Web Stepper Active
+              Durable Operations Active
             </span>
             <Link
               href="/demo"

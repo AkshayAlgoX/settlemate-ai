@@ -37,8 +37,8 @@ interface DynamicJobPrisma {
 
 const dynamicPrisma = prisma as unknown as DynamicJobPrisma;
 
-export type JobStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "STALLED" | "CANCELLED" | "DEAD_LETTER";
-export type JobItemStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "RETRYABLE_FAILED";
+export type JobStatus = "PENDING" | "RUNNING" | "CANCEL_REQUESTED" | "COMPLETED" | "FAILED" | "STALLED" | "CANCELLED" | "DEAD_LETTER";
+export type JobItemStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "RETRYABLE_FAILED" | "CANCELLED";
 export type FailureClassification = "TRANSIENT" | "PERMANENT" | "INVARIANT_FAILURE" | "VALIDATION_FAILURE" | "RATE_LIMIT" | "TIMEOUT";
 
 export interface DurableJobRecord {
@@ -106,15 +106,15 @@ function isPostgres(): boolean {
  */
 export function assertValidTransition(current: JobStatus, next: JobStatus): void {
   const legalTransitions: Record<JobStatus, JobStatus[]> = {
-    PENDING: ["PENDING", "RUNNING", "CANCELLED", "FAILED", "DEAD_LETTER"],
-    RUNNING: ["RUNNING", "COMPLETED", "FAILED", "STALLED", "CANCELLED", "PENDING", "DEAD_LETTER"],
-    STALLED: ["STALLED", "PENDING", "RUNNING", "FAILED", "DEAD_LETTER"],
+    PENDING: ["PENDING", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "FAILED", "DEAD_LETTER"],
+    RUNNING: ["RUNNING", "CANCEL_REQUESTED", "COMPLETED", "FAILED", "STALLED", "CANCELLED", "PENDING", "DEAD_LETTER"],
+    CANCEL_REQUESTED: ["CANCEL_REQUESTED", "CANCELLED"],
+    STALLED: ["STALLED", "PENDING", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "FAILED", "DEAD_LETTER"],
     FAILED: ["FAILED", "PENDING", "DEAD_LETTER"],
     CANCELLED: ["CANCELLED"], // Terminal
     DEAD_LETTER: ["DEAD_LETTER", "PENDING"], // Controlled admin replay only
     COMPLETED: ["COMPLETED"], // Terminal
   };
-
 
   if (!legalTransitions[current]?.includes(next)) {
     throw new Error(
@@ -451,35 +451,124 @@ export async function updateJobProgress(
 
 /**
  * Requests cooperative cancellation of an active or pending job.
+ * Idempotent, durable, tenant-isolated, and immediately updates job state.
  */
 export async function requestJobCancellation(jobId: string, tenantId?: string): Promise<boolean> {
   const targetTenant = tenantId || getRequiredTenantId();
   const now = new Date();
 
   if (isPostgres()) {
-    const res = await dynamicPrisma.asyncJob?.updateMany({
-      where: {
-        id: jobId,
-        tenantId: targetTenant,
-        status: { in: ["PENDING", "RUNNING", "STALLED"] },
-      },
-      data: {
-        cancelRequestedAt: now,
-        updatedAt: now,
-      },
-    });
-    return (res?.count ?? 0) > 0;
+    const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
+    if (!job || (job.tenantId && job.tenantId !== targetTenant)) {
+      return false;
+    }
+
+    const currentStatus = job.status as JobStatus;
+
+    if (currentStatus === "CANCELLED" || currentStatus === "CANCEL_REQUESTED") {
+      return true;
+    }
+
+    if (currentStatus === "COMPLETED" || currentStatus === "FAILED" || currentStatus === "DEAD_LETTER") {
+      return false;
+    }
+
+    if (currentStatus === "PENDING" || currentStatus === "STALLED") {
+      await dynamicPrisma.asyncJob?.updateMany({
+        where: { id: jobId, tenantId: targetTenant },
+        data: {
+          status: "CANCELLED",
+          cancelRequestedAt: now,
+          completedAt: now,
+          error: "Cancelled by user request",
+          updatedAt: now,
+        },
+      });
+
+      await dynamicPrisma.jobItem?.updateMany({
+        where: { jobId, status: { in: ["PENDING", "PROCESSING", "RETRYABLE_FAILED"] } },
+        data: { status: "CANCELLED", updatedAt: now },
+      });
+
+      const payload = JSON.parse((job.payload as string) || "{}");
+      if (payload.batchId) {
+        try {
+          await prisma.batch.update({
+            where: { id: payload.batchId },
+            data: { status: "CANCELLED" },
+          });
+        } catch {
+          // Ignore if batch not present
+        }
+      }
+
+      return true;
+    }
+
+    if (currentStatus === "RUNNING") {
+      await dynamicPrisma.asyncJob?.updateMany({
+        where: { id: jobId, tenantId: targetTenant },
+        data: {
+          status: "CANCEL_REQUESTED",
+          cancelRequestedAt: now,
+          updatedAt: now,
+        },
+      });
+      return true;
+    }
+
+    return false;
   }
 
+  // Local memory queue
   for (const job of localMemoryQueue.values()) {
-    if (
-      job.id === jobId &&
-      job.tenantId === targetTenant &&
-      (job.status === "PENDING" || job.status === "RUNNING" || job.status === "STALLED")
-    ) {
-      job.cancelRequestedAt = now;
-      job.updatedAt = now;
-      return true;
+    if (job.id === jobId) {
+      if (job.tenantId !== targetTenant) {
+        return false;
+      }
+
+      if (job.status === "CANCELLED" || job.status === "CANCEL_REQUESTED") {
+        return true;
+      }
+
+      if (job.status === "COMPLETED" || job.status === "FAILED" || job.status === "DEAD_LETTER") {
+        return false;
+      }
+
+      if (job.status === "PENDING" || job.status === "STALLED") {
+        job.cancelRequestedAt = now;
+        job.status = "CANCELLED";
+        job.completedAt = now;
+        job.error = "Cancelled by user request";
+        job.updatedAt = now;
+
+        for (const item of localJobItems.values()) {
+          if (item.jobId === jobId && item.status !== "COMPLETED" && item.status !== "FAILED") {
+            item.status = "CANCELLED";
+            item.updatedAt = now;
+          }
+        }
+
+        if (job.payload?.batchId) {
+          try {
+            await prisma.batch.update({
+              where: { id: job.payload.batchId as string },
+              data: { status: "CANCELLED" },
+            });
+          } catch {
+            // Ignore
+          }
+        }
+
+        return true;
+      }
+
+      if (job.status === "RUNNING") {
+        job.cancelRequestedAt = now;
+        job.status = "CANCEL_REQUESTED";
+        job.updatedAt = now;
+        return true;
+      }
     }
   }
 
@@ -492,12 +581,12 @@ export async function requestJobCancellation(jobId: string, tenantId?: string): 
 export async function checkCancellationRequested(jobId: string): Promise<boolean> {
   if (isPostgres()) {
     const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
-    return Boolean(job?.cancelRequestedAt);
+    return Boolean(job?.cancelRequestedAt || job?.status === "CANCEL_REQUESTED" || job?.status === "CANCELLED");
   }
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId) {
-      return Boolean(job.cancelRequestedAt);
+      return Boolean(job.cancelRequestedAt || job.status === "CANCEL_REQUESTED" || job.status === "CANCELLED");
     }
   }
 
@@ -505,7 +594,7 @@ export async function checkCancellationRequested(jobId: string): Promise<boolean
 }
 
 /**
- * Sets a job to CANCELLED terminal state cleanly.
+ * Sets a job to CANCELLED terminal state cleanly and cancels remaining job items.
  */
 export async function cancelJob(
   jobId: string,
@@ -522,22 +611,67 @@ export async function cancelJob(
       },
       data: {
         status: "CANCELLED",
+        cancelRequestedAt: now,
         error: reason,
         completedAt: now,
         updatedAt: now,
       },
     });
+
+    await dynamicPrisma.jobItem?.updateMany({
+      where: {
+        jobId,
+        status: { in: ["PENDING", "PROCESSING", "RETRYABLE_FAILED"] },
+      },
+      data: {
+        status: "CANCELLED",
+        updatedAt: now,
+      },
+    });
+
+    const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
+    if (job?.payload) {
+      const payload = JSON.parse((job.payload as string) || "{}");
+      if (payload.batchId) {
+        try {
+          await prisma.batch.update({
+            where: { id: payload.batchId },
+            data: { status: "CANCELLED" },
+          });
+        } catch {
+          // Ignore
+        }
+      }
+    }
     return;
   }
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId) {
       assertValidTransition(job.status, "CANCELLED");
+      job.cancelRequestedAt = job.cancelRequestedAt || now;
       job.status = "CANCELLED";
       job.error = reason;
       job.completedAt = now;
       job.updatedAt = now;
-      return;
+
+      if (job.payload?.batchId) {
+        try {
+          await prisma.batch.update({
+            where: { id: job.payload.batchId as string },
+            data: { status: "CANCELLED" },
+          });
+        } catch {
+          // Ignore
+        }
+      }
+    }
+  }
+
+  for (const item of localJobItems.values()) {
+    if (item.jobId === jobId && item.status !== "COMPLETED" && item.status !== "FAILED") {
+      item.status = "CANCELLED";
+      item.updatedAt = now;
     }
   }
 }
@@ -1118,7 +1252,11 @@ export async function listDurableJobs(
       completedAt: (raw.completedAt as Date) || undefined,
     }));
 
-    const activeJobs = mapped.filter((j) => j.status === "PENDING" || j.status === "RUNNING" || j.status === "STALLED");
+    const activeJobs = mapped.filter(
+      (j) =>
+        (j.status === "PENDING" || j.status === "RUNNING") &&
+        !j.cancelRequestedAt
+    );
     const recentJobs = mapped.slice(0, limit);
 
     return { activeJobs, recentJobs };
@@ -1127,7 +1265,11 @@ export async function listDurableJobs(
   const all = [...localMemoryQueue.values()].filter((j) => !tenantId || j.tenantId === tenantId);
   all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-  const activeJobs = all.filter((j) => j.status === "PENDING" || j.status === "RUNNING" || j.status === "STALLED");
+  const activeJobs = all.filter(
+    (j) =>
+      (j.status === "PENDING" || j.status === "RUNNING") &&
+      !j.cancelRequestedAt
+  );
   const recentJobs = all.slice(0, limit);
 
   return { activeJobs, recentJobs };
@@ -1136,7 +1278,7 @@ export async function listDurableJobs(
 /**
  * Executes a single bounded step slice for an active job.
  * Enforces bounded concurrency (max 2 concurrent step slices on the server),
- * checks for cancellation, applies atomic checkpointing, and returns updated progress.
+ * checks for cancellation atomically, applies safe checkpointing, and returns updated progress.
  */
 export async function stepJobChunk(
   jobId: string,
@@ -1151,8 +1293,13 @@ export async function stepJobChunk(
     throw new Error(`Job '${jobId}' not found`);
   }
 
-  // If already terminal, return status immediately
-  if (job.status === "COMPLETED" || job.status === "CANCELLED" || job.status === "DEAD_LETTER") {
+  // 1. If already terminal, return status immediately without mutations
+  if (
+    job.status === "COMPLETED" ||
+    job.status === "CANCELLED" ||
+    job.status === "DEAD_LETTER" ||
+    job.status === "FAILED"
+  ) {
     return {
       jobId: job.id,
       tenantId: job.tenantId,
@@ -1160,7 +1307,7 @@ export async function stepJobChunk(
       status: job.status,
       progressCurrent: job.progressCurrent,
       progressTotal: job.progressTotal,
-      progressPct: job.progressTotal > 0 ? Math.round((job.progressCurrent / job.progressTotal) * 100) : 100,
+      progressPct: job.progressTotal > 0 ? Math.round((job.progressCurrent / job.progressTotal) * 100) : (job.status === "COMPLETED" ? 100 : 0),
       completedSliceCount: 0,
       isComplete: job.status === "COMPLETED",
       isCancelled: job.status === "CANCELLED",
@@ -1170,17 +1317,18 @@ export async function stepJobChunk(
     };
   }
 
-  // Check cancellation request
-  if (job.cancelRequestedAt || (await checkCancellationRequested(job.id))) {
+  // 2. Check cancellation request before starting step
+  if (job.cancelRequestedAt || job.status === "CANCEL_REQUESTED" || (await checkCancellationRequested(job.id))) {
     await cancelJob(job.id, workerId, "Cancellation requested by user");
+    const current = (await getDurableJob(job.id)) || job;
     return {
-      jobId: job.id,
-      tenantId: job.tenantId,
-      jobType: job.jobType,
+      jobId: current.id,
+      tenantId: current.tenantId,
+      jobType: current.jobType,
       status: "CANCELLED",
-      progressCurrent: job.progressCurrent,
-      progressTotal: job.progressTotal,
-      progressPct: job.progressTotal > 0 ? Math.round((job.progressCurrent / job.progressTotal) * 100) : 0,
+      progressCurrent: current.progressCurrent,
+      progressTotal: current.progressTotal,
+      progressPct: current.progressTotal > 0 ? Math.round((current.progressCurrent / current.progressTotal) * 100) : 0,
       completedSliceCount: 0,
       isComplete: false,
       isCancelled: true,
@@ -1188,7 +1336,7 @@ export async function stepJobChunk(
     };
   }
 
-  // Global concurrency guard
+  // 3. Global concurrency guard
   if (activeInFlightSteps >= MAX_CONCURRENT_STEPS) {
     return {
       jobId: job.id,
@@ -1210,9 +1358,14 @@ export async function stepJobChunk(
     const now = new Date();
     const leaseExpiresAt = new Date(now.getTime() + 30000);
 
+    // 4. Atomically claim/check lease and cancellation
     if (isPostgres()) {
-      await dynamicPrisma.asyncJob?.updateMany({
-        where: { id: job.id },
+      const claimResult = await dynamicPrisma.asyncJob?.updateMany({
+        where: {
+          id: job.id,
+          status: { in: ["PENDING", "RUNNING"] },
+          cancelRequestedAt: null,
+        },
         data: {
           status: "RUNNING",
           workerId,
@@ -1222,9 +1375,46 @@ export async function stepJobChunk(
           updatedAt: now,
         },
       });
+
+      if (!claimResult || claimResult.count === 0) {
+        const latest = await getDurableJob(job.id);
+        if (latest?.cancelRequestedAt || latest?.status === "CANCEL_REQUESTED" || latest?.status === "CANCELLED") {
+          await cancelJob(job.id, workerId, "Cancellation requested by user");
+          const updated = (await getDurableJob(job.id)) || job;
+          return {
+            jobId: updated.id,
+            tenantId: updated.tenantId,
+            jobType: updated.jobType,
+            status: "CANCELLED",
+            progressCurrent: updated.progressCurrent,
+            progressTotal: updated.progressTotal,
+            progressPct: updated.progressTotal > 0 ? Math.round((updated.progressCurrent / updated.progressTotal) * 100) : 0,
+            completedSliceCount: 0,
+            isComplete: false,
+            isCancelled: true,
+            durationMs: performance.now() - t0,
+          };
+        }
+      }
     } else {
       for (const localJob of localMemoryQueue.values()) {
         if (localJob.id === job.id) {
+          if (localJob.cancelRequestedAt || localJob.status === "CANCEL_REQUESTED" || localJob.status === "CANCELLED") {
+            await cancelJob(job.id, workerId, "Cancellation requested by user");
+            return {
+              jobId: job.id,
+              tenantId: job.tenantId,
+              jobType: job.jobType,
+              status: "CANCELLED",
+              progressCurrent: localJob.progressCurrent,
+              progressTotal: localJob.progressTotal,
+              progressPct: localJob.progressTotal > 0 ? Math.round((localJob.progressCurrent / localJob.progressTotal) * 100) : 0,
+              completedSliceCount: 0,
+              isComplete: false,
+              isCancelled: true,
+              durationMs: performance.now() - t0,
+            };
+          }
           localJob.status = "RUNNING";
           localJob.workerId = workerId;
           localJob.claimedAt = now;
@@ -1234,6 +1424,26 @@ export async function stepJobChunk(
         }
       }
     }
+
+    // Re-check cancellation right before dispatching slice handler
+    if (await checkCancellationRequested(job.id)) {
+      await cancelJob(job.id, workerId, "Cancellation requested by user");
+      const current = (await getDurableJob(job.id)) || job;
+      return {
+        jobId: current.id,
+        tenantId: current.tenantId,
+        jobType: current.jobType,
+        status: "CANCELLED",
+        progressCurrent: current.progressCurrent,
+        progressTotal: current.progressTotal,
+        progressPct: current.progressTotal > 0 ? Math.round((current.progressCurrent / current.progressTotal) * 100) : 0,
+        completedSliceCount: 0,
+        isComplete: false,
+        isCancelled: true,
+        durationMs: performance.now() - t0,
+      };
+    }
+
     job.status = "RUNNING";
     job.workerId = workerId;
 
@@ -1256,15 +1466,21 @@ export async function stepJobChunk(
       const isComplete = newProgress >= job.progressTotal;
 
       await updateJobProgress(job.id, workerId, newProgress, job.progressTotal);
-      if (isComplete) {
-        await completeJob(job.id, workerId, { completedAt: new Date().toISOString() });
-      }
 
-      stepOutcome = {
-        sliceCount,
-        isComplete,
-        result: isComplete ? { completedAt: new Date().toISOString() } : undefined,
-      };
+      // Check cancellation immediately after updating progress
+      if (await checkCancellationRequested(job.id)) {
+        await cancelJob(job.id, workerId, "Cancelled after safe chunk");
+        stepOutcome = { sliceCount, isComplete: false };
+      } else {
+        if (isComplete) {
+          await completeJob(job.id, workerId, { completedAt: new Date().toISOString() });
+        }
+        stepOutcome = {
+          sliceCount,
+          isComplete,
+          result: isComplete ? { completedAt: new Date().toISOString() } : undefined,
+        };
+      }
     }
 
     const updatedJob = (await getDurableJob(job.id)) || job;
@@ -1307,21 +1523,24 @@ export async function stepJobChunk(
       durationMs: performance.now() - t0,
     };
   } finally {
-
-
     activeInFlightSteps = Math.max(0, activeInFlightSteps - 1);
   }
 }
 
 // Register built-in BATCH_GENERATION step handler
 registerStepHandler("BATCH_GENERATION", async (job, chunkSize) => {
+  // 1. Check cancellation before starting any mutation
+  if (await checkCancellationRequested(job.id)) {
+    await cancelJob(job.id, job.workerId || "stepper", "Cancellation requested by user");
+    return { sliceCount: 0, isComplete: false };
+  }
 
   const payload = job.payload as { batchId?: string; size?: number; batchName?: string };
   const totalSize = Number(payload.size || job.progressTotal || 250);
   const batchName = payload.batchName || `Synthetic Batch ${new Date().toISOString().slice(0, 16)}`;
   let batchId = payload.batchId;
 
-  // 1. If batch does not exist yet in DB, create batch shell
+  // If batch does not exist yet in DB, create batch shell
   if (!batchId) {
     try {
       const batch = await prisma.batch.create({
@@ -1344,6 +1563,11 @@ registerStepHandler("BATCH_GENERATION", async (job, chunkSize) => {
   const count = Math.min(chunkSize, totalSize - startIdx);
 
   if (count <= 0) {
+    if (await checkCancellationRequested(job.id)) {
+      await cancelJob(job.id, job.workerId || "stepper", "Cancellation requested by user");
+      return { sliceCount: 0, isComplete: false };
+    }
+
     try {
       await prisma.batch.update({
         where: { id: batchId },
@@ -1372,7 +1596,7 @@ registerStepHandler("BATCH_GENERATION", async (job, chunkSize) => {
     createMany: (args: { data: Record<string, unknown>[] }) => Promise<unknown>;
   }
 
-  // 3. Insert records for this bounded slice
+  // 3. Insert records for this bounded slice (Safe Chunk Execution)
   try {
     await Promise.all([
       (prisma.order as unknown as CreateManyModel).createMany({
@@ -1469,7 +1693,14 @@ registerStepHandler("BATCH_GENERATION", async (job, chunkSize) => {
   const newProgress = startIdx + count;
   const isComplete = newProgress >= totalSize;
 
+  // 4. Update progress checkpoint
   await updateJobProgress(job.id, job.workerId || "stepper", newProgress, totalSize);
+
+  // 5. Check cancellation immediately after current safe slice finishes
+  if (await checkCancellationRequested(job.id)) {
+    await cancelJob(job.id, job.workerId || "stepper", "Cancellation requested during step execution");
+    return { sliceCount: count, isComplete: false };
+  }
 
   if (isComplete) {
     try {

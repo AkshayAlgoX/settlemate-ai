@@ -56,6 +56,9 @@ export async function GET(
           retryable: durableJob.status === "FAILED" || durableJob.status === "STALLED",
           createdAt: durableJob.createdAt,
           claimedAt: durableJob.claimedAt,
+          heartbeatAt: durableJob.heartbeatAt,
+          leaseExpiresAt: durableJob.leaseExpiresAt,
+          cancelRequestedAt: durableJob.cancelRequestedAt,
           updatedAt: durableJob.updatedAt,
           completedAt: durableJob.completedAt,
           result: durableJob.result,
@@ -131,16 +134,78 @@ export async function DELETE(
   }
 
   const { jobId } = await params;
-  try {
-    const cancelled = await requestJobCancellation(jobId, session.tenantId);
+  const existing = await getDurableJob(jobId, session.tenantId);
+
+  if (!existing) {
+    return applySecurityHeaders(
+      NextResponse.json(
+        { error: { code: "NOT_FOUND", message: `Job '${jobId}' not found` } },
+        { status: 404 }
+      )
+    );
+  }
+
+  if (existing.status === "COMPLETED") {
+    return applySecurityHeaders(
+      NextResponse.json(
+        {
+          error: {
+            code: "ALREADY_COMPLETED",
+            message: "Job is already completed and cannot be cancelled",
+          },
+          jobId,
+          status: "COMPLETED",
+        },
+        { status: 409 }
+      )
+    );
+  }
+
+  if (existing.status === "FAILED" || existing.status === "DEAD_LETTER") {
+    return applySecurityHeaders(
+      NextResponse.json(
+        {
+          error: {
+            code: "TERMINAL_STATE",
+            message: `Job is in terminal state '${existing.status}' and cannot be cancelled`,
+          },
+          jobId,
+          status: existing.status,
+        },
+        { status: 409 }
+      )
+    );
+  }
+
+  if (existing.status === "CANCELLED") {
     return applySecurityHeaders(
       NextResponse.json({
         success: true,
         jobId,
+        status: "CANCELLED",
+        cancelled: true,
+        cancelRequestedAt: existing.cancelRequestedAt,
+        message: "Job is already cancelled.",
+      })
+    );
+  }
+
+  try {
+    const cancelled = await requestJobCancellation(jobId, session.tenantId);
+    const updated = await getDurableJob(jobId, session.tenantId);
+
+    return applySecurityHeaders(
+      NextResponse.json({
+        success: true,
+        jobId,
+        status: updated?.status || (cancelled ? "CANCEL_REQUESTED" : existing.status),
         cancelled,
-        message: cancelled
-          ? "Cancellation requested. The job will halt cooperatively after the current slice."
-          : "Job cannot be cancelled (already completed or terminal).",
+        cancelRequestedAt: updated?.cancelRequestedAt,
+        progressCurrent: updated?.progressCurrent,
+        progressTotal: updated?.progressTotal,
+        message: updated?.status === "CANCELLED"
+          ? "Job cancelled successfully."
+          : "Cancellation requested. The job will halt cooperatively after the current slice.",
       })
     );
   } catch (err: unknown) {
