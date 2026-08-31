@@ -213,7 +213,8 @@ export function splitSqlStatements(source: string): SqlStatement[] {
 // instead by the tenant-scoped-table invariants in the verification gate.
 const CREATE_TABLE = /\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?!IF\s+NOT\s+EXISTS\b)"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
 const CREATE_INDEX = /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?!IF\s+NOT\s+EXISTS\b)"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
-const ADD_CONSTRAINT = /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?"?([A-Za-z_][A-Za-z0-9_]*)"?[\s\S]*?\bADD\s+CONSTRAINT\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
+const ADD_CONSTRAINT = /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?"?([A-Za-z_][A-Za-z0-9_]*)"?[^;]*?\bADD\s+CONSTRAINT\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
+
 const CREATE_POLICY = /\bCREATE\s+POLICY\s+"?([A-Za-z_][A-Za-z0-9_]*)"?\s+ON\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
 
 /**

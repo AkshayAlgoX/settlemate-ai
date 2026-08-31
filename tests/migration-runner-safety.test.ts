@@ -242,13 +242,20 @@ async function main() {
 
   await test("9. constraints and policies are extracted with their owning table", () => {
     const sql = [
+      'ALTER TABLE "AsyncJob" ADD COLUMN IF NOT EXISTS "progressTotal" INTEGER NOT NULL DEFAULT 0;',
+      'CREATE TABLE IF NOT EXISTS "JobItem" ("id" TEXT NOT NULL);',
+      'ALTER TABLE "JobItem" ADD CONSTRAINT "JobItem_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "AsyncJob"("id");',
       'ALTER TABLE "Exception" ADD CONSTRAINT "Exception_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "Batch"("id");',
       'CREATE POLICY tenant_isolation_policy ON "Batch" USING (true);',
     ].join("\n");
     const declared = extractDeclaredObjects([sql]);
-    assert.deepEqual(declared.constraints, [{ table: "Exception", name: "Exception_batchId_fkey" }]);
+    assert.deepEqual(declared.constraints, [
+      { table: "Exception", name: "Exception_batchId_fkey" },
+      { table: "JobItem", name: "JobItem_jobId_fkey" },
+    ]);
     assert.deepEqual(declared.policies, [{ table: "Batch", name: "tenant_isolation_policy" }]);
   });
+
 
   await test("10. the real migrations declare the guards that the silent-skip bug destroyed", () => {
     const declared = extractDeclaredObjects(readMigrationFiles().map((m) => m.sql));
