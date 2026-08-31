@@ -414,6 +414,26 @@ export const metrics = {
     "settlemate_invoice_solver_invalid_result_total",
     "Total solver results rejected by deterministic verifier"
   ),
+  correctionProposedTotal: registry.counter(
+    "settlemate_correction_proposed_total",
+    "Total minimal correcting journal entries proposed"
+  ),
+  correctionApprovedTotal: registry.counter(
+    "settlemate_correction_approved_total",
+    "Total minimal correcting journal entries approved and committed"
+  ),
+  correctionRejectedTotal: registry.counter(
+    "settlemate_correction_rejected_total",
+    "Total proposed corrections rejected by human reviewer"
+  ),
+  correctionStaleTotal: registry.counter(
+    "settlemate_correction_stale_total",
+    "Total correction approval attempts rejected due to stale underlying record"
+  ),
+  correctionFailedTotal: registry.counter(
+    "settlemate_correction_failed_total",
+    "Total correction proposal or proof execution failures"
+  ),
 };
 
 /** Renders all registered metrics in Prometheus text exposition format. */
