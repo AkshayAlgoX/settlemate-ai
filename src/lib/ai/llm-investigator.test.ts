@@ -95,14 +95,15 @@ async function runTests() {
     delete process.env.GEMINI_API_KEY;
 
     try {
-      const res = await executeAiInvestigator(sampleRequest);
+      const uniqueRequest = { ...sampleRequest, exceptionId: `exc_test_fallback_${Date.now()}` };
+      const res = await executeAiInvestigator(uniqueRequest);
       assert.equal(res.isOfflineFallback, true);
       assert.equal(res.model, "offline-fallback");
       assert.ok(res.latencyMs >= 0);
       assert.ok(res.investigator.claims.length >= 2);
 
       // Verify logged to SQLite
-      const logs = AiClaimLogRepository.getByExceptionId(sampleRequest.exceptionId);
+      const logs = AiClaimLogRepository.getByExceptionId(uniqueRequest.exceptionId);
       assert.ok(logs.length > 0);
       assert.equal(logs[0].status, "FALLBACK");
       assert.equal(logs[0].model, "offline-fallback");

@@ -28,7 +28,6 @@ import type {
   InvestigatorOutput,
   CriticEvaluation,
   CriticObjection,
-  FalsificationTest,
 } from "./zod-schemas";
 import { CriticEvaluationSchema } from "./zod-schemas";
 import { DEFAULT_POLICY } from "../policy/manager";

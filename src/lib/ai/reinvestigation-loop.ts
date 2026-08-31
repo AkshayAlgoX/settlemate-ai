@@ -30,7 +30,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import type { CouncilReviewRequest, CouncilDecision } from "./council";
+import type { CouncilReviewRequest } from "./council";
 import { shouldInvokeCouncil } from "./council";
 import { z3Prover } from "./z3-prover";
 import { tamperProofEvidenceGate } from "../evidence/tamper-proof";
@@ -142,7 +142,10 @@ export class InnovationBackboneEngine {
     // If straight-through bypass is qualified AND Z3 proof holds AND evidence is clean
     if (!routing.shouldInvoke && z3Proof.conservationPassed && tamperReport.isValid) {
       trace.push(`[Deterministic Gate] Qualified for straight-through AI bypass (${routing.routingReason})`);
-      const defaultInvestigator = generateDeterministicClaims(request);
+      const defaultInvestigator = InvestigatorOutputSchema.parse({
+        ...generateDeterministicClaims(request),
+        iteration: 0,
+      });
       const defaultCritic = adversarialCritic.evaluate(defaultInvestigator, request);
       const defaultMech = mechanicalVerifier.verifyObjections(defaultCritic.objections, request);
 
@@ -182,7 +185,10 @@ export class InnovationBackboneEngine {
     // STEP 4 & 5: ITERATIVE INVESTIGATION & REINVESTIGATE LOOP
     // =========================================================================
     let currentIteration = 0;
-    let currentInvestigator: InvestigatorOutput = generateDeterministicClaims(request);
+    let currentInvestigator: InvestigatorOutput = InvestigatorOutputSchema.parse({
+      ...generateDeterministicClaims(request),
+      iteration: 0,
+    });
     let currentCritic: CriticEvaluation = adversarialCritic.evaluate(currentInvestigator, request);
     let currentMech: MechanicalVerificationResult = mechanicalVerifier.verifyObjections(currentCritic.objections, request);
     const loopHistory: ReinvestigationState["history"] = [];
@@ -198,10 +204,13 @@ export class InnovationBackboneEngine {
           .map((v) => v.mechanicalEvidence);
 
         const base = generateDeterministicClaims(request);
-        base.iteration = currentIteration;
-        base.reasoning = `${base.reasoning} [Reinvestigation Pass ${currentIteration}: Addressed ${confirmedObjectionTexts.length} verified objections]`;
-        base.uncertainties = [...base.uncertainties, ...confirmedObjectionTexts];
-        currentInvestigator = InvestigatorOutputSchema.parse(base);
+        const revised = {
+          ...base,
+          iteration: currentIteration,
+          reasoning: `${base.reasoning} [Reinvestigation Pass ${currentIteration}: Addressed ${confirmedObjectionTexts.length} verified objections]`,
+          uncertainties: [...base.uncertainties, ...confirmedObjectionTexts],
+        };
+        currentInvestigator = InvestigatorOutputSchema.parse(revised);
       }
 
       // 2. ONE Adversarial Critic evaluates across 3 lenses

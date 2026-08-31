@@ -370,6 +370,22 @@ export const metrics = {
     "settlemate_archive_restore_total",
     "Total archival object restores retrieved"
   ),
+  routingAutoResolveTotal: registry.counter(
+    "settlemate_routing_auto_resolve_total",
+    "Total routing decisions automatically resolved via low deterministic risk"
+  ),
+  routingHumanReviewTotal: registry.counter(
+    "settlemate_routing_human_review_total",
+    "Total routing decisions escalated to human review"
+  ),
+  routingBlockedTotal: registry.counter(
+    "settlemate_routing_blocked_total",
+    "Total routing decisions blocked by invariant or verification failures"
+  ),
+  routingReinvestigateTotal: registry.counter(
+    "settlemate_routing_reinvestigate_total",
+    "Total routing decisions routed back to reinvestigation due to confirmed challenges"
+  ),
 };
 
 /** Renders all registered metrics in Prometheus text exposition format. */

@@ -81,9 +81,9 @@ export function computeEvidenceMerkleRoot(hashes: string[]): string {
 export class TamperProofEvidenceGate {
   private allowedAccessLevels: Set<AccessClassification> = new Set([
     "PUBLIC",
-    "INTERNAL",
     "CONFIDENTIAL",
     "RESTRICTED",
+    "HIGHLY_RESTRICTED",
   ]);
 
   /**

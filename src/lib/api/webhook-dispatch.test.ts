@@ -53,7 +53,7 @@ async function runTests() {
     assert.ok(log.signature.includes(",v1="));
 
     // Verify stored in SQLite
-    const recentLogs = v1Store.getWebhookLogs(5);
+    const recentLogs = v1Store.getWebhookLogs(100);
     const found = recentLogs.find((l) => l.id === log.id);
     assert.ok(found);
   });
