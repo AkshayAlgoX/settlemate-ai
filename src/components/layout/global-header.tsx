@@ -49,7 +49,6 @@ export function GlobalHeader({
   // Poll for global active background jobs
   useEffect(() => {
     let mounted = true;
-    let timer: NodeJS.Timeout | null = null;
 
     async function checkActiveJobs() {
       try {
@@ -76,9 +75,9 @@ export function GlobalHeader({
     return () => {
       mounted = false;
       clearInterval(interval);
-      if (timer) clearInterval(timer);
     };
   }, []);
+
 
   // Increment timer while active
   useEffect(() => {

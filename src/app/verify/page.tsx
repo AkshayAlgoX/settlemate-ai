@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
+
   RefreshCw,
   Check,
   Copy,
@@ -89,12 +90,45 @@ export default function VerificationHubPage() {
     setSelectedSuites(AVAILABLE_SUITES.map((s) => s.id));
   };
 
-  const stopPolling = () => {
+  const stopPolling = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
-  };
+  }, []);
+
+  const startPolling = useCallback((jobId: string) => {
+    stopPolling();
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await safeFetch<{ success?: boolean; job?: VerifyJobState }>(`/api/verify/progress/${jobId}`);
+        if (!res.ok || !res.data) return;
+
+        const data = res.data;
+        if (data.success && data.job) {
+          const job = data.job;
+          setOverallProgress(job.overallProgressPct);
+          setLiveSuiteStates(job.results);
+
+          if (job.status === "COMPLETED" || job.status === "FAILED") {
+            stopPolling();
+            setIsRunning(false);
+            setFinalResponse({
+              success: true,
+              allPassed: job.allPassed ?? false,
+              timestamp: job.completedAt || new Date().toISOString(),
+              totalDurationMs: job.totalDurationMs || 0,
+              totalSuitesExecuted: job.completedSuites,
+              results: job.results,
+              jobId: job.jobId,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Polling error:", err);
+      }
+    }, 1500);
+  }, [stopPolling]);
 
   // Recover active or latest job on mount
   useEffect(() => {
@@ -129,7 +163,7 @@ export default function VerificationHubPage() {
       mounted = false;
       stopPolling();
     };
-  }, []);
+  }, [startPolling, stopPolling]);
 
   const handleRunVerification = async () => {
     stopPolling();
@@ -196,39 +230,6 @@ export default function VerificationHubPage() {
     }
   };
 
-  const startPolling = (jobId: string) => {
-    stopPolling();
-    pollingRef.current = setInterval(async () => {
-      try {
-        const res = await safeFetch<{ success?: boolean; job?: VerifyJobState }>(`/api/verify/progress/${jobId}`);
-        if (!res.ok || !res.data) return;
-
-        const data = res.data;
-        if (data.success && data.job) {
-          const job = data.job;
-          setOverallProgress(job.overallProgressPct);
-          setLiveSuiteStates(job.results);
-
-          if (job.status === "COMPLETED" || job.status === "FAILED") {
-            stopPolling();
-            setIsRunning(false);
-            setFinalResponse({
-              success: true,
-              allPassed: job.allPassed ?? false,
-              timestamp: job.completedAt || new Date().toISOString(),
-              totalDurationMs: job.totalDurationMs || 0,
-              totalSuitesExecuted: job.completedSuites,
-              results: job.results,
-              jobId: job.jobId,
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Polling error:", err);
-      }
-    }, 1500);
-  };
-
   const handleCopyJson = () => {
     if (finalResponse) {
       navigator.clipboard.writeText(JSON.stringify(finalResponse, null, 2));
@@ -236,6 +237,7 @@ export default function VerificationHubPage() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
 
 
   return (

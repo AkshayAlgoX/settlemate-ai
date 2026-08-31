@@ -33,7 +33,6 @@ export default function ForensicsPage() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [offlineVerified, setOfflineVerified] = useState<boolean>(false);
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
-  const [loadingJobs, setLoadingJobs] = useState<boolean>(true);
 
   const playbackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -46,15 +45,13 @@ export default function ForensicsPage() {
           setSelectedJobId(res.data.jobs[0].jobId);
         }
       })
-      .catch((err) => console.error("Failed to load jobs list:", err))
-      .finally(() => {
-        if (mounted) setLoadingJobs(false);
-      });
+      .catch((err) => console.error("Failed to load jobs list:", err));
 
     return () => {
       mounted = false;
     };
   }, []);
+
 
   useEffect(() => {
     let mounted = true;

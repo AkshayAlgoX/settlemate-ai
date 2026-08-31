@@ -71,9 +71,10 @@ async function main() {
 
   try {
     console.log("→ Synchronizing Prisma SQLite schema (idempotent push)...");
-    execSync("npx prisma db push", {
+    execSync("npx prisma db push --accept-data-loss", {
       stdio: "inherit",
       env: {
+
         ...process.env,
         PRISMA_TARGET_PROVIDER: "sqlite",
         DATABASE_URL: `file:${prismaDbPath}`,

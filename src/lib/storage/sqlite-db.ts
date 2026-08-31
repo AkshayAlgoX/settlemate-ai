@@ -283,9 +283,10 @@ export function initDatabase(customPath?: string): DatabaseType {
     if (!cols.includes("error_code")) db.exec("ALTER TABLE reconciliation_jobs ADD COLUMN error_code TEXT");
     db.exec("CREATE INDEX IF NOT EXISTS idx_recon_jobs_tenant ON reconciliation_jobs(tenant_id)");
     db.exec("CREATE INDEX IF NOT EXISTS idx_recon_jobs_status ON reconciliation_jobs(status)");
-  } catch (migErr) {
+  } catch {
     // Ignore migration error if already applied
   }
+
 
 
   // Seed default demo webhook if table is empty
