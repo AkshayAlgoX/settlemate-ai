@@ -121,7 +121,7 @@ async function main() {
       timestamp,
     });
 
-    const logs = UnifiedWebhookRepository.getDeliveryLogs(10);
+    const logs = UnifiedWebhookRepository.getDeliveryLogs(100);
     const foundLog = logs.find((l) => l.id === logId);
     assert.ok(foundLog, "Delivery log must be recorded");
     assert.equal(foundLog.statusCode, 200);
@@ -141,7 +141,7 @@ async function main() {
       createdAt: timestamp,
     });
 
-    const recentLogs = UnifiedAiClaimLogRepository.getRecentLogs(10);
+    const recentLogs = UnifiedAiClaimLogRepository.getRecentLogs(100);
     const found = recentLogs.find((l) => l.id === logId);
     assert.ok(found, "AI claim log must be retrieved");
     assert.equal(found.model, "gpt-4o-financial");

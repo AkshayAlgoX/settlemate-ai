@@ -11,13 +11,9 @@ export async function GET(req: NextRequest) {
   try {
     const session = getSession(req);
     const tenantId = session?.tenantId || "tenant_default_sandbox";
-    const isPg = process.env.DATABASE_URL?.startsWith("postgres://") || process.env.DATABASE_URL?.startsWith("postgresql://");
     const batches = await prisma.batch.findMany({
-      where: isPg
-        ? ({ tenantId } as unknown as Parameters<typeof prisma.batch.findMany>[0] extends { where?: infer W } ? W : never)
-        : undefined,
       orderBy: { createdAt: "desc" },
-      take: 25,
+      take: 500,
       select: {
         id: true,
         name: true,

@@ -536,7 +536,7 @@ export const JobRepository = {
     try {
       const db = getDb();
       const stmt = tenantId
-        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE (tenant_id = ? OR tenant_id IS NULL) ORDER BY created_at DESC")
+        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE tenant_id = ? ORDER BY created_at DESC")
         : db.prepare("SELECT * FROM reconciliation_jobs ORDER BY created_at DESC");
       const rows = (tenantId ? stmt.all(tenantId) : stmt.all()) as Record<string, unknown>[];
       return rows.map((row) => ({
@@ -569,7 +569,7 @@ export const JobRepository = {
     try {
       const db = getDb();
       const stmt = tenantId
-        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE (tenant_id = ? OR tenant_id IS NULL) ORDER BY created_at DESC LIMIT ?")
+        ? db.prepare("SELECT * FROM reconciliation_jobs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?")
         : db.prepare("SELECT * FROM reconciliation_jobs ORDER BY created_at DESC LIMIT ?");
       const rows = (tenantId ? stmt.all(tenantId, limit) : stmt.all(limit)) as Record<string, unknown>[];
       return rows.map((row) => ({

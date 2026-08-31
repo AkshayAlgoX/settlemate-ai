@@ -386,6 +386,34 @@ export const metrics = {
     "settlemate_routing_reinvestigate_total",
     "Total routing decisions routed back to reinvestigation due to confirmed challenges"
   ),
+  invoiceSolverRequestsTotal: registry.counter(
+    "settlemate_invoice_solver_requests_total",
+    "Total combinatorial invoice matching solver requests"
+  ),
+  invoiceSolverExactMatchesTotal: registry.counter(
+    "settlemate_invoice_solver_exact_matches_total",
+    "Total exact 1:1 invoice matches resolved by solver"
+  ),
+  invoiceSolverSplitMatchesTotal: registry.counter(
+    "settlemate_invoice_solver_split_matches_total",
+    "Total split payment matches resolved by CP-SAT solver"
+  ),
+  invoiceSolverPartialTotal: registry.counter(
+    "settlemate_invoice_solver_partial_total",
+    "Total partial payment matches resolved by solver"
+  ),
+  invoiceSolverNoMatchTotal: registry.counter(
+    "settlemate_invoice_solver_no_match_total",
+    "Total solver requests where no feasible match was found"
+  ),
+  invoiceSolverTimeoutTotal: registry.counter(
+    "settlemate_invoice_solver_timeout_total",
+    "Total solver requests that exceeded time ceiling"
+  ),
+  invoiceSolverInvalidResultTotal: registry.counter(
+    "settlemate_invoice_solver_invalid_result_total",
+    "Total solver results rejected by deterministic verifier"
+  ),
 };
 
 /** Renders all registered metrics in Prometheus text exposition format. */

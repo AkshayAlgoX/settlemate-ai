@@ -65,7 +65,7 @@ async function main() {
       createdAt: new Date(Date.now() - 5000).toISOString(),
     };
 
-    UnifiedJobRepository.save(job);
+    await UnifiedJobRepository.saveAsync(job);
 
     // Simulate page mount calling GET /api/batches/jobs
     const req = makeAuthRequest("http://localhost:3000/api/batches/jobs", tenantA);
@@ -103,7 +103,7 @@ async function main() {
       summary: JSON.stringify(mockResult),
     };
 
-    UnifiedJobRepository.save(job);
+    await UnifiedJobRepository.saveAsync(job);
 
     const req = makeAuthRequest(`http://localhost:3000/api/batches/jobs/${jobId}`, tenantA);
     const res = await getJobDetailRoute(req, { params: Promise.resolve({ jobId }) });
@@ -129,7 +129,7 @@ async function main() {
       error: "Simulated worker deadlock error",
     };
 
-    UnifiedJobRepository.save(job);
+    await UnifiedJobRepository.saveAsync(job);
 
     const req = makeAuthRequest(`http://localhost:3000/api/batches/jobs/${jobId}`, tenantA);
     const res = await getJobDetailRoute(req, { params: Promise.resolve({ jobId }) });

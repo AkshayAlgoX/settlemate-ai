@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
     // Run opportunistic stalled job reclamation during list check
     await detectAndReclaimStalledJobs(30000, 3).catch(() => {});
 
-    const { activeJobs: durableActive, recentJobs: durableRecent } = await listDurableJobs(session.tenantId, 20);
-    const unifiedAll = await UnifiedJobRepository.listAsync(session.tenantId, 20);
+    const { activeJobs: durableActive, recentJobs: durableRecent } = await listDurableJobs(session.tenantId, 100);
+    const unifiedAll = await UnifiedJobRepository.listAsync(session.tenantId, 100);
 
     const activeMap = new Map<string, {
       jobId: string;

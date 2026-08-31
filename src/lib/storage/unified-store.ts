@@ -150,6 +150,77 @@ export const UnifiedJobRepository = {
     });
   },
 
+  async saveAsync(job: UnifiedJob): Promise<void> {
+    if (job.tenantId) {
+      localTenantJobMap.set(job.jobId, job.tenantId);
+    }
+    if (isPostgres()) {
+      const tenantId = job.tenantId || getRequiredTenantId();
+      try {
+        await withTenantContext(tenantId, async (tx) => {
+          await (tx as unknown as PrismaDynamicClient).asyncJob?.upsert({
+            where: {
+              tenantId_idempotencyKey: {
+                tenantId,
+                idempotencyKey: job.jobId,
+              },
+            },
+            update: {
+              status: job.status,
+              result: JSON.stringify({
+                summary: job.summary,
+                exceptions: job.exceptions,
+                receipt: job.receipt,
+                webhookUrl: job.webhookUrl,
+              }),
+              error: job.error,
+              completedAt: job.completedAt ? new Date(job.completedAt) : undefined,
+            },
+            create: {
+              id: job.jobId,
+              tenantId,
+              idempotencyKey: job.jobId,
+              jobType: job.type || job.jobType || "RECONCILIATION_BATCH",
+              status: job.status,
+              payload: JSON.stringify({ batchSize: job.batchSize, webhookUrl: job.webhookUrl }),
+              result: JSON.stringify({
+                summary: job.summary,
+                exceptions: job.exceptions,
+                receipt: job.receipt,
+              }),
+              error: job.error,
+              createdAt: new Date(job.createdAt),
+              completedAt: job.completedAt ? new Date(job.completedAt) : undefined,
+            },
+          });
+        });
+      } catch (err: unknown) {
+        console.error("[PostgresJobRepo] saveAsync error:", err);
+      }
+    }
+
+    nativeSqlite.JobRepository.save({
+      jobId: job.jobId,
+      tenantId: job.tenantId,
+      jobType: job.type || job.jobType,
+      status: job.status,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      updatedAt: job.updatedAt,
+      completedAt: job.completedAt,
+      progressPct: job.progressPct,
+      retryCount: job.retryCount,
+      retryable: job.retryable ? 1 : 0,
+      errorCode: job.errorCode,
+      webhookUrl: job.webhookUrl,
+      batchSize: job.batchSize,
+      summary: job.summary,
+      exceptions: job.exceptions,
+      receipt: job.receipt,
+      error: job.error,
+    });
+  },
+
   async getAsync(jobId: string, tenantId?: string): Promise<UnifiedJob | null> {
     if (isPostgres()) {
       const activeTenant = tenantId || getRequiredTenantId();
