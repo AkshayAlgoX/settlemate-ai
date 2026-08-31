@@ -106,82 +106,84 @@ export async function POST(req: NextRequest) {
 
     if (isAsync) {
       // Check if an identical generation job is already active for this tenant to prevent duplicate storms
-      const activeJobs = await UnifiedJobRepository.getActiveJobsAsync(session.tenantId);
+      const { listDurableJobs, enqueueJob } = await import("@/lib/workers/durable-job-worker");
+      const { activeJobs } = await listDurableJobs(session.tenantId);
       const existingJob = activeJobs.find(
-        (j) => j.batchSize === size && (j.status === "PENDING" || j.status === "PROCESSING")
+        (j) =>
+          j.jobType === "BATCH_GENERATION" &&
+          (j.payload?.size === size || j.progressTotal === size) &&
+          (j.status === "PENDING" || j.status === "RUNNING")
       );
       if (existingJob) {
         return NextResponse.json(
           {
             accepted: true,
-            jobId: existingJob.jobId,
+            jobId: existingJob.id,
             status: existingJob.status,
-            size: existingJob.batchSize,
+            size,
+            progressCurrent: existingJob.progressCurrent,
+            progressTotal: existingJob.progressTotal,
             estimatedDurationMs: Math.round(size * 1.8),
-            pollUrl: `/api/batches/jobs/${existingJob.jobId}`,
+            pollUrl: `/api/batches/jobs/${existingJob.id}`,
+            stepUrl: `/api/batches/jobs/${existingJob.id}/step`,
             message: `A background job is already generating ${size.toLocaleString()} records.`,
           },
           { status: 202 }
         );
       }
 
-      const jobId = `job_gen_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const now = new Date().toISOString();
-      UnifiedJobRepository.save({
-        jobId,
-        tenantId: session.tenantId,
-        jobType: "BATCH_GENERATION",
-        status: "PROCESSING",
-        batchSize: size,
-        progressPct: 10,
-        createdAt: now,
-        startedAt: now,
-        updatedAt: now,
+      const idempotencyKey = `gen_${session.tenantId}_${size}_${Date.now()}`;
+      // Pre-create batch shell in database
+      const batch = await prisma.batch.create({
+        data: {
+          name: batchName,
+          size,
+          status: "PROCESSING",
+          source: "GENERATED",
+        },
       });
 
-      // Execute generation in background without blocking HTTP request
-      setImmediate(async () => {
-        try {
-          const res = await executeBatchGeneration(size, batchName);
-          const completedNow = new Date().toISOString();
-          UnifiedJobRepository.save({
-            jobId,
-            tenantId: session.tenantId,
-            jobType: "BATCH_GENERATION",
-            status: "COMPLETED",
-            batchSize: size,
-            progressPct: 100,
-            completedAt: completedNow,
-            createdAt: now,
-            startedAt: now,
-            updatedAt: completedNow,
-            summary: JSON.stringify(res),
-          });
-        } catch (err: unknown) {
-          console.error("Async batch generation error:", err);
-          UnifiedJobRepository.updateStatus(
-            jobId,
-            "FAILED",
-            err instanceof Error ? err.message : String(err),
-            "GENERATION_ERROR",
-            0
-          );
-        }
+      const durableJob = await enqueueJob({
+        tenantId: session.tenantId,
+        idempotencyKey,
+        jobType: "BATCH_GENERATION",
+        payload: {
+          batchId: batch.id,
+          size,
+          batchName,
+        },
+        progressTotal: size,
+      });
+
+      // Save to UnifiedJobRepository for backward compatibility
+      UnifiedJobRepository.save({
+        jobId: durableJob.id,
+        tenantId: session.tenantId,
+        jobType: "BATCH_GENERATION",
+        status: "PENDING",
+        batchSize: size,
+        progressPct: 0,
+        createdAt: new Date().toISOString(),
       });
 
       return NextResponse.json(
         {
           accepted: true,
-          jobId,
-          status: "PROCESSING",
+          jobId: durableJob.id,
+          batchId: batch.id,
+          status: "PENDING",
           size,
+          progressCurrent: 0,
+          progressTotal: size,
           estimatedDurationMs: Math.round(size * 1.8),
-          pollUrl: `/api/batches/jobs/${jobId}`,
-          message: `Generating ${size.toLocaleString()} records in background durable job.`,
+          pollUrl: `/api/batches/jobs/${durableJob.id}`,
+          stepUrl: `/api/batches/jobs/${durableJob.id}/step`,
+          message: `Durable batch generation job queued for ${size.toLocaleString()} records.`,
         },
         { status: 202 }
       );
     }
+
 
 
     const res = await executeBatchGeneration(size, batchName);

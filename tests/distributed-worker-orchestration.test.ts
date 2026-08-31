@@ -30,9 +30,13 @@ import {
   cancelJob,
   createJobItems,
   classifyFailure,
+  stepJobChunk,
+  getDurableJob,
+  listDurableJobs,
   _clearLocalQueue,
   type DurableJobRecord,
 } from "../src/lib/workers/durable-job-worker";
+
 
 
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -422,8 +426,130 @@ async function main() {
     assert.equal(validationFailure.classification, "VALIDATION_FAILURE");
   });
 
+  // 17. Bounded Step Execution ($0 Free Web Service Stepper)
+  await test("TEST 17: stepJobChunk executes one bounded slice and checkpoints progress", async () => {
+    const job = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `step_exec_job_${Date.now()}`,
+      jobType: "BATCH_GENERATION",
+      payload: { size: 250 },
+      progressTotal: 250,
+    });
+
+    // Step 1: Execute 100 items
+    const step1 = await stepJobChunk(job.id, "stepper_1", { chunkSize: 100 });
+    assert.equal(step1.jobId, job.id);
+    assert.equal(step1.progressCurrent, 100);
+    assert.equal(step1.isComplete, false);
+    assert.equal(step1.status, "RUNNING");
+
+    // Read-only status query must not advance progress
+    const statusQuery = await getDurableJob(job.id, TENANT_A);
+    assert.equal(statusQuery?.progressCurrent, 100);
+    assert.equal(statusQuery?.status, "RUNNING");
+
+    // Step 2: Execute next 100 items
+    const step2 = await stepJobChunk(job.id, "stepper_1", { chunkSize: 100 });
+    assert.equal(step2.progressCurrent, 200);
+    assert.equal(step2.isComplete, false);
+
+    // Step 3: Execute final 50 items
+    const step3 = await stepJobChunk(job.id, "stepper_1", { chunkSize: 100 });
+    assert.equal(step3.progressCurrent, 250);
+    assert.equal(step3.isComplete, true);
+    assert.equal(step3.status, "COMPLETED");
+  });
+
+  // 18. Fair Scheduling & Multi-Job Interleaving
+  await test("TEST 18: 250-record job can complete while 10,000-record job is in progress", async () => {
+    const jobLarge = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `large_10k_job_${Date.now()}`,
+      jobType: "BATCH_GENERATION",
+      payload: { size: 10000 },
+      progressTotal: 10000,
+    });
+
+    const jobSmall = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `small_250_job_${Date.now()}`,
+      jobType: "BATCH_GENERATION",
+      payload: { size: 250 },
+      progressTotal: 250,
+    });
+
+    // Step large job once (100 / 10,000)
+    const stepLarge1 = await stepJobChunk(jobLarge.id, "stepper_fair", { chunkSize: 100 });
+    assert.equal(stepLarge1.progressCurrent, 100);
+    assert.equal(stepLarge1.isComplete, false);
+
+    // Step small job to completion in 3 interleaved steps
+    await stepJobChunk(jobSmall.id, "stepper_fair", { chunkSize: 100 });
+    await stepJobChunk(jobLarge.id, "stepper_fair", { chunkSize: 100 }); // Large at 200
+    await stepJobChunk(jobSmall.id, "stepper_fair", { chunkSize: 100 });
+    const stepSmallFinal = await stepJobChunk(jobSmall.id, "stepper_fair", { chunkSize: 100 });
+
+    assert.equal(stepSmallFinal.isComplete, true);
+    assert.equal(stepSmallFinal.status, "COMPLETED");
+
+    // Verify large job is still preserved at checkpoint (200 / 10,000)
+    const largeStatus = await getDurableJob(jobLarge.id, TENANT_A);
+    assert.equal(largeStatus?.progressCurrent, 200);
+    assert.equal(largeStatus?.status, "RUNNING");
+  });
+
+  // 19. Cooperative Step Cancellation
+  await test("TEST 19: Cancellation request cleanly halts future steps and marks job CANCELLED", async () => {
+    const job = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `cancel_step_job_${Date.now()}`,
+      jobType: "BATCH_GENERATION",
+      payload: { size: 1000 },
+      progressTotal: 1000,
+    });
+
+    // Step 1: Advance to 100
+    await stepJobChunk(job.id, "stepper_canceller", { chunkSize: 100 });
+
+    // Request cancellation
+    const cancelOk = await requestJobCancellation(job.id, TENANT_A);
+    assert.equal(cancelOk, true, "Cancellation request must succeed");
+
+    // Next step must detect cancellation and halt immediately
+    const cancelStep = await stepJobChunk(job.id, "stepper_canceller", { chunkSize: 100 });
+    assert.equal(cancelStep.isCancelled, true);
+    assert.equal(cancelStep.status, "CANCELLED");
+    assert.equal(cancelStep.progressCurrent, 100, "Progress must not advance after cancellation");
+  });
+
+  // 20. Stalled / Spin-Down Recovery Resumption
+  await test("TEST 20: Free Render spin-down preserves checkpoint and resumes on wake-up", async () => {
+    const job = await enqueueJob({
+      tenantId: TENANT_A,
+      idempotencyKey: `spindown_job_${Date.now()}`,
+      jobType: "BATCH_GENERATION",
+      payload: { size: 1000 },
+      progressTotal: 1000,
+    });
+
+    // Step to 400
+    await stepJobChunk(job.id, "stepper_old", { chunkSize: 200 });
+    await stepJobChunk(job.id, "stepper_old", { chunkSize: 200 });
+
+    // Simulate Render spin-down: lease expires while sleeping
+    await new Promise((r) => setTimeout(r, 10));
+    const { stalledCount } = await detectAndReclaimStalledJobs(1, 0);
+    assert.ok(stalledCount >= 1, "Stalled detector must reclaim job with expired lease");
+
+    // Next worker wakes up and resumes stepping from 400
+    const resumeStep = await stepJobChunk(job.id, "stepper_new", { chunkSize: 200 });
+    assert.equal(resumeStep.progressCurrent, 600, "Must resume from checkpoint 400 + 200 = 600");
+    assert.equal(resumeStep.status, "RUNNING");
+  });
+
+
   console.log("\n=========================================================================");
-  console.log(" ✅ ALL 16 DISTRIBUTED DURABLE WORKER ORCHESTRATION TESTS PASSED");
+  console.log(" ✅ ALL 20 DISTRIBUTED DURABLE WORKER ORCHESTRATION TESTS PASSED");
   console.log("=========================================================================\n");
 }
 
