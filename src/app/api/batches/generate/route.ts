@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
         (j) =>
           j.jobType === "BATCH_GENERATION" &&
           (j.payload?.size === size || j.progressTotal === size) &&
-          (j.status === "PENDING" || j.status === "RUNNING")
+          (j.status === "PENDING" || j.status === "CLAIMED" || j.status === "RUNNING" || j.status === "RETRY_WAIT")
       );
       if (existingJob) {
         return NextResponse.json(

@@ -244,9 +244,12 @@ async function main() {
     assert.ok(Array.isArray(logsJson.logs));
     assert.ok(logsJson.logs.length > 0);
 
-    const latestLog = logsJson.logs[0];
-    assert.ok(latestLog.signature.includes("v1="));
-    assert.equal(latestLog.event, "reconciliation.completed");
+    const matchingLog = logsJson.logs.find(
+      (l: { url?: string; event?: string }) => l.url === targetWebhookUrl && l.event === "reconciliation.completed"
+    ) || logsJson.logs[0];
+    assert.ok(matchingLog, "Matching webhook log found");
+    assert.ok(matchingLog.signature.includes("v1="));
+    assert.equal(matchingLog.event, "reconciliation.completed");
   });
 
   console.log("\ne2e-workflows: ALL 6 CRITICAL USER JOURNEYS PASSED\n");

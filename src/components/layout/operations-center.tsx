@@ -19,11 +19,26 @@ export interface OperationJob {
   jobId: string;
   tenantId?: string;
   type?: string;
-  status: "PENDING" | "PROCESSING" | "RUNNING" | "CANCEL_REQUESTED" | "COMPLETED" | "FAILED" | "CANCELLED" | "STALLED" | "DEAD_LETTER";
+  status:
+    | "PENDING"
+    | "CLAIMED"
+    | "PROCESSING"
+    | "RUNNING"
+    | "CANCEL_REQUESTED"
+    | "COMPLETED"
+    | "FAILED"
+    | "CANCELLED"
+    | "STALLED"
+    | "RETRY_WAIT"
+    | "DEAD_LETTER";
   batchSize: number;
   progressPct: number;
   progressCurrent?: number;
   progressTotal?: number;
+  recordsPerSecond?: number;
+  estimatedRemainingMs?: number | null;
+  recommendedNextChunkSize?: number;
+  queuePosition?: number;
   createdAt: string;
   cancelRequestedAt?: string;
   result?: { batchId?: string; size?: number };
@@ -37,6 +52,8 @@ export function OperationsCenter() {
   const [isStepping, setIsStepping] = useState(false);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inFlightJobIdsRef = useRef<Set<string>>(new Set());
+  const adaptiveChunkSizesRef = useRef<Map<string, number>>(new Map());
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -63,10 +80,13 @@ export function OperationsCenter() {
 
       if (res.ok && res.data) {
         if (res.data.activeJobs) {
-          // Filter out any jobs that are currently cancelling or cancelled
           const filteredActive = res.data.activeJobs.filter(
             (j) =>
-              (j.status === "PENDING" || j.status === "PROCESSING" || j.status === "RUNNING") &&
+              (j.status === "PENDING" ||
+                j.status === "CLAIMED" ||
+                j.status === "PROCESSING" ||
+                j.status === "RUNNING" ||
+                j.status === "RETRY_WAIT") &&
               !cancellingIds.has(j.jobId)
           );
           setActiveJobs(filteredActive);
@@ -97,33 +117,63 @@ export function OperationsCenter() {
     }
   }, [cancellingIds]);
 
-  // Poll job status periodically
+  // Poll job status periodically and listen to Page Visibility API
   useEffect(() => {
     let mounted = true;
+    let pollInterval = 3000;
+
     const fetchInitial = async () => {
       if (mounted) {
         await refreshJobs();
       }
     };
     void fetchInitial();
-    const interval = setInterval(() => {
+
+    let intervalId = setInterval(() => {
       if (mounted) {
         void refreshJobs();
       }
-    }, 3000);
+    }, pollInterval);
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        // Tab restored to focus: immediately refresh authoritative state and restore aggressive poll
+        void refreshJobs();
+        clearInterval(intervalId);
+        pollInterval = 3000;
+        intervalId = setInterval(() => {
+          if (mounted) void refreshJobs();
+        }, pollInterval);
+      } else {
+        // Tab hidden: back off polling frequency to reduce unnecessary network chatter
+        clearInterval(intervalId);
+        pollInterval = 10000;
+        intervalId = setInterval(() => {
+          if (mounted) void refreshJobs();
+        }, pollInterval);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       mounted = false;
-      clearInterval(interval);
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshJobs]);
 
-  // 2. Bounded Step Executor: drives fair scheduling strictly across active non-cancelled jobs
+  // 2. Bounded Step Executor: centralized single scheduler loop with fair round-robin scheduling
   useEffect(() => {
-    // Only schedule if activeJobs has valid eligible jobs and not currently stepping
     const eligibleJobs = activeJobs.filter(
       (job) =>
-        (job.status === "PENDING" || job.status === "PROCESSING" || job.status === "RUNNING") &&
-        !cancellingIds.has(job.jobId)
+        (job.status === "PENDING" ||
+          job.status === "CLAIMED" ||
+          job.status === "PROCESSING" ||
+          job.status === "RUNNING" ||
+          job.status === "RETRY_WAIT") &&
+        !cancellingIds.has(job.jobId) &&
+        !inFlightJobIdsRef.current.has(job.jobId)
     );
 
     if (eligibleJobs.length === 0 || isStepping) return;
@@ -133,14 +183,17 @@ export function OperationsCenter() {
     async function stepActiveJobs() {
       setIsStepping(true);
       try {
-        // Fair scheduling: step each eligible active job in round-robin sequence
+        // Fair round-robin: step each eligible active job in sequence
         for (const job of eligibleJobs) {
           if (!isMounted) break;
 
-          // Re-verify cancellation check before issuing step call
-          if (cancellingIds.has(job.jobId)) {
+          if (cancellingIds.has(job.jobId) || inFlightJobIdsRef.current.has(job.jobId)) {
             continue;
           }
+
+          // Mark job as in-flight
+          inFlightJobIdsRef.current.add(job.jobId);
+          const nextChunkSize = adaptiveChunkSizesRef.current.get(job.jobId) || 100;
 
           try {
             const res = await safeFetch<{ job?: OperationJob }>(
@@ -148,14 +201,26 @@ export function OperationsCenter() {
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chunkSize: 100 }),
+                body: JSON.stringify({ chunkSize: nextChunkSize }),
               }
             );
 
             if (isMounted) {
               if (res.ok && res.data?.job) {
                 const updated = res.data.job;
+                if (updated.recommendedNextChunkSize) {
+                  adaptiveChunkSizesRef.current.set(job.jobId, updated.recommendedNextChunkSize);
+                }
+
                 if (updated.status === "CANCELLED" || updated.status === "CANCEL_REQUESTED") {
+                  setActiveJobs((prev) => prev.filter((j) => j.jobId !== updated.jobId));
+                  setRecentJobs((prev) => {
+                    const exists = prev.some((j) => j.jobId === updated.jobId);
+                    return exists
+                      ? prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
+                      : [updated, ...prev];
+                  });
+                } else if (updated.status === "COMPLETED" || updated.status === "FAILED") {
                   setActiveJobs((prev) => prev.filter((j) => j.jobId !== updated.jobId));
                   setRecentJobs((prev) => {
                     const exists = prev.some((j) => j.jobId === updated.jobId);
@@ -169,16 +234,20 @@ export function OperationsCenter() {
                   );
                 }
               } else if (!res.ok) {
-                // If 409 conflict or job cancelled on server, remove from active pool
-                setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
+                if (res.status === 409) {
+                  // Conflict / cancelled on server: remove from active pool
+                  setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
+                }
               }
             }
           } catch {
-            // Step error handled on next poll
+            // Step error handled on next tick
+          } finally {
+            inFlightJobIdsRef.current.delete(job.jobId);
           }
 
-          // Small inter-step delay for fair web loop yield
-          await new Promise((r) => setTimeout(r, 200));
+          // Fair web loop yield delay
+          await new Promise((r) => setTimeout(r, 150));
         }
       } finally {
         if (isMounted) {
@@ -188,7 +257,7 @@ export function OperationsCenter() {
       }
     }
 
-    const timer = setTimeout(stepActiveJobs, 1000);
+    const timer = setTimeout(stepActiveJobs, 500);
     return () => {
       isMounted = false;
       clearTimeout(timer);
@@ -216,7 +285,11 @@ export function OperationsCenter() {
 
   const totalActive = activeJobs.filter(
     (j) =>
-      (j.status === "PENDING" || j.status === "PROCESSING" || j.status === "RUNNING") &&
+      (j.status === "PENDING" ||
+        j.status === "CLAIMED" ||
+        j.status === "PROCESSING" ||
+        j.status === "RUNNING" ||
+        j.status === "RETRY_WAIT") &&
       !cancellingIds.has(j.jobId)
   ).length;
 
@@ -284,7 +357,11 @@ export function OperationsCenter() {
                 const isCancelling = cancellingIds.has(job.jobId) || job.status === "CANCEL_REQUESTED";
                 const isCancelled = job.status === "CANCELLED";
                 const isProcessing =
-                  (job.status === "PENDING" || job.status === "PROCESSING" || job.status === "RUNNING") &&
+                  (job.status === "PENDING" ||
+                    job.status === "CLAIMED" ||
+                    job.status === "PROCESSING" ||
+                    job.status === "RUNNING" ||
+                    job.status === "RETRY_WAIT") &&
                   !isCancelling;
                 const isCompleted = job.status === "COMPLETED";
                 const isFailed = job.status === "FAILED" || job.status === "STALLED" || job.status === "DEAD_LETTER";
@@ -309,19 +386,36 @@ export function OperationsCenter() {
                           ? "⏹ Cancelling…"
                           : isCancelled
                           ? "⏹ Cancelled"
+                          : job.queuePosition && job.queuePosition > 1
+                          ? `Queued · Pos ${job.queuePosition}`
                           : isProcessing
                           ? `${job.progressPct}%`
                           : job.status}
                       </span>
                     </div>
 
-                    {/* Progress Bar for active operations */}
+                    {/* Progress Bar & Telemetry for active operations */}
                     {(isProcessing || isCancelling) && (
-                      <div className="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.max(5, job.progressPct)}%` }}
-                        />
+                      <div className="space-y-1">
+                        <div className="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.max(5, job.progressPct)}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground pt-0.5">
+                          <span>
+                            {(job.progressCurrent ?? 0).toLocaleString()} / {(job.batchSize || job.progressTotal || 250).toLocaleString()} recs
+                          </span>
+                          {job.recordsPerSecond ? (
+                            <span>{job.recordsPerSecond.toLocaleString()} rec/s</span>
+                          ) : null}
+                          {job.estimatedRemainingMs ? (
+                            <span>ETA ~{Math.ceil(job.estimatedRemainingMs / 1000)}s</span>
+                          ) : isProcessing && (job.progressCurrent ?? 0) === 0 ? (
+                            <span>calculating ETA…</span>
+                          ) : null}
+                        </div>
                       </div>
                     )}
 

@@ -16,7 +16,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { withTenantContext, getRequiredTenantId } from "@/lib/tenant/tenant-context";
-import { generateSyntheticBatch } from "@/lib/synthetic/generator";
+import { generateSyntheticBatchSlice } from "@/lib/synthetic/generator";
 
 interface DynamicJobPrisma {
   asyncJob?: {
@@ -37,9 +37,34 @@ interface DynamicJobPrisma {
 
 const dynamicPrisma = prisma as unknown as DynamicJobPrisma;
 
-export type JobStatus = "PENDING" | "RUNNING" | "CANCEL_REQUESTED" | "COMPLETED" | "FAILED" | "STALLED" | "CANCELLED" | "DEAD_LETTER";
+export type JobStatus =
+  | "PENDING"
+  | "CLAIMED"
+  | "RUNNING"
+  | "CANCEL_REQUESTED"
+  | "STALLED"
+  | "RETRY_WAIT"
+  | "COMPLETED"
+  | "FAILED"
+  | "DEAD_LETTER"
+  | "CANCELLED";
+
 export type JobItemStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "RETRYABLE_FAILED" | "CANCELLED";
-export type FailureClassification = "TRANSIENT" | "PERMANENT" | "INVARIANT_FAILURE" | "VALIDATION_FAILURE" | "RATE_LIMIT" | "TIMEOUT";
+export type FailureClassification =
+  | "TRANSIENT"
+  | "PERMANENT"
+  | "INVARIANT_FAILURE"
+  | "VALIDATION_FAILURE"
+  | "BUSINESS_RULE_ERROR"
+  | "RATE_LIMIT"
+  | "RATE_LIMITED_429"
+  | "TIMEOUT"
+  | "DATABASE_TIMEOUT"
+  | "NETWORK_TIMEOUT"
+  | "SERVICE_UNAVAILABLE"
+  | "CANCELLED"
+  | "STALE_LEASE"
+  | "UNKNOWN";
 
 export interface DurableJobRecord {
   id: string;
@@ -60,6 +85,7 @@ export interface DurableJobRecord {
   cancelRequestedAt?: Date;
   progressCurrent: number;
   progressTotal: number;
+  queuePosition?: number;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;
@@ -103,14 +129,17 @@ function isPostgres(): boolean {
 
 /**
  * Validates legal job state machine transitions.
+ * Explicitly guards against illegal transitions and enforces fail-closed state flow.
  */
 export function assertValidTransition(current: JobStatus, next: JobStatus): void {
   const legalTransitions: Record<JobStatus, JobStatus[]> = {
-    PENDING: ["PENDING", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "FAILED", "DEAD_LETTER"],
-    RUNNING: ["RUNNING", "CANCEL_REQUESTED", "COMPLETED", "FAILED", "STALLED", "CANCELLED", "PENDING", "DEAD_LETTER"],
+    PENDING: ["PENDING", "CLAIMED", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "FAILED", "DEAD_LETTER"],
+    CLAIMED: ["CLAIMED", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "STALLED", "FAILED", "PENDING"],
+    RUNNING: ["RUNNING", "CANCEL_REQUESTED", "COMPLETED", "FAILED", "STALLED", "RETRY_WAIT", "CANCELLED", "PENDING", "DEAD_LETTER"],
     CANCEL_REQUESTED: ["CANCEL_REQUESTED", "CANCELLED"],
-    STALLED: ["STALLED", "PENDING", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "FAILED", "DEAD_LETTER"],
-    FAILED: ["FAILED", "PENDING", "DEAD_LETTER"],
+    STALLED: ["STALLED", "RETRY_WAIT", "PENDING", "CLAIMED", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "FAILED", "DEAD_LETTER"],
+    RETRY_WAIT: ["RETRY_WAIT", "PENDING", "CLAIMED", "RUNNING", "CANCEL_REQUESTED", "CANCELLED", "DEAD_LETTER"],
+    FAILED: ["FAILED", "RETRY_WAIT", "PENDING", "DEAD_LETTER"],
     CANCELLED: ["CANCELLED"], // Terminal
     DEAD_LETTER: ["DEAD_LETTER", "PENDING"], // Controlled admin replay only
     COMPLETED: ["COMPLETED"], // Terminal
@@ -138,39 +167,123 @@ export function calculateBackoffMs(
   if (!withJitter) {
     return backoffSec * 1000;
   }
-  const jitter = Math.random() * 0.25 * backoffSec;
-  return Math.round((backoffSec + jitter) * 1000);
+  const jitter = (0.5 + Math.random() * 0.75) * backoffSec;
+  return Math.round(jitter * 1000);
 }
 
-
 /**
- * Classifies failure into retryable vs non-retryable categories.
+ * Classifies failure into retryable vs non-retryable categories with retry-after timing.
  */
 export function classifyFailure(err: unknown): {
   classification: FailureClassification;
   retryable: boolean;
   errorMsg: string;
+  retryAfterMs?: number;
 } {
   const errorMsg = err instanceof Error ? err.message : String(err);
   const lower = errorMsg.toLowerCase();
 
+  if (lower.includes("cancel") || lower.includes("aborted")) {
+    return { classification: "CANCELLED", retryable: false, errorMsg };
+  }
   if (lower.includes("invariant") || lower.includes("control_failure") || lower.includes("tampered")) {
     return { classification: "INVARIANT_FAILURE", retryable: false, errorMsg };
   }
   if (lower.includes("validation") || lower.includes("invalid input") || lower.includes("schema mismatch")) {
     return { classification: "VALIDATION_FAILURE", retryable: false, errorMsg };
   }
-  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota exceeded")) {
-    return { classification: "RATE_LIMIT", retryable: true, errorMsg };
+  if (lower.includes("business_rule") || lower.includes("unauthorized") || lower.includes("forbidden")) {
+    return { classification: "BUSINESS_RULE_ERROR", retryable: false, errorMsg };
+  }
+  if (lower.includes("stale lease") || lower.includes("lease expired") || lower.includes("lost lease")) {
+    return { classification: "STALE_LEASE", retryable: true, errorMsg, retryAfterMs: 1000 };
+  }
+  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota exceeded") || lower.includes("too many requests")) {
+    return { classification: "RATE_LIMIT", retryable: true, errorMsg, retryAfterMs: 5000 };
+  }
+  if (lower.includes("db timeout") || lower.includes("query_timeout") || lower.includes("canceling statement due to statement timeout")) {
+    return { classification: "DATABASE_TIMEOUT", retryable: true, errorMsg, retryAfterMs: 2000 };
   }
   if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("econnreset") || lower.includes("etimedout")) {
-    return { classification: "TIMEOUT", retryable: true, errorMsg };
+    return { classification: "TIMEOUT", retryable: true, errorMsg, retryAfterMs: 2000 };
   }
-  if (lower.includes("sqlite_busy") || lower.includes("deadlock") || lower.includes("connection terminated") || lower.includes("econnrefused")) {
-    return { classification: "TRANSIENT", retryable: true, errorMsg };
+  if (lower.includes("503") || lower.includes("service unavailable") || lower.includes("econnrefused") || lower.includes("connection refused")) {
+    return { classification: "SERVICE_UNAVAILABLE", retryable: true, errorMsg, retryAfterMs: 3000 };
+  }
+  if (lower.includes("sqlite_busy") || lower.includes("deadlock") || lower.includes("connection terminated") || lower.includes("serialization_failure")) {
+    return { classification: "TRANSIENT", retryable: true, errorMsg, retryAfterMs: 1000 };
   }
 
-  return { classification: "TRANSIENT", retryable: true, errorMsg };
+  return { classification: "UNKNOWN", retryable: true, errorMsg };
+}
+
+/**
+ * Adaptive chunk sizing policy targeting ~500ms execution windows (< 2,000ms safety ceiling).
+ * Dynamically adjusts chunk size based on measured execution duration and database write latency.
+ * The same durable bounded-partition engine scales to larger workloads,
+ * constrained by available free compute.
+ *
+ * Invariants:
+ * 1. Minimum chunk size cannot fall below configured floor (default 50).
+ * 2. Maximum chunk size cannot exceed configured ceiling (default 500 for <50k, 2500 for >=50k, hard cap 5000).
+ * 3. Workloads with totalSize >= 50k have bounded chunk ceilings to maintain predictable per-slice latency.
+ * 4. No execution path or scaling factor can bypass the effective floor or ceiling.
+ */
+export function calculateAdaptiveChunkSize(params: {
+  currentChunkSize?: number;
+  lastDurationMs?: number;
+  targetDurationMs?: number;
+  minChunkSize?: number;
+  maxChunkSize?: number;
+  totalSize?: number;
+}): number {
+  const targetMs = Number.isFinite(params.targetDurationMs) && params.targetDurationMs! > 0
+    ? params.targetDurationMs!
+    : 500;
+
+  const rawMin = Number.isFinite(params.minChunkSize) && params.minChunkSize! > 0
+    ? params.minChunkSize!
+    : 50;
+
+  const defaultMax = params.totalSize && params.totalSize >= 50000 ? 2500 : 500;
+  const rawMax = Number.isFinite(params.maxChunkSize) && params.maxChunkSize! > 0
+    ? params.maxChunkSize!
+    : defaultMax;
+
+  // Absolute hard ceiling prevents runaway chunks under all configurations
+  const ABSOLUTE_MAX_CHUNK = 5000;
+  const effectiveMax = Math.min(ABSOLUTE_MAX_CHUNK, Math.max(1, rawMax));
+  const effectiveMin = Math.min(effectiveMax, Math.max(1, rawMin));
+
+  const currentChunk = Number.isFinite(params.currentChunkSize) && params.currentChunkSize! > 0
+    ? params.currentChunkSize!
+    : 100;
+
+  // Guard against missing, zero, negative, or invalid duration
+  if (!params.lastDurationMs || params.lastDurationMs <= 0 || !Number.isFinite(params.lastDurationMs)) {
+    return Math.min(effectiveMax, Math.max(effectiveMin, currentChunk));
+  }
+
+  const duration = params.lastDurationMs;
+  let candidate: number;
+
+  if (duration < 200) {
+    // Fast step — moderate scale up (max 1.3x)
+    const scaleFactor = Math.min(1.3, targetMs / duration);
+    candidate = Math.round(currentChunk * scaleFactor);
+  } else if (duration > 600) {
+    // High duration — scale down aggressively
+    const scaleFactor = Math.max(0.4, targetMs / duration);
+    candidate = Math.round(currentChunk * scaleFactor);
+  } else {
+    // Near target duration (200-600ms) — smoothly tune
+    const rps = (currentChunk / duration) * 1000;
+    const targetCount = Math.round(rps * (targetMs / 1000));
+    candidate = Math.round(currentChunk * 0.7 + targetCount * 0.3);
+  }
+
+  // Unified infallible clamp guarantees floor and ceiling across all paths
+  return Math.min(effectiveMax, Math.max(effectiveMin, candidate));
 }
 
 /**
@@ -1117,7 +1230,9 @@ export class DistributedJobWorker {
 }
 
 // -----------------------------------------------------------------------------
-// BOUNDED STEP EXECUTOR ARCHITECTURE ($0 FREE RENDER COMPLIANT)
+// BOUNDED STEP EXECUTOR ARCHITECTURE (RENDER FREE ARCHITECTURE)
+// The same durable bounded-partition engine scales to larger workloads,
+// constrained by available free compute.
 // -----------------------------------------------------------------------------
 
 export interface StepResult {
@@ -1134,6 +1249,9 @@ export interface StepResult {
   result?: Record<string, unknown>;
   error?: string;
   durationMs: number;
+  recordsPerSecond?: number;
+  estimatedRemainingMs?: number | null;
+  recommendedNextChunkSize?: number;
 }
 
 export type StepHandlerFn = (
@@ -1154,7 +1272,7 @@ export function registerStepHandler(jobType: string, handler: StepHandlerFn): vo
 
 // Global active step limiter: bounds in-flight execution on the free web instance
 let activeInFlightSteps = 0;
-const MAX_CONCURRENT_STEPS = 2;
+const MAX_CONCURRENT_STEPS = 4;
 
 /**
  * Fetches a single durable job record by ID (read-only, status only, no mutations).
@@ -1227,7 +1345,6 @@ export async function listDurableJobs(
           LIMIT ${limit}
         `;
 
-
     const mapped: DurableJobRecord[] = records.map((raw) => ({
       id: raw.id as string,
       tenantId: raw.tenantId as string,
@@ -1254,7 +1371,7 @@ export async function listDurableJobs(
 
     const activeJobs = mapped.filter(
       (j) =>
-        (j.status === "PENDING" || j.status === "RUNNING") &&
+        (j.status === "PENDING" || j.status === "CLAIMED" || j.status === "RUNNING" || j.status === "RETRY_WAIT") &&
         !j.cancelRequestedAt
     );
     const recentJobs = mapped.slice(0, limit);
@@ -1267,7 +1384,7 @@ export async function listDurableJobs(
 
   const activeJobs = all.filter(
     (j) =>
-      (j.status === "PENDING" || j.status === "RUNNING") &&
+      (j.status === "PENDING" || j.status === "CLAIMED" || j.status === "RUNNING" || j.status === "RETRY_WAIT") &&
       !j.cancelRequestedAt
   );
   const recentJobs = all.slice(0, limit);
@@ -1286,7 +1403,7 @@ export async function stepJobChunk(
   options: { chunkSize?: number } = {}
 ): Promise<StepResult> {
   const t0 = performance.now();
-  const chunkSize = Math.max(1, Math.min(500, options.chunkSize ?? 100));
+  const chunkSize = Math.max(1, Math.min(5000, options.chunkSize ?? 100));
 
   const job = await getDurableJob(jobId);
   if (!job) {
@@ -1314,6 +1431,9 @@ export async function stepJobChunk(
       result: job.result,
       error: job.error,
       durationMs: performance.now() - t0,
+      recordsPerSecond: 0,
+      estimatedRemainingMs: null,
+      recommendedNextChunkSize: chunkSize,
     };
   }
 
@@ -1333,6 +1453,9 @@ export async function stepJobChunk(
       isComplete: false,
       isCancelled: true,
       durationMs: performance.now() - t0,
+      recordsPerSecond: 0,
+      estimatedRemainingMs: null,
+      recommendedNextChunkSize: chunkSize,
     };
   }
 
@@ -1350,6 +1473,9 @@ export async function stepJobChunk(
       isComplete: false,
       isCancelled: false,
       durationMs: performance.now() - t0,
+      recordsPerSecond: 0,
+      estimatedRemainingMs: null,
+      recommendedNextChunkSize: chunkSize,
     };
   }
 
@@ -1363,7 +1489,7 @@ export async function stepJobChunk(
       const claimResult = await dynamicPrisma.asyncJob?.updateMany({
         where: {
           id: job.id,
-          status: { in: ["PENDING", "RUNNING"] },
+          status: { in: ["PENDING", "CLAIMED", "RUNNING", "RETRY_WAIT"] },
           cancelRequestedAt: null,
         },
         data: {
@@ -1393,6 +1519,9 @@ export async function stepJobChunk(
             isComplete: false,
             isCancelled: true,
             durationMs: performance.now() - t0,
+            recordsPerSecond: 0,
+            estimatedRemainingMs: null,
+            recommendedNextChunkSize: chunkSize,
           };
         }
       }
@@ -1413,6 +1542,9 @@ export async function stepJobChunk(
               isComplete: false,
               isCancelled: true,
               durationMs: performance.now() - t0,
+              recordsPerSecond: 0,
+              estimatedRemainingMs: null,
+              recommendedNextChunkSize: chunkSize,
             };
           }
           localJob.status = "RUNNING";
@@ -1441,6 +1573,9 @@ export async function stepJobChunk(
         isComplete: false,
         isCancelled: true,
         durationMs: performance.now() - t0,
+        recordsPerSecond: 0,
+        estimatedRemainingMs: null,
+        recommendedNextChunkSize: chunkSize,
       };
     }
 
@@ -1483,10 +1618,24 @@ export async function stepJobChunk(
       }
     }
 
+    const durationMs = Math.max(1, performance.now() - t0);
     const updatedJob = (await getDurableJob(job.id)) || job;
     const progressPct = updatedJob.progressTotal > 0
       ? Math.min(100, Math.round((updatedJob.progressCurrent / updatedJob.progressTotal) * 100))
       : (updatedJob.status === "COMPLETED" ? 100 : 0);
+
+    const recordsPerSecond = durationMs > 0 && stepOutcome.sliceCount > 0
+      ? Math.round((stepOutcome.sliceCount / durationMs) * 1000)
+      : 0;
+    const remainingRecords = Math.max(0, updatedJob.progressTotal - updatedJob.progressCurrent);
+    const estimatedRemainingMs = recordsPerSecond > 0 && remainingRecords > 0
+      ? Math.round((remainingRecords / recordsPerSecond) * 1000)
+      : null;
+    const recommendedNextChunkSize = calculateAdaptiveChunkSize({
+      currentChunkSize: chunkSize,
+      lastDurationMs: durationMs,
+      totalSize: updatedJob.progressTotal,
+    });
 
     return {
       jobId: updatedJob.id,
@@ -1501,9 +1650,13 @@ export async function stepJobChunk(
       isCancelled: updatedJob.status === "CANCELLED",
       result: updatedJob.result || stepOutcome.result,
       error: updatedJob.error || stepOutcome.error,
-      durationMs: performance.now() - t0,
+      durationMs,
+      recordsPerSecond,
+      estimatedRemainingMs,
+      recommendedNextChunkSize,
     };
   } catch (err: unknown) {
+    const durationMs = Math.max(1, performance.now() - t0);
     const classification = classifyFailure(err);
     await failJob(job.id, workerId, classification.errorMsg, classification.classification);
     const failedJob = (await getDurableJob(job.id)) || job;
@@ -1520,14 +1673,17 @@ export async function stepJobChunk(
       isComplete: false,
       isCancelled: false,
       error: classification.errorMsg,
-      durationMs: performance.now() - t0,
+      durationMs,
+      recordsPerSecond: 0,
+      estimatedRemainingMs: null,
+      recommendedNextChunkSize: chunkSize,
     };
   } finally {
     activeInFlightSteps = Math.max(0, activeInFlightSteps - 1);
   }
 }
 
-// Register built-in BATCH_GENERATION step handler
+// Register built-in BATCH_GENERATION step handler (Bounded Memory & Safe Chunk Slicing)
 registerStepHandler("BATCH_GENERATION", async (job, chunkSize) => {
   // 1. Check cancellation before starting any mutation
   if (await checkCancellationRequested(job.id)) {
@@ -1582,15 +1738,15 @@ registerStepHandler("BATCH_GENERATION", async (job, chunkSize) => {
     return { sliceCount: 0, isComplete: true, result: finalResult };
   }
 
-  // 2. Generate synthetic data slice
-  const fullData = generateSyntheticBatch(totalSize);
-  const orderSlice = fullData.orders.slice(startIdx, startIdx + count);
-  const paymentSlice = fullData.payments.slice(startIdx, startIdx + count);
-  const settlementSlice = fullData.settlements.slice(startIdx, startIdx + count);
-  const bankSlice = fullData.bankTransactions.slice(startIdx, startIdx + count);
-  const refundSlice = fullData.refunds.filter((_, idx) => idx >= startIdx && idx < startIdx + count);
-  const chargebackSlice = fullData.chargebacks.filter((_, idx) => idx >= startIdx && idx < startIdx + count);
-  const groundTruthSlice = fullData.groundTruths.filter((_, idx) => idx >= startIdx && idx < startIdx + count);
+  // 2. Generate synthetic data slice (bounded memory: generates ONLY the [startIdx, startIdx+count) slice)
+  const sliceData = generateSyntheticBatchSlice(startIdx, count, totalSize);
+  const orderSlice = sliceData.orders;
+  const paymentSlice = sliceData.payments;
+  const settlementSlice = sliceData.settlements;
+  const bankSlice = sliceData.bankTransactions;
+  const refundSlice = sliceData.refunds;
+  const chargebackSlice = sliceData.chargebacks;
+  const groundTruthSlice = sliceData.groundTruths;
 
   interface CreateManyModel {
     createMany: (args: { data: Record<string, unknown>[] }) => Promise<unknown>;

@@ -48,7 +48,10 @@ export async function GET(req: NextRequest) {
 
     // Add durable active jobs
     for (const d of durableActive) {
-      if ((d.status === "PENDING" || d.status === "RUNNING") && !d.cancelRequestedAt) {
+      if (
+        (d.status === "PENDING" || d.status === "CLAIMED" || d.status === "RUNNING" || d.status === "RETRY_WAIT") &&
+        !d.cancelRequestedAt
+      ) {
         const pct = d.progressTotal > 0 ? Math.min(100, Math.round((d.progressCurrent / d.progressTotal) * 100)) : 0;
         activeMap.set(d.id, {
           jobId: d.id,

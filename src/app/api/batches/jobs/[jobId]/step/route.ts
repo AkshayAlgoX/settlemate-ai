@@ -1,8 +1,9 @@
 /*
- * SettleMate AI — Bounded Job Step Execution Endpoint ($0 Free Render Architecture)
+ * SettleMate AI — Bounded Job Step Execution Endpoint (Render Free Architecture)
  *
  * POST /api/batches/jobs/[jobId]/step
- * Executes a single bounded slice of work (< 1.5s) and checkpoints progress.
+ * Executes a single bounded slice of work (targeting ~500ms, < 2,000ms safety ceiling) and checkpoints progress.
+ * The same durable bounded-partition engine scales to larger workloads, constrained by available free compute.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -171,6 +172,9 @@ export async function POST(
           result: stepResult.result,
           error: stepResult.error,
           durationMs: stepResult.durationMs,
+          recordsPerSecond: stepResult.recordsPerSecond,
+          estimatedRemainingMs: stepResult.estimatedRemainingMs,
+          recommendedNextChunkSize: stepResult.recommendedNextChunkSize,
         },
       })
     );
