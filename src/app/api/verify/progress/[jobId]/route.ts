@@ -93,16 +93,21 @@ export async function POST(
     "finance-ops",
   ];
 
+  const targetSuites =
+    job.requestedSuites && job.requestedSuites.length > 0
+      ? job.requestedSuites
+      : ALL_SUITES;
+
   const executedCount = Object.values(job.results || {}).filter(
     (r) => r.status === "PASS" || r.status === "FAIL"
   ).length;
 
-  if (executedCount < ALL_SUITES.length) {
-    const suiteId = ALL_SUITES[executedCount];
+  if (executedCount < targetSuites.length) {
+    const suiteId = targetSuites[executedCount];
     verifyProgressStore.setSuiteRunning(jobId, suiteId);
 
     try {
-      const suiteResult = runSingleSuite(suiteId);
+      const suiteResult = await runSingleSuite(suiteId);
       verifyProgressStore.setSuiteCompleted(jobId, suiteId, {
         status: suiteResult.status,
         durationMs: suiteResult.durationMs,
@@ -115,7 +120,7 @@ export async function POST(
         (r) => r.status === "PASS" || r.status === "FAIL"
       ).length;
 
-      if (newExecutedCount >= ALL_SUITES.length) {
+      if (newExecutedCount >= targetSuites.length) {
         const allPassed = Object.values(newJob?.results || {}).every((r) => r.status === "PASS");
         const totalDurationMs = Object.values(newJob?.results || {}).reduce(
           (sum, r) => sum + (r.durationMs || 0),
