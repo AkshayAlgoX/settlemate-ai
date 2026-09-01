@@ -616,7 +616,7 @@ export async function requestJobCancellation(jobId: string, tenantId?: string): 
 
     const currentStatus = job.status as JobStatus;
 
-    if (currentStatus === "CANCELLED" || currentStatus === "CANCEL_REQUESTED") {
+    if (currentStatus === "CANCELLED") {
       return true;
     }
 
@@ -624,51 +624,36 @@ export async function requestJobCancellation(jobId: string, tenantId?: string): 
       return false;
     }
 
-    if (currentStatus === "PENDING" || currentStatus === "STALLED") {
-      await dynamicPrisma.asyncJob?.updateMany({
-        where: { id: jobId, tenantId: targetTenant },
-        data: {
-          status: "CANCELLED",
-          cancelRequestedAt: now,
-          completedAt: now,
-          error: "Cancelled by user request",
-          updatedAt: now,
-        },
-      });
+    // Atomically transition to CANCELLED and record cancelRequestedAt
+    await dynamicPrisma.asyncJob?.updateMany({
+      where: { id: jobId, tenantId: targetTenant },
+      data: {
+        status: "CANCELLED",
+        cancelRequestedAt: now,
+        completedAt: now,
+        error: "Cancelled by user request",
+        updatedAt: now,
+      },
+    });
 
-      await dynamicPrisma.jobItem?.updateMany({
-        where: { jobId, status: { in: ["PENDING", "PROCESSING", "RETRYABLE_FAILED"] } },
-        data: { status: "CANCELLED", updatedAt: now },
-      });
+    await dynamicPrisma.jobItem?.updateMany({
+      where: { jobId, status: { in: ["PENDING", "PROCESSING", "RETRYABLE_FAILED"] } },
+      data: { status: "CANCELLED", updatedAt: now },
+    });
 
-      const payload = JSON.parse((job.payload as string) || "{}");
-      if (payload.batchId) {
-        try {
-          await prisma.batch.update({
-            where: { id: payload.batchId },
-            data: { status: "CANCELLED" },
-          });
-        } catch {
-          // Ignore if batch not present
-        }
+    const payload = JSON.parse((job.payload as string) || "{}");
+    if (payload.batchId) {
+      try {
+        await prisma.batch.update({
+          where: { id: payload.batchId },
+          data: { status: "CANCELLED" },
+        });
+      } catch {
+        // Ignore if batch not present
       }
-
-      return true;
     }
 
-    if (currentStatus === "RUNNING") {
-      await dynamicPrisma.asyncJob?.updateMany({
-        where: { id: jobId, tenantId: targetTenant },
-        data: {
-          status: "CANCEL_REQUESTED",
-          cancelRequestedAt: now,
-          updatedAt: now,
-        },
-      });
-      return true;
-    }
-
-    return false;
+    return true;
   }
 
   // Local memory queue
@@ -678,7 +663,7 @@ export async function requestJobCancellation(jobId: string, tenantId?: string): 
         return false;
       }
 
-      if (job.status === "CANCELLED" || job.status === "CANCEL_REQUESTED") {
+      if (job.status === "CANCELLED") {
         return true;
       }
 
@@ -686,40 +671,31 @@ export async function requestJobCancellation(jobId: string, tenantId?: string): 
         return false;
       }
 
-      if (job.status === "PENDING" || job.status === "STALLED") {
-        job.cancelRequestedAt = now;
-        job.status = "CANCELLED";
-        job.completedAt = now;
-        job.error = "Cancelled by user request";
-        job.updatedAt = now;
+      job.cancelRequestedAt = now;
+      job.status = "CANCELLED";
+      job.completedAt = now;
+      job.error = "Cancelled by user request";
+      job.updatedAt = now;
 
-        for (const item of localJobItems.values()) {
-          if (item.jobId === jobId && item.status !== "COMPLETED" && item.status !== "FAILED") {
-            item.status = "CANCELLED";
-            item.updatedAt = now;
-          }
+      for (const item of localJobItems.values()) {
+        if (item.jobId === jobId && item.status !== "COMPLETED" && item.status !== "FAILED") {
+          item.status = "CANCELLED";
+          item.updatedAt = now;
         }
-
-        if (job.payload?.batchId) {
-          try {
-            await prisma.batch.update({
-              where: { id: job.payload.batchId as string },
-              data: { status: "CANCELLED" },
-            });
-          } catch {
-            // Ignore
-          }
-        }
-
-        return true;
       }
 
-      if (job.status === "RUNNING") {
-        job.cancelRequestedAt = now;
-        job.status = "CANCEL_REQUESTED";
-        job.updatedAt = now;
-        return true;
+      if (job.payload?.batchId) {
+        try {
+          await prisma.batch.update({
+            where: { id: job.payload.batchId as string },
+            data: { status: "CANCELLED" },
+          });
+        } catch {
+          // Ignore
+        }
       }
+
+      return true;
     }
   }
 
@@ -749,7 +725,7 @@ export async function checkCancellationRequested(jobId: string): Promise<boolean
  */
 export async function cancelJob(
   jobId: string,
-  workerId?: string,
+  _workerId?: string,
   reason: string = "Cancelled by user request"
 ): Promise<void> {
   const now = new Date();
@@ -758,7 +734,6 @@ export async function cancelJob(
     await dynamicPrisma.asyncJob?.updateMany({
       where: {
         id: jobId,
-        ...(workerId ? { workerId } : {}),
       },
       data: {
         status: "CANCELLED",
@@ -951,6 +926,17 @@ export async function detectAndReclaimStalledJobs(
   let dlqCount = 0;
 
   if (isPostgres()) {
+    // Cleanly finalize any lingering CANCEL_REQUESTED jobs to CANCELLED
+    await dynamicPrisma.asyncJob?.updateMany({
+      where: { status: "CANCEL_REQUESTED" },
+      data: {
+        status: "CANCELLED",
+        completedAt: now,
+        error: "Cancelled by user request",
+        updatedAt: now,
+      },
+    });
+
     // Find all expired RUNNING jobs
     const expiredJobs = (await dynamicPrisma.$queryRaw`
       SELECT id, attempt, "maxRetries"

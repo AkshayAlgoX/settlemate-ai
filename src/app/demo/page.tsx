@@ -292,6 +292,20 @@ export default function DemoPage() {
                 : null
             );
             return;
+          } else if (
+            job.status === ("CANCELLED" as unknown) ||
+            job.status === ("CANCELED" as unknown) ||
+            job.status === ("CANCEL_REQUESTED" as unknown)
+          ) {
+            setActiveJob((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: "CANCELED",
+                  }
+                : null
+            );
+            return;
           }
         }
       } catch (e) {
@@ -630,7 +644,7 @@ export default function DemoPage() {
                     </button>
                   ) : null}
 
-                  {activeJob.status === "COMPLETED" || activeJob.status === "FAILED" ? (
+                  {activeJob.status === "COMPLETED" || activeJob.status === "FAILED" || activeJob.status === "CANCELED" ? (
                     <button
                       type="button"
                       onClick={() => setActiveJob(null)}

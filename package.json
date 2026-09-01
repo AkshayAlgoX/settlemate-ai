@@ -26,6 +26,7 @@
     "test:pipeline": "npx tsx tests/final-integrated-financial-pipeline.test.ts",
     "test:10k-progress": "npx tsx tests/continuous-10k-job-progress-ux.test.ts",
     "test:cancellation": "npx tsx tests/cooperative-cancellation-state-machine.test.ts",
+    "test:cancellation:1m": "npx tsx tests/1m-workload-cancellation-regression.test.ts",
     "test:e2e-cardinality": "npx tsx src/lib/reconciliation/cardinality-e2e.test.ts",
     "test:persistence": "npx tsx tests/persistence-e2e.test.ts",
     "test:postgres": "npx tsx tests/postgres-foundation.test.ts",

@@ -108,7 +108,7 @@ export async function POST(
       NextResponse.json({
         success: true,
         jobId,
-        status: updated?.status || (cancelled ? "CANCEL_REQUESTED" : existing.status),
+        status: updated?.status || (cancelled ? "CANCELLED" : existing.status),
         cancelled,
         cancelRequestedAt: updated?.cancelRequestedAt,
         progressCurrent: updated?.progressCurrent,

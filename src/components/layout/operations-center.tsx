@@ -224,6 +224,22 @@ export function OperationsCenter() {
             if (res.status === 409) {
               // Conflict / cancelled on server: remove from active pool
               setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
+              if (res.data?.job) {
+                const updated = res.data.job;
+                setRecentJobs((prev) => {
+                  const exists = prev.some((j) => j.jobId === updated.jobId);
+                  return exists
+                    ? prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
+                    : [updated, ...prev];
+                });
+                if (updated.status === "CANCELLED" || updated.status === "COMPLETED" || updated.status === "FAILED") {
+                  setCancellingIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(updated.jobId);
+                    return next;
+                  });
+                }
+              }
             }
           }
         } catch {
@@ -275,7 +291,22 @@ export function OperationsCenter() {
     );
 
     try {
-      await safeFetch(`/api/batches/jobs/${jobId}/cancel`, { method: "POST" });
+      const res = await safeFetch<{ success?: boolean; status?: string; jobId?: string; cancelRequestedAt?: string }>(
+        `/api/batches/jobs/${jobId}/cancel`,
+        { method: "POST" }
+      );
+      if (res.ok && res.data) {
+        if (res.data.status === "CANCELLED") {
+          setCancellingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(jobId);
+            return next;
+          });
+          setRecentJobs((prev) =>
+            prev.map((j) => (j.jobId === jobId ? { ...j, status: "CANCELLED", cancelRequestedAt: res.data?.cancelRequestedAt || j.cancelRequestedAt } : j))
+          );
+        }
+      }
       await refreshJobs();
     } catch {
       // Server cancellation error handled on next poll
