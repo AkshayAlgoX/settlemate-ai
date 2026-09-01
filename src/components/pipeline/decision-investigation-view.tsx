@@ -35,6 +35,7 @@ export const DecisionInvestigationView: React.FC = () => {
     setActiveScenario(scenario);
     setLoading(true);
     setError(null);
+    setResult(null);
     try {
       let body: Record<string, unknown> = {};
 
@@ -201,7 +202,11 @@ export const DecisionInvestigationView: React.FC = () => {
                   className={`rounded-md px-2.5 py-0.5 text-xs font-bold ${
                     result.finalDecision === "AUTO_RESOLVED"
                       ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                      : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                      : result.finalDecision === "HUMAN_APPROVED"
+                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                      : result.finalDecision === "HUMAN_REJECTED"
+                      ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30"
+                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30"
                   }`}
                 >
                   {result.finalDecision.replace(/_/g, " ")}
@@ -252,8 +257,20 @@ export const DecisionInvestigationView: React.FC = () => {
                 <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Receipt Status
                 </div>
-                <div className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                  {result.verificationReport.verdict === "VALID" ? "RECEIPT VERIFIED ✅" : "VERIFY FAILED ❌"}
+                <div className="mt-1 text-xs font-semibold">
+                  {result.finalDecision === "BLOCKED" || result.finalDecision === "FAILED" || result.finalDecision === "HUMAN_REJECTED" ? (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      RECEIPT SEALED ({result.finalDecision}) 🛡️
+                    </span>
+                  ) : result.verificationReport.verdict === "VALID" ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      RECEIPT VERIFIED ✅
+                    </span>
+                  ) : (
+                    <span className="text-destructive">
+                      VERIFY FAILED ❌
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

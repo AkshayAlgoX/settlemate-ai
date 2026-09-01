@@ -418,8 +418,94 @@ async function main() {
     assert.equal(res.verificationReport.verdict, "VALID");
   });
 
+  // ---------------------------------------------------------------------------
+  // 6. CONSECUTIVE REPEATED EXECUTION IDEMPOTENCY
+  // ---------------------------------------------------------------------------
+  console.log("\n--- 6. CONSECUTIVE REPEATED EXECUTION IDEMPOTENCY ---");
+
+  await test("21. Demo A (Clean Fast Path) executed twice consecutively succeeds idempotently", async () => {
+    const params = {
+      tenantId: tenantA,
+      transactionId: "tx_demo_a_repeat",
+      currency: "INR",
+      amountMinor: 500000,
+      observedDebitMinor: 500000,
+      observedCreditMinor: 500000,
+      scenarioType: "CLEAN_FAST_PATH" as const,
+    };
+    const run1 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+    const run2 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+
+    assert.equal(run1.finalDecision, "AUTO_RESOLVED");
+    assert.equal(run2.finalDecision, "AUTO_RESOLVED");
+    assert.equal(run1.receipt.receiptId, run2.receipt.receiptId);
+    assert.equal(run1.receipt.proofHash, run2.receipt.proofHash);
+  });
+
+  await test("22. Demo B (Adversarial Reinvestigation) executed twice consecutively succeeds idempotently", async () => {
+    const params = {
+      tenantId: tenantA,
+      transactionId: "tx_demo_b_repeat",
+      currency: "INR",
+      amountMinor: 120000,
+      observedDebitMinor: 120000,
+      observedCreditMinor: 110000,
+      scenarioType: "ADVERSARIAL_REINVESTIGATION" as const,
+    };
+    const run1 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+    const run2 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+
+    assert.equal(run1.finalDecision, run2.finalDecision);
+    assert.equal(run1.receipt.receiptId, run2.receipt.receiptId);
+    assert.equal(run1.receipt.proofHash, run2.receipt.proofHash);
+  });
+
+  await test("23. Demo C (Human Correction) executed twice consecutively succeeds idempotently", async () => {
+    const params = {
+      tenantId: tenantA,
+      transactionId: "tx_demo_c_repeat",
+      currency: "INR",
+      amountMinor: 8750000,
+      observedDebitMinor: 8750000,
+      observedCreditMinor: 7500000,
+      scenarioType: "HUMAN_CORRECTION" as const,
+      humanApprovalAction: "APPROVE" as const,
+      humanReviewer: "lead_controller",
+    };
+    const run1 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+    const run2 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+
+    assert.equal(run1.finalDecision, "HUMAN_APPROVED");
+    assert.equal(run2.finalDecision, "HUMAN_APPROVED");
+    assert.equal(run1.receipt.receiptId, run2.receipt.receiptId);
+    assert.equal(run1.receipt.proofHash, run2.receipt.proofHash);
+  });
+
+  await test("24. Split Payment (OR-Tools) executed twice consecutively succeeds idempotently", async () => {
+    const params = {
+      tenantId: tenantA,
+      transactionId: "tx_demo_split_repeat",
+      currency: "INR",
+      amountMinor: 10000000,
+      observedDebitMinor: 10000000,
+      observedCreditMinor: 10000000,
+      scenarioType: "SPLIT_PAYMENT" as const,
+      invoiceCandidates: [
+        { invoiceId: "INV-R1", amountMinor: 3000000, currency: "INR", status: "OPEN" as const },
+        { invoiceId: "INV-R2", amountMinor: 2500000, currency: "INR", status: "OPEN" as const },
+        { invoiceId: "INV-R3", amountMinor: 4500000, currency: "INR", status: "OPEN" as const },
+      ],
+    };
+    const run1 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+    const run2 = await CanonicalFinancialPipelineOrchestrator.execute(params);
+
+    assert.equal(run1.finalDecision, run2.finalDecision);
+    assert.equal(run1.receipt.receiptId, run2.receipt.receiptId);
+    assert.equal(run1.receipt.proofHash, run2.receipt.proofHash);
+  });
+
   console.log("\n=========================================================================");
-  console.log(" ✅ ALL 20 FINAL INTEGRATED PIPELINE TEST SCENARIOS PASSED");
+  console.log(" ✅ ALL 24 FINAL INTEGRATED PIPELINE TEST SCENARIOS PASSED");
   console.log("=========================================================================\n");
 }
 

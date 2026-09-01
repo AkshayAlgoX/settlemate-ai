@@ -52,6 +52,12 @@ export class TerminalReceiptRepository {
           // Exactly identical -> idempotent success
           return { success: true, receipt: existing, idempotent: true };
         }
+        // If content is identical except for timestamp on identical logical execution:
+        const existingNoTime = { ...existing, createdAt: "" };
+        const incomingNoTime = { ...validated, createdAt: "" };
+        if (canonicalizeReceipt(existingNoTime) === canonicalizeReceipt(incomingNoTime)) {
+          return { success: true, receipt: existing, idempotent: true };
+        }
         // Different content -> violation of immutability
         throw new ReceiptImmutableError(validated.receiptId);
       }

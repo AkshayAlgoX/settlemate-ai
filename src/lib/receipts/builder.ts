@@ -1,4 +1,4 @@
-﻿/*
+/*
  * SettleMate AI — Milestone 5: Terminal Decision Receipt Builder
  *
  * Assembles and cryptographically seals the terminal decision receipt
@@ -68,8 +68,14 @@ export async function createTerminalDecisionReceipt(
     ...(params.policyVersions || {}),
   };
 
-  const receiptSeed = `${params.tenantId}:${params.transactionId}:${params.finalDecision}:${policyVersions.receiptVersion}`;
+  const receiptSeed = `${params.tenantId}:${params.transactionId}:${params.inputCommitment.inputHash}:${params.finalDecision}:${policyVersions.receiptVersion}`;
   const receiptId = `rcpt_${createHash("sha256").update(receiptSeed).digest("hex").slice(0, 16)}`;
+
+  // Return existing immutable receipt for identical logical execution
+  const existing = await TerminalReceiptRepository.getReceipt(receiptId, params.tenantId);
+  if (existing && existing.inputCommitment.inputHash === params.inputCommitment.inputHash && existing.finalDecision === params.finalDecision) {
+    return existing;
+  }
 
   const unsignedReceipt: Omit<TerminalDecisionReceipt, "proofHash" | "signature"> = {
     receiptId,
