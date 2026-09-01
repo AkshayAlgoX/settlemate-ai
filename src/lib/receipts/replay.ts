@@ -66,12 +66,9 @@ export function replayTerminalReceipt(
     }
 
     const invariantStatus = receipt.invariantProof.status === "PROOF_VALID" ? "VERIFIED" : "FAILED";
-    const mechanicalVerificationStatus =
-      receipt.mechanicalVerification?.verdict === "PASSED" || rd.verificationStatus === "VERIFIED"
-        ? "VERIFIED"
-        : receipt.mechanicalVerification?.verdict === "FAILED"
-        ? "FAILED"
-        : "UNCHECKED";
+    const mechanicalVerificationStatus = receipt.mechanicalVerification
+      ? (receipt.mechanicalVerification.verdict === "PASSED" ? "VERIFIED" : "FAILED")
+      : (rd.verificationStatus === "VERIFIED" ? "VERIFIED" : "FAILED");
 
     const recomputedRouting = calculateRoutingRisk({
       tenantId: receipt.tenantId,

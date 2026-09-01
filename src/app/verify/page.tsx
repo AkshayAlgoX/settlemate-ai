@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatAuditTime } from "@/lib/format";
 
 import { safeFetch } from "@/lib/api/safe-fetch";
+import { DecisionInvestigationView } from "@/components/pipeline/decision-investigation-view";
 
 interface SuiteResult {
   suiteId: string;
@@ -310,6 +311,9 @@ export default function VerificationHubPage() {
           </div>
         </div>
       )}
+
+      {/* Interactive Financial Decision Pipeline Visualizer */}
+      <DecisionInvestigationView />
 
       {/* Suite Selection Controls */}
       <div className="p-5 rounded-xl border border-border bg-card space-y-4 shadow-2xs">

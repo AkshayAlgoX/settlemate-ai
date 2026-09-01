@@ -186,9 +186,9 @@ export class AdversarialCritic {
     // =========================================================================
     // LENS 3: TIMING & POLICY LENS
     // =========================================================================
-    if (context.paymentRecord && context.settlementRecord) {
-      const pDate = context.paymentRecord.createdAt.getTime();
-      const sDate = context.settlementRecord.settledAt.getTime();
+    if (context.paymentRecord?.createdAt && context.settlementRecord?.settledAt) {
+      const pDate = new Date(context.paymentRecord.createdAt).getTime();
+      const sDate = new Date(context.settlementRecord.settledAt).getTime();
       const delayHours = Math.abs(sDate - pDate) / 3600_000;
       const maxHours = policy.rules?.toleranceWindowHours ?? ((policy.rules as unknown as Record<string, number>)?.maxSettlementDelayHours) ?? 72;
 
