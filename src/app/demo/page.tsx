@@ -36,9 +36,9 @@ const SIZES: ScaleOption[] = [
   { size: 250, label: "250", badge: "Official Benchmark", mode: "STANDARD" },
   { size: 1000, label: "1,000", badge: "Standard", mode: "STANDARD" },
   { size: 10000, label: "10,000", badge: "Standard", mode: "STANDARD" },
-  { size: 100000, label: "100k", badge: "Scale Lab", mode: "STREAMING" },
-  { size: 1000000, label: "1M", badge: "Hyperscale Lab", mode: "STREAMING" },
-  { size: 10000000, label: "10M", badge: "Stress Test", mode: "STREAMING" },
+  { size: 100000, label: "100k", badge: "Scale Lab", mode: "STANDARD" },
+  { size: 1000000, label: "1M", badge: "Hyperscale Lab", mode: "STANDARD" },
+  { size: 10000000, label: "10M", badge: "Stress Test", mode: "STANDARD" },
 ];
 
 const DISTRIBUTION = [

@@ -91,10 +91,7 @@ export const UnifiedJobRepository = {
       withTenantContext(tenantId, async (tx) => {
         await (tx as unknown as PrismaDynamicClient).asyncJob?.upsert({
           where: {
-            tenantId_idempotencyKey: {
-              tenantId,
-              idempotencyKey: job.jobId,
-            },
+            id: job.jobId,
           },
           update: {
             status: job.status,
@@ -160,10 +157,7 @@ export const UnifiedJobRepository = {
         await withTenantContext(tenantId, async (tx) => {
           await (tx as unknown as PrismaDynamicClient).asyncJob?.upsert({
             where: {
-              tenantId_idempotencyKey: {
-                tenantId,
-                idempotencyKey: job.jobId,
-              },
+              id: job.jobId,
             },
             update: {
               status: job.status,

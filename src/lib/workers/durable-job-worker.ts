@@ -339,22 +339,60 @@ export async function enqueueJob(params: {
     }
 
     const createdId = randomUUID();
-    await dynamicPrisma.asyncJob?.create({
-      data: {
-        id: createdId,
-        tenantId,
-        idempotencyKey: params.idempotencyKey,
-        jobType: params.jobType,
-        status: "PENDING",
-        payload: JSON.stringify(params.payload),
-        attempt: 0,
-        maxRetries,
-        progressCurrent: 0,
-        progressTotal,
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
+    try {
+      await dynamicPrisma.asyncJob?.create({
+        data: {
+          id: createdId,
+          tenantId,
+          idempotencyKey: params.idempotencyKey,
+          jobType: params.jobType,
+          status: "PENDING",
+          payload: JSON.stringify(params.payload),
+          attempt: 0,
+          maxRetries,
+          progressCurrent: 0,
+          progressTotal,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+    } catch (createErr: unknown) {
+      // If a concurrent request inserted the same (tenantId, idempotencyKey), return the winning record
+      const raced = await dynamicPrisma.asyncJob?.findUnique({
+        where: {
+          tenantId_idempotencyKey: {
+            tenantId,
+            idempotencyKey: params.idempotencyKey,
+          },
+        },
+      });
+      if (raced) {
+        return {
+          id: raced.id as string,
+          tenantId: raced.tenantId as string,
+          idempotencyKey: raced.idempotencyKey as string,
+          jobType: raced.jobType as string,
+          status: raced.status as JobStatus,
+          payload: JSON.parse((raced.payload as string) || "{}"),
+          result: raced.result ? JSON.parse(raced.result as string) : undefined,
+          error: (raced.error as string) || undefined,
+          attempt: Number(raced.attempt || 0),
+          maxRetries: Number(raced.maxRetries || maxRetries),
+          workerId: (raced.workerId as string) || undefined,
+          claimedAt: (raced.claimedAt as Date) || undefined,
+          leaseExpiresAt: (raced.leaseExpiresAt as Date) || undefined,
+          heartbeatAt: (raced.heartbeatAt as Date) || undefined,
+          nextRetryAt: (raced.nextRetryAt as Date) || undefined,
+          cancelRequestedAt: (raced.cancelRequestedAt as Date) || undefined,
+          progressCurrent: Number(raced.progressCurrent || 0),
+          progressTotal: Number(raced.progressTotal || progressTotal),
+          createdAt: raced.createdAt as Date,
+          updatedAt: raced.updatedAt as Date,
+          completedAt: (raced.completedAt as Date) || undefined,
+        };
+      }
+      throw createErr;
+    }
 
     return {
       id: createdId,

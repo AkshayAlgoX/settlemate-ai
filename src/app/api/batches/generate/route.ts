@@ -33,8 +33,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (size > 10000) {
-      // Real Scale Lab Streaming Generation & Execution
+    if (body.streaming === true) {
+      // Explicit Real Scale Lab Streaming Generation & Execution
       const t0 = Date.now();
       const runId = `scale-run-${Date.now()}-${size}`;
       const batchName = `Scale Lab ${size.toLocaleString()} Recs (${new Date().toISOString().slice(0, 16)})`;
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     }
 
     const batchName = `Synthetic Batch ${new Date().toISOString().slice(0, 16)}`;
-    const isAsync = body.async === true || (size > 1000 && !body.sync);
+    const isAsync = body.async === true || (size >= 1000 && !body.sync);
 
     if (isAsync) {
       // Check if an identical generation job is already active for this tenant to prevent duplicate storms
@@ -132,7 +132,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const idempotencyKey = `gen_${session.tenantId}_${size}_${Date.now()}`;
+      const { randomUUID } = await import("node:crypto");
+      const idempotencyKey = body.idempotencyKey || `gen_${session.tenantId}_${size}_${Date.now()}_${randomUUID().slice(0, 8)}`;
       // Pre-create batch shell in database
       const batch = await prisma.batch.create({
         data: {
