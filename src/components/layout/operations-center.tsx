@@ -49,11 +49,11 @@ export function OperationsCenter() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeJobs, setActiveJobs] = useState<OperationJob[]>([]);
   const [recentJobs, setRecentJobs] = useState<OperationJob[]>([]);
-  const [isStepping, setIsStepping] = useState(false);
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inFlightJobIdsRef = useRef<Set<string>>(new Set());
   const adaptiveChunkSizesRef = useRef<Map<string, number>>(new Map());
+  const isSteppingRef = useRef<boolean>(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -163,106 +163,105 @@ export function OperationsCenter() {
     };
   }, [refreshJobs]);
 
-  // 2. Bounded Step Executor: centralized single scheduler loop with fair round-robin scheduling
+  // 2. Bounded Step Executor: continuous automated coordinator with fair round-robin scheduling
+  const executeStepCycle = useCallback(async () => {
+    if (isSteppingRef.current) return;
+    isSteppingRef.current = true;
+
+    try {
+      const eligibleJobs = activeJobs.filter(
+        (job) =>
+          (job.status === "PENDING" ||
+            job.status === "CLAIMED" ||
+            job.status === "PROCESSING" ||
+            job.status === "RUNNING" ||
+            job.status === "RETRY_WAIT") &&
+          !cancellingIds.has(job.jobId) &&
+          !inFlightJobIdsRef.current.has(job.jobId)
+      );
+
+      if (eligibleJobs.length === 0) return;
+
+      for (const job of eligibleJobs) {
+        if (cancellingIds.has(job.jobId) || inFlightJobIdsRef.current.has(job.jobId)) {
+          continue;
+        }
+
+        // Mark job as in-flight
+        inFlightJobIdsRef.current.add(job.jobId);
+        const nextChunkSize = adaptiveChunkSizesRef.current.get(job.jobId) || 100;
+
+        try {
+          const res = await safeFetch<{ job?: OperationJob }>(
+            `/api/batches/jobs/${job.jobId}/step`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chunkSize: nextChunkSize }),
+            }
+          );
+
+          if (res.ok && res.data?.job) {
+            const updated = res.data.job;
+            if (updated.recommendedNextChunkSize) {
+              adaptiveChunkSizesRef.current.set(job.jobId, updated.recommendedNextChunkSize);
+            }
+
+            if (updated.status === "CANCELLED" || updated.status === "CANCEL_REQUESTED" || updated.status === "COMPLETED" || updated.status === "FAILED") {
+              setActiveJobs((prev) => prev.filter((j) => j.jobId !== updated.jobId));
+              setRecentJobs((prev) => {
+                const exists = prev.some((j) => j.jobId === updated.jobId);
+                return exists
+                  ? prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
+                  : [updated, ...prev];
+              });
+            } else {
+              setActiveJobs((prev) =>
+                prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
+              );
+            }
+          } else if (!res.ok) {
+            if (res.status === 409) {
+              // Conflict / cancelled on server: remove from active pool
+              setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
+            }
+          }
+        } catch {
+          // Transient network error handled on next tick
+        } finally {
+          inFlightJobIdsRef.current.delete(job.jobId);
+        }
+
+        // Fair web loop yield delay
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    } finally {
+      isSteppingRef.current = false;
+    }
+  }, [activeJobs, cancellingIds]);
+
+  // Trigger automated stepping whenever active jobs are eligible
   useEffect(() => {
-    const eligibleJobs = activeJobs.filter(
+    const hasEligibleJobs = activeJobs.some(
       (job) =>
         (job.status === "PENDING" ||
           job.status === "CLAIMED" ||
           job.status === "PROCESSING" ||
           job.status === "RUNNING" ||
           job.status === "RETRY_WAIT") &&
-        !cancellingIds.has(job.jobId) &&
-        !inFlightJobIdsRef.current.has(job.jobId)
+        !cancellingIds.has(job.jobId)
     );
 
-    if (eligibleJobs.length === 0 || isStepping) return;
+    if (!hasEligibleJobs) return;
 
-    let isMounted = true;
+    const timer = setTimeout(() => {
+      void executeStepCycle();
+    }, 150);
 
-    async function stepActiveJobs() {
-      setIsStepping(true);
-      try {
-        // Fair round-robin: step each eligible active job in sequence
-        for (const job of eligibleJobs) {
-          if (!isMounted) break;
-
-          if (cancellingIds.has(job.jobId) || inFlightJobIdsRef.current.has(job.jobId)) {
-            continue;
-          }
-
-          // Mark job as in-flight
-          inFlightJobIdsRef.current.add(job.jobId);
-          const nextChunkSize = adaptiveChunkSizesRef.current.get(job.jobId) || 100;
-
-          try {
-            const res = await safeFetch<{ job?: OperationJob }>(
-              `/api/batches/jobs/${job.jobId}/step`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chunkSize: nextChunkSize }),
-              }
-            );
-
-            if (isMounted) {
-              if (res.ok && res.data?.job) {
-                const updated = res.data.job;
-                if (updated.recommendedNextChunkSize) {
-                  adaptiveChunkSizesRef.current.set(job.jobId, updated.recommendedNextChunkSize);
-                }
-
-                if (updated.status === "CANCELLED" || updated.status === "CANCEL_REQUESTED") {
-                  setActiveJobs((prev) => prev.filter((j) => j.jobId !== updated.jobId));
-                  setRecentJobs((prev) => {
-                    const exists = prev.some((j) => j.jobId === updated.jobId);
-                    return exists
-                      ? prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
-                      : [updated, ...prev];
-                  });
-                } else if (updated.status === "COMPLETED" || updated.status === "FAILED") {
-                  setActiveJobs((prev) => prev.filter((j) => j.jobId !== updated.jobId));
-                  setRecentJobs((prev) => {
-                    const exists = prev.some((j) => j.jobId === updated.jobId);
-                    return exists
-                      ? prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
-                      : [updated, ...prev];
-                  });
-                } else {
-                  setActiveJobs((prev) =>
-                    prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
-                  );
-                }
-              } else if (!res.ok) {
-                if (res.status === 409) {
-                  // Conflict / cancelled on server: remove from active pool
-                  setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
-                }
-              }
-            }
-          } catch {
-            // Step error handled on next tick
-          } finally {
-            inFlightJobIdsRef.current.delete(job.jobId);
-          }
-
-          // Fair web loop yield delay
-          await new Promise((r) => setTimeout(r, 150));
-        }
-      } finally {
-        if (isMounted) {
-          setIsStepping(false);
-          void refreshJobs();
-        }
-      }
-    }
-
-    const timer = setTimeout(stepActiveJobs, 500);
     return () => {
-      isMounted = false;
       clearTimeout(timer);
     };
-  }, [activeJobs, isStepping, refreshJobs, cancellingIds]);
+  }, [activeJobs, cancellingIds, executeStepCycle]);
 
   // 3. Request job cancellation (Idempotent & immediate UI reflection)
   const handleCancel = async (jobId: string) => {

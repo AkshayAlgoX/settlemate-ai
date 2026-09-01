@@ -24,6 +24,7 @@
     "test:m4": "npx tsx tests/milestone4-correction-proof.test.ts",
     "test:m5": "npx tsx tests/milestone5-terminal-receipt.test.ts",
     "test:pipeline": "npx tsx tests/final-integrated-financial-pipeline.test.ts",
+    "test:10k-progress": "npx tsx tests/continuous-10k-job-progress-ux.test.ts",
     "test:cancellation": "npx tsx tests/cooperative-cancellation-state-machine.test.ts",
     "test:e2e-cardinality": "npx tsx src/lib/reconciliation/cardinality-e2e.test.ts",
     "test:persistence": "npx tsx tests/persistence-e2e.test.ts",

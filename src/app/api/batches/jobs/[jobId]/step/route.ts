@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { stepJobChunk, getDurableJob } from "@/lib/workers/durable-job-worker";
-import { applySecurityHeaders, handleCorsPreflight, rateLimitGuard } from "@/lib/security/api-security";
+import { applySecurityHeaders, handleCorsPreflight, rateLimitGuard, jobStepRateLimiter } from "@/lib/security/api-security";
 
 export async function OPTIONS() {
   return handleCorsPreflight();
@@ -19,7 +19,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const rateLimit = rateLimitGuard(req);
+  const rateLimit = rateLimitGuard(req, jobStepRateLimiter);
   if (!rateLimit.allowed && rateLimit.response) {
     return rateLimit.response;
   }

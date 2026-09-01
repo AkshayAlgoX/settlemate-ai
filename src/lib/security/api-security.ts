@@ -109,6 +109,12 @@ export const apiV1RateLimiter = new TokenBucketRateLimiter({
   refillWindowMs: 60_000,
 });
 
+// Dedicated rate limiter for internal job step execution: 1,200 requests per minute (20 req/sec ceiling)
+export const jobStepRateLimiter = new TokenBucketRateLimiter({
+  maxTokens: 1200,
+  refillWindowMs: 60_000,
+});
+
 /**
  * Standard CORS headers.
  * NOTE: For demo & integration simulator, Access-Control-Allow-Origin is set to '*'.
