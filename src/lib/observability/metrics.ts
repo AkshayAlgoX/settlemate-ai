@@ -434,6 +434,45 @@ export const metrics = {
     "settlemate_correction_failed_total",
     "Total correction proposal or proof execution failures"
   ),
+  receiptsCreatedTotal: registry.counter(
+    "settlemate_receipts_created_total",
+    "Total immutable terminal decision receipts generated and signed"
+  ),
+  receiptsVerifiedTotal: registry.counter(
+    "settlemate_receipts_verified_total",
+    "Total terminal decision receipts independently verified successfully"
+  ),
+  receiptsInvalidTotal: registry.counter(
+    "settlemate_receipts_invalid_total",
+    "Total terminal decision receipts that failed verification or tampering checks"
+  ),
+  receiptReplayDivergenceTotal: registry.counter(
+    "settlemate_receipt_replay_divergence_total",
+    "Total receipt verification attempts that detected deterministic replay divergence"
+  ),
+  receiptSignatureFailureTotal: registry.counter(
+    "settlemate_receipt_signature_failure_total",
+    "Total receipt verification attempts that failed HMAC-SHA256 signature verification"
+  ),
+  receiptHashFailureTotal: registry.counter(
+    "settlemate_receipt_hash_failure_total",
+    "Total receipt verification attempts that failed SHA-256 canonical proof hash verification"
+  ),
+  receiptGenerationMs: registry.histogram(
+    "settlemate_receipt_generation_ms",
+    "Latency distribution for terminal decision receipt generation and signing (ms)",
+    [0.1, 0.5, 1, 2, 5, 10, 25, 50, 100]
+  ),
+  receiptVerificationMs: registry.histogram(
+    "settlemate_receipt_verification_ms",
+    "Latency distribution for independent receipt verification and proof checking (ms)",
+    [0.1, 0.5, 1, 2, 5, 10, 25, 50, 100]
+  ),
+  receiptReplayMs: registry.histogram(
+    "settlemate_receipt_replay_ms",
+    "Latency distribution for deterministic pipeline replay execution (ms)",
+    [0.1, 0.5, 1, 2, 5, 10, 25, 50, 100]
+  ),
 };
 
 /** Renders all registered metrics in Prometheus text exposition format. */
