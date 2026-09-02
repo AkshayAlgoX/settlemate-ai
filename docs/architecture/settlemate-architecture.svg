@@ -1,311 +1,650 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 860" width="100%" height="100%" style="background:#ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1680 1080" width="100%" height="100%" style="background:#090d16; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <defs>
-    <linearGradient id="grad-blue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#eff6ff" />
-      <stop offset="100%" stop-color="#dbeafe" />
+    <!-- Card Gradients & Patterns -->
+    <linearGradient id="bg-canvas" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16" />
+      <stop offset="100%" stop-color="#06090f" />
     </linearGradient>
-    <linearGradient id="grad-amber" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fffbeb" />
-      <stop offset="100%" stop-color="#fef3c7" />
-    </linearGradient>
-    <linearGradient id="grad-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ecfdf5" />
-      <stop offset="100%" stop-color="#d1fae5" />
-    </linearGradient>
-    <linearGradient id="grad-purple" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#faf5ff" />
-      <stop offset="100%" stop-color="#f3e8ff" />
-    </linearGradient>
-    <linearGradient id="grad-slate" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f8fafc" />
-      <stop offset="100%" stop-color="#f1f5f9" />
-    </linearGradient>
-    <filter id="shadow" x="-2%" y="-2%" width="104%" height="106%" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06" />
-    </filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" />
+
+    <!-- Arrow Markers -->
+    <marker id="arr-gray" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748b" />
     </marker>
-    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#059669" />
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#38bdf8" />
     </marker>
-    <marker id="arrow-amber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#d97706" />
+    <marker id="arr-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
     </marker>
-    <marker id="arrow-rose" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#e11d48" />
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b" />
+    </marker>
+    <marker id="arr-rose" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ef4444" />
+    </marker>
+    <marker id="arr-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#a855f7" />
     </marker>
   </defs>
 
-  <!-- Canvas Header -->
-  <rect x="0" y="0" width="1200" height="70" fill="#0f172a" />
-  <text x="30" y="32" fill="#ffffff" font-size="20" font-weight="700" letter-spacing="-0.5">SettleMate AI — System Architecture &amp; Financial Control Plane</text>
-  <text x="30" y="52" fill="#94a3b8" font-size="12" font-weight="500">Track 04: AI Finance Controller · Deterministic Authority with AI-Assisted Exception Investigation</text>
+  <!-- Background Base -->
+  <rect width="1680" height="1080" fill="url(#bg-canvas)" />
 
-  <!-- Core Thesis Pill -->
-  <rect x="740" y="18" width="430" height="34" rx="17" fill="#1e293b" stroke="#334155" stroke-width="1" />
-  <text x="955" y="39" fill="#38bdf8" font-size="11.5" font-weight="600" text-anchor="middle">AI investigates · Critics challenge · Deterministic systems decide</text>
+  <!-- Grid Pattern Overlay (Subtle) -->
+  <g opacity="0.04" stroke="#ffffff" stroke-width="1">
+    <path d="M 0 60 L 1680 60 M 0 120 L 1680 120 M 0 180 L 1680 180 M 0 240 L 1680 240 M 0 300 L 1680 300 M 0 360 L 1680 360 M 0 420 L 1680 420 M 0 480 L 1680 480 M 0 540 L 1680 540 M 0 600 L 1680 600 M 0 660 L 1680 660 M 0 720 L 1680 720 M 0 780 L 1680 780 M 0 840 L 1680 840 M 0 900 L 1680 900 M 0 960 L 1680 960 M 0 1020 L 1680 1020" />
+    <path d="M 120 0 L 120 1080 M 240 0 L 240 1080 M 360 0 L 360 1080 M 480 0 L 480 1080 M 600 0 L 600 1080 M 720 0 L 720 1080 M 840 0 L 840 1080 M 960 0 L 960 1080 M 1080 0 L 1080 1080 M 1200 0 L 1200 1080 M 1320 0 L 1320 1080 M 1440 0 L 1440 1080 M 1560 0 L 1560 1080" />
+  </g>
 
-  <!-- 1. MULTI-SOURCE INGESTION (LEFT) -->
+  <!-- ========================================================================= -->
+  <!-- HEADER BAR                                                                -->
+  <!-- ========================================================================= -->
+  <g transform="translate(30, 24)">
+    <!-- Main Title -->
+    <text x="0" y="24" fill="#f8fafc" font-size="20" font-weight="800" letter-spacing="-0.5">SETTLEMATE AI</text>
+    <text x="160" y="24" fill="#38bdf8" font-size="13" font-weight="700" letter-spacing="1.5">| TECHNICAL ARCHITECTURE SPECIFICATION</text>
+    <text x="0" y="44" fill="#64748b" font-size="11" font-weight="500">Track 04: AI Finance Controller · Razorpay AI Buildathon · Deterministic Financial Authority with Advisory AI Exception Loop</text>
+
+    <!-- Top Trust Boundary Banner -->
+    <g transform="translate(940, 0)">
+      <rect x="0" y="0" width="680" height="48" rx="6" fill="#111c30" stroke="#1e3a5f" stroke-width="1.2" />
+      <circle cx="22" cy="24" r="5" fill="#f59e0b" />
+      <text x="36" y="20" fill="#fbbf24" font-size="11" font-weight="700" letter-spacing="0.5">CORE INVARIANT BOUNDARY: AI IS ADVISORY — NEVER THE FINANCIAL AUTHORITY</text>
+      <text x="36" y="36" fill="#94a3b8" font-size="9.5" font-weight="500">AI investigates exceptions · Critics challenge · Deterministic gates decide · Cryptographic Merkle receipts replay offline</text>
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- ZONE 1: SOURCE INGESTION (X: 30, Width: 220, Y: 90)                      -->
+  <!-- ========================================================================= -->
   <g transform="translate(30, 90)">
-    <rect width="180" height="470" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
-    <rect width="180" height="32" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5" />
-    <text x="90" y="21" fill="#0f172a" font-size="12" font-weight="700" text-anchor="middle">1. SOURCE INGESTION</text>
+    <!-- Zone Container -->
+    <rect width="220" height="660" rx="8" fill="#0d1424" stroke="#1e293b" stroke-width="1" />
+    <rect width="220" height="34" rx="8" fill="#131e36" stroke="#1e293b" stroke-width="1" />
+    <text x="16" y="22" fill="#94a3b8" font-size="11" font-weight="700" letter-spacing="1">1. MULTI-SOURCE INGESTION</text>
 
-    <!-- Source Items -->
-    <g transform="translate(12, 45)">
-      <rect width="156" height="58" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="24" fill="#0f172a" font-size="12" font-weight="600">Gateway Payments</text>
-      <text x="12" y="42" fill="#64748b" font-size="10">Captured amount, fees, tax</text>
+    <!-- Feed Card 1: Payments -->
+    <g transform="translate(12, 46)">
+      <rect width="196" height="64" rx="5" fill="#131a29" stroke="#1e293b" stroke-width="1" />
+      <text x="12" y="22" fill="#f1f5f9" font-size="11" font-weight="600">Gateway Payments</text>
+      <text x="12" y="38" fill="#64748b" font-size="9">· Captured gross amount</text>
+      <text x="12" y="52" fill="#64748b" font-size="9">· Gateway fee, GST &amp; UTR</text>
     </g>
 
-    <g transform="translate(12, 113)">
-      <rect width="156" height="58" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="24" fill="#0f172a" font-size="12" font-weight="600">Merchant Orders</text>
-      <text x="12" y="42" fill="#64748b" font-size="10">Order ID, currency, line items</text>
+    <!-- Feed Card 2: Orders -->
+    <g transform="translate(12, 118)">
+      <rect width="196" height="64" rx="5" fill="#131a29" stroke="#1e293b" stroke-width="1" />
+      <text x="12" y="22" fill="#f1f5f9" font-size="11" font-weight="600">Merchant Orders</text>
+      <text x="12" y="38" fill="#64748b" font-size="9">· Order ID &amp; line items</text>
+      <text x="12" y="52" fill="#64748b" font-size="9">· Currency &amp; buyer metadata</text>
     </g>
 
-    <g transform="translate(12, 181)">
-      <rect width="156" height="58" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="24" fill="#0f172a" font-size="12" font-weight="600">Gateway Settlements</text>
-      <text x="12" y="42" fill="#64748b" font-size="10">Net payouts, deductions, UTR</text>
+    <!-- Feed Card 3: Settlements -->
+    <g transform="translate(12, 190)">
+      <rect width="196" height="64" rx="5" fill="#131a29" stroke="#1e293b" stroke-width="1" />
+      <text x="12" y="22" fill="#f1f5f9" font-size="11" font-weight="600">Settlement Batches</text>
+      <text x="12" y="38" fill="#64748b" font-size="9">· Aggregated payouts (N:1)</text>
+      <text x="12" y="52" fill="#64748b" font-size="9">· Deductions &amp; bank reference</text>
     </g>
 
-    <g transform="translate(12, 249)">
-      <rect width="156" height="58" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="24" fill="#0f172a" font-size="12" font-weight="600">Bank Credits (CAMT/STMT)</text>
-      <text x="12" y="42" fill="#64748b" font-size="10">Account credits, UTR, timestamp</text>
+    <!-- Feed Card 4: Bank Statement -->
+    <g transform="translate(12, 262)">
+      <rect width="196" height="64" rx="5" fill="#131a29" stroke="#1e293b" stroke-width="1" />
+      <text x="12" y="22" fill="#f1f5f9" font-size="11" font-weight="600">Bank Credits (CAMT/MT)</text>
+      <text x="12" y="38" fill="#64748b" font-size="9">· Core account credit log</text>
+      <text x="12" y="52" fill="#64748b" font-size="9">· Bank UTR &amp; timestamp</text>
     </g>
 
-    <g transform="translate(12, 317)">
-      <rect width="156" height="58" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="24" fill="#0f172a" font-size="12" font-weight="600">Refunds &amp; Disputes</text>
-      <text x="12" y="42" fill="#64748b" font-size="10">Partial / full refunds, disputes</text>
+    <!-- Feed Card 5: Refunds & Disputes -->
+    <g transform="translate(12, 334)">
+      <rect width="196" height="64" rx="5" fill="#131a29" stroke="#1e293b" stroke-width="1" />
+      <text x="12" y="22" fill="#f1f5f9" font-size="11" font-weight="600">Refunds &amp; Disputes</text>
+      <text x="12" y="38" fill="#64748b" font-size="9">· Partial / full refunds</text>
+      <text x="12" y="52" fill="#64748b" font-size="9">· Chargeback adjustments</text>
     </g>
 
-    <g transform="translate(12, 385)">
-      <rect width="156" height="70" rx="6" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#1e40af" font-size="11" font-weight="700">Normalization</text>
-      <text x="12" y="40" fill="#3b82f6" font-size="9.5">· Canonical casing &amp; trimming</text>
-      <text x="12" y="56" fill="#3b82f6" font-size="9.5">· Integer minor units (paise)</text>
-    </g>
-  </g>
+    <!-- Normalization Subsystem -->
+    <g transform="translate(12, 410)">
+      <rect width="196" height="236" rx="6" fill="#0b162c" stroke="#1d4ed8" stroke-width="1.2" />
+      <rect width="196" height="28" rx="6" fill="#1e3a8a" stroke="#1d4ed8" stroke-width="1.2" />
+      <text x="12" y="19" fill="#bfdbfe" font-size="10.5" font-weight="700">INTEGER NORMALIZATION</text>
+      
+      <text x="12" y="48" fill="#93c5fd" font-size="10" font-weight="600">Paise Minor Units</text>
+      <text x="12" y="64" fill="#60a5fa" font-size="9">· All INR amounts in integer paise</text>
+      <text x="12" y="78" fill="#60a5fa" font-size="9">· ₹1.00 = 100 paise (BigInt / num)</text>
+      <text x="12" y="92" fill="#60a5fa" font-size="9">· 0.00% IEEE 754 float drift</text>
 
-  <!-- Arrow from Ingestion to Deterministic Engine -->
-  <path d="M 210 325 L 245 325" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+      <path d="M 12 104 L 184 104" stroke="#1e3a8a" stroke-width="1" />
 
-  <!-- 2. DETERMINISTIC FINANCIAL CONTROL PLANE (MIDDLE-LEFT) -->
-  <g transform="translate(250, 90)">
-    <rect width="250" height="470" rx="8" fill="#f8fafc" stroke="#3b82f6" stroke-width="2" />
-    <rect width="250" height="32" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2" />
-    <text x="125" y="21" fill="#1e40af" font-size="12" font-weight="700" text-anchor="middle">2. DETERMINISTIC CONTROL PLANE</text>
+      <text x="12" y="122" fill="#93c5fd" font-size="10" font-weight="600">Canonical Normalization</text>
+      <text x="12" y="138" fill="#60a5fa" font-size="9">· Trim &amp; uppercase UTR refs</text>
+      <text x="12" y="152" fill="#60a5fa" font-size="9">· ISO 8601 UTC timestamps</text>
+      <text x="12" y="166" fill="#60a5fa" font-size="9">· Strict schema parsing (Zod)</text>
 
-    <!-- Step 1: Matching Rules -->
-    <g transform="translate(12, 45)">
-      <rect width="226" height="88" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#0f172a" font-size="11.5" font-weight="700">Multi-Source Hash Matching</text>
-      <text x="12" y="40" fill="#475569" font-size="10">· O(1) Exact UTR &amp; Reference Match</text>
-      <text x="12" y="56" fill="#475569" font-size="10">· Temporal Window (T+2 / 48h SLA)</text>
-      <text x="12" y="72" fill="#475569" font-size="10">· Exact integer tolerance (≤ ₹1.00)</text>
-    </g>
+      <path d="M 12 178 L 184 178" stroke="#1e3a8a" stroke-width="1" />
 
-    <!-- Step 2: Conservation of Money -->
-    <g transform="translate(12, 143)">
-      <rect width="226" height="80" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#0f172a" font-size="11.5" font-weight="700">Conservation Invariants</text>
-      <text x="12" y="40" fill="#475569" font-size="10">· Net = Payment - Fee - Tax - Refunds</text>
-      <text x="12" y="56" fill="#475569" font-size="10">· Zero floating-point arithmetic</text>
-      <text x="12" y="72" fill="#475569" font-size="10">· Duplicate settlement rejection</text>
-    </g>
-
-    <!-- Step 3: Fast-Path vs Exception Router -->
-    <g transform="translate(12, 233)">
-      <rect width="226" height="92" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#0f172a" font-size="11.5" font-weight="700">Confidence × Exposure Router</text>
-      <text x="12" y="40" fill="#475569" font-size="10">· Weighted evidence scoring (0–100)</text>
-      <text x="12" y="56" fill="#475569" font-size="10">· Exposure = Discrepancy Amount</text>
-      <text x="12" y="74" fill="#475569" font-size="10">· High Conf + Low Exp → Fast Path</text>
-      <text x="12" y="88" fill="#475569" font-size="10">· Ambiguity / High Exp → Investigation</text>
-    </g>
-
-    <!-- Fast Path Direct Output -->
-    <g transform="translate(12, 335)">
-      <rect width="226" height="60" rx="6" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
-      <text x="12" y="22" fill="#065f46" font-size="11" font-weight="700">Clean Fast Path (96.4% Auto)</text>
-      <text x="12" y="40" fill="#047857" font-size="9.5">0 AI Invocations · Immediate Ledger Write</text>
-      <text x="12" y="54" fill="#047857" font-size="9.5">Direct Terminal Receipt Issuance</text>
-    </g>
-
-    <!-- Measured Benchmark Badge -->
-    <g transform="translate(12, 405)">
-      <rect width="226" height="52" rx="6" fill="#0f172a" />
-      <text x="113" y="22" fill="#38bdf8" font-size="10.5" font-weight="700" text-anchor="middle">Official Benchmark Gate</text>
-      <text x="113" y="40" fill="#ffffff" font-size="10" text-anchor="middle">98.1% Acc · 98% Prec · 806.75 rec/s</text>
+      <text x="12" y="196" fill="#38bdf8" font-size="9.5" font-weight="700">Deterministic Representation</text>
+      <text x="12" y="210" fill="#94a3b8" font-size="8.5">Byte-exact inputs for hashes</text>
+      <text x="12" y="224" fill="#94a3b8" font-size="8.5">and immutable audit logs</text>
     </g>
   </g>
 
-  <!-- Path from Fast Path to Finality Ledger -->
-  <path d="M 476 365 C 510 365, 510 500, 890 500" fill="none" stroke="#059669" stroke-width="2.5" stroke-dasharray="4,4" marker-end="url(#arrow-emerald)" />
-  <text x="540" y="455" fill="#059669" font-size="10" font-weight="600">Clean Fast Path (Bypasses AI)</text>
+  <!-- Flow Connector 1 -> 2 -->
+  <path d="M 250 520 L 280 520" fill="none" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arr-blue)" />
 
-  <!-- Arrow from Control Plane to AI Investigation -->
-  <path d="M 500 280 L 535 280" fill="none" stroke="#d97706" stroke-width="2" marker-end="url(#arrow-amber)" />
-  <text x="502" y="270" fill="#d97706" font-size="9.5" font-weight="600">Exceptions</text>
+  <!-- ========================================================================= -->
+  <!-- ZONE 2: DETERMINISTIC CONTROL PLANE (X: 280, Width: 260, Y: 90)           -->
+  <!-- ========================================================================= -->
+  <g transform="translate(280, 90)">
+    <!-- Zone Container -->
+    <rect width="260" height="660" rx="8" fill="#0a1526" stroke="#1e3a8a" stroke-width="1.5" />
+    <rect width="260" height="34" rx="8" fill="#1e3a8a" stroke="#1e3a8a" stroke-width="1.5" />
+    <text x="16" y="22" fill="#bfdbfe" font-size="11" font-weight="700" letter-spacing="1">2. DETERMINISTIC CONTROL PLANE</text>
 
-  <!-- 3. EXCEPTION INVESTIGATION & CRITIC (MIDDLE-RIGHT) -->
-  <g transform="translate(540, 90)">
-    <rect width="320" height="470" rx="8" fill="#fffdfa" stroke="#d97706" stroke-width="2" />
-    <rect width="320" height="32" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
-    <text x="160" y="21" fill="#92400e" font-size="12" font-weight="700" text-anchor="middle">3. ADVISORY AI &amp; ADVERSARIAL CRITIC</text>
+    <!-- Stage 1: Exact Hash Indexer -->
+    <g transform="translate(12, 46)">
+      <rect width="236" height="106" rx="6" fill="#0e1d38" stroke="#1d4ed8" stroke-width="1" />
+      <text x="12" y="22" fill="#38bdf8" font-size="11" font-weight="700">O(1) Multi-Key Hash Matching</text>
+      <text x="12" y="42" fill="#e2e8f0" font-size="9.5">· Gateway Payment ID (pay_...)</text>
+      <text x="12" y="58" fill="#e2e8f0" font-size="9.5">· Merchant Order Reference ID</text>
+      <text x="12" y="74" fill="#e2e8f0" font-size="9.5">· Bank UTR &amp; Authorization Code</text>
+      <text x="12" y="92" fill="#94a3b8" font-size="9">Sub-millisecond memory index lookup</text>
+    </g>
+
+    <!-- Stage 2: Temporal Window Matcher -->
+    <g transform="translate(12, 160)">
+      <rect width="236" height="96" rx="6" fill="#0e1d38" stroke="#1d4ed8" stroke-width="1" />
+      <text x="12" y="22" fill="#38bdf8" font-size="11" font-weight="700">Temporal Window Matcher</text>
+      <text x="12" y="42" fill="#e2e8f0" font-size="9.5">· T+1 / T+2 Banking Settlement SLA</text>
+      <text x="12" y="58" fill="#e2e8f0" font-size="9.5">· Holiday calendar &amp; cutoff window</text>
+      <text x="12" y="74" fill="#e2e8f0" font-size="9.5">· Configurable SLA tolerance (±48h)</text>
+      <text x="12" y="88" fill="#94a3b8" font-size="8.5">Reconciles delayed bank credit legs</text>
+    </g>
+
+    <!-- Stage 3: Conservation Invariant Gate -->
+    <g transform="translate(12, 264)">
+      <rect width="236" height="114" rx="6" fill="#0e1d38" stroke="#1d4ed8" stroke-width="1" />
+      <text x="12" y="22" fill="#38bdf8" font-size="11" font-weight="700">Conservation of Money Gate</text>
+      <text x="12" y="40" fill="#67e8f9" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="9">S_net = P_gross - Fees - Refunds</text>
+      <text x="12" y="58" fill="#e2e8f0" font-size="9.5">· Zero floating-point arithmetic</text>
+      <text x="12" y="74" fill="#e2e8f0" font-size="9.5">· Fee tier &amp; 18% GST tax schedule</text>
+      <text x="12" y="90" fill="#e2e8f0" font-size="9.5">· Exact integer tolerance (≤ ₹1.00)</text>
+      <text x="12" y="106" fill="#94a3b8" font-size="8.5">Blocks duplicate payout claims</text>
+    </g>
+
+    <!-- Stage 4: Confidence x Exposure Router -->
+    <g transform="translate(12, 386)">
+      <rect width="236" height="116" rx="6" fill="#0e1d38" stroke="#1d4ed8" stroke-width="1" />
+      <text x="12" y="22" fill="#38bdf8" font-size="11" font-weight="700">Confidence × Exposure Router</text>
+      <text x="12" y="40" fill="#67e8f9" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="9">Risk = (1.0 - Conf) × Exposure</text>
+      <text x="12" y="58" fill="#e2e8f0" font-size="9.5">· Multi-feature confidence score (0–100)</text>
+      <text x="12" y="74" fill="#e2e8f0" font-size="9.5">· Material exposure threshold gating</text>
+      <text x="12" y="90" fill="#10b981" font-size="9.5" font-weight="600">→ High Conf + 0 Exp → Fast Path</text>
+      <text x="12" y="106" fill="#f59e0b" font-size="9.5" font-weight="600">→ Discrepancy → Advisory AI Loop</text>
+    </g>
+
+    <!-- Clean Fast Path Banner -->
+    <g transform="translate(12, 510)">
+      <rect width="236" height="78" rx="6" fill="#062d1f" stroke="#059669" stroke-width="1.5" />
+      <text x="12" y="22" fill="#34d399" font-size="11" font-weight="700">CLEAN FAST PATH</text>
+      <text x="12" y="38" fill="#a7f3d0" font-size="9.5" font-weight="600">96.4% Auto-Matched · 0 AI Invocations</text>
+      <text x="12" y="52" fill="#6ee7b7" font-size="9">Sub-millisecond direct ledger write</text>
+      <text x="12" y="66" fill="#6ee7b7" font-size="9">Direct terminal receipt issuance</text>
+    </g>
+
+    <!-- Benchmark Baseline Pill -->
+    <g transform="translate(12, 596)">
+      <rect width="236" height="50" rx="5" fill="#0b1324" stroke="#334155" stroke-width="1" />
+      <text x="118" y="20" fill="#38bdf8" font-size="9.5" font-weight="700" text-anchor="middle">Official Benchmark Gate</text>
+      <text x="118" y="36" fill="#ffffff" font-size="9.5" font-weight="600" text-anchor="middle">98.1% Acc · 98% Prec/Rec · 806.75 rec/s</text>
+    </g>
+  </g>
+
+  <!-- Clean Fast Path Routing Line (Direct to Finality Ledger, bypassing AI) -->
+  <path d="M 516 550 C 600 550, 600 540, 890 540" fill="none" stroke="#10b981" stroke-width="2.2" stroke-dasharray="5,4" marker-end="url(#arr-green)" />
+  <text x="640" y="532" fill="#34d399" font-size="10" font-weight="700">Clean Fast Path (Bypasses AI Completely)</text>
+
+  <!-- Exception Connector (To Zone 3) -->
+  <path d="M 480 430 L 560 430" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#arr-amber)" />
+  <text x="484" y="422" fill="#fbbf24" font-size="9" font-weight="700">Exceptions</text>
+
+  <!-- ========================================================================= -->
+  <!-- ZONE 3: ADVISORY AI + ADVERSARIAL CRITIC (X: 560, Width: 320, Y: 90)       -->
+  <!-- ========================================================================= -->
+  <g transform="translate(560, 90)">
+    <!-- Zone Container with Dashed Warning Perimeter -->
+    <rect width="320" height="660" rx="8" fill="#181308" stroke="#d97706" stroke-width="1.8" stroke-dasharray="6,4" />
+    <rect width="320" height="34" rx="8" fill="#451a03" stroke="#d97706" stroke-width="1.8" />
+    <circle cx="18" cy="17" r="4" fill="#fbbf24" />
+    <text x="28" y="22" fill="#fde68a" font-size="10.5" font-weight="700" letter-spacing="0.8">3. ADVISORY AI &amp; ADVERSARIAL CRITIC</text>
 
     <!-- Context Vault -->
-    <g transform="translate(12, 45)">
-      <rect width="296" height="66" rx="6" fill="#ffffff" stroke="#fde68a" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#0f172a" font-size="11.5" font-weight="700">Context Vault Evidence Assembly</text>
-      <text x="12" y="38" fill="#475569" font-size="10">· Chronological timeline of multi-source feeds</text>
-      <text x="12" y="54" fill="#475569" font-size="10">· SHA-256 evidence path commitment</text>
+    <g transform="translate(12, 46)">
+      <rect width="296" height="88" rx="6" fill="#241a0e" stroke="#78350f" stroke-width="1" />
+      <text x="12" y="22" fill="#fde68a" font-size="11" font-weight="700">Context Vault Evidence Assembly</text>
+      <text x="12" y="40" fill="#fef3c7" font-size="9.5">· Chronological multi-source feed graph</text>
+      <text x="12" y="56" fill="#fef3c7" font-size="9.5">· Immutable raw string extraction &amp; sanitizer</text>
+      <text x="12" y="72" fill="#fef3c7" font-size="9.5">· SHA-256 evidence node commitment</text>
+      <text x="12" y="84" fill="#d97706" font-size="8.5">Isolated prompt construction context</text>
     </g>
 
-    <!-- Advisory Investigator -->
-    <g transform="translate(12, 120)">
-      <rect width="296" height="84" rx="6" fill="#ffffff" stroke="#fde68a" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#0f172a" font-size="11.5" font-weight="700">Advisory AI Investigator</text>
-      <text x="12" y="40" fill="#475569" font-size="10">· Multi-model (OpenAI / Anthropic / Gemini / Local)</text>
-      <text x="12" y="56" fill="#475569" font-size="10">· Synthesizes root-cause hypothesis</text>
-      <text x="12" y="72" fill="#475569" font-size="10">· Formulates Structured Claim AST (AIClaim[])</text>
+    <!-- Advisory LLM Investigator -->
+    <g transform="translate(12, 142)">
+      <rect width="296" height="96" rx="6" fill="#241a0e" stroke="#78350f" stroke-width="1" />
+      <text x="12" y="22" fill="#fde68a" font-size="11" font-weight="700">Advisory AI Investigator</text>
+      <text x="12" y="40" fill="#fef3c7" font-size="9.5">· Multi-provider (OpenAI / Anthropic / Gemini)</text>
+      <text x="12" y="56" fill="#fef3c7" font-size="9.5">· High-precision deterministic local fallback</text>
+      <text x="12" y="72" fill="#fef3c7" font-size="9.5">· Synthesizes root-cause explanation</text>
+      <text x="12" y="88" fill="#f59e0b" font-size="9" font-weight="600">→ Emits Structured Claim AST (AIClaim[])</text>
     </g>
 
-    <!-- Adversarial Critic -->
-    <g transform="translate(12, 214)">
-      <rect width="296" height="114" rx="6" fill="#ffffff" stroke="#fca5a5" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#991b1b" font-size="11.5" font-weight="700">Adversarial Critic (3 Challenge Lenses)</text>
-      <text x="12" y="40" fill="#475569" font-size="10">1. Arithmetic Lens: Checks fee &amp; tax math exactness</text>
-      <text x="12" y="56" fill="#475569" font-size="10">2. Timing Lens: Enforces SLA &amp; banking settlement dates</text>
-      <text x="12" y="72" fill="#475569" font-size="10">3. Relationship Lens: Validates gateway entity graphs</text>
-      <text x="12" y="94" fill="#b91c1c" font-size="10" font-weight="600">→ Emits Concrete Falsification Objections</text>
+    <!-- Structured Claim Schema -->
+    <g transform="translate(12, 246)">
+      <rect width="296" height="66" rx="6" fill="#1c160c" stroke="#92400e" stroke-width="1" />
+      <text x="12" y="20" fill="#fbbf24" font-size="10.5" font-weight="700">Structured Claim AST Schema</text>
+      <text x="12" y="38" fill="#fde68a" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="8.5">type: AMOUNT | DATE | REFERENCE | ENTITY</text>
+      <text x="12" y="54" fill="#94a3b8" font-size="8.5">Strict typed schema — zero free-form ledger writes</text>
     </g>
 
-    <!-- Reinvestigation Loop -->
-    <g transform="translate(12, 338)">
-      <rect width="296" height="52" rx="6" fill="#fef2f2" stroke="#fecaca" stroke-width="1" />
-      <text x="12" y="22" fill="#991b1b" font-size="11" font-weight="700">Multi-Pass Reinvestigation Loop</text>
-      <text x="12" y="40" fill="#b91c1c" font-size="9.5">Objection confirmed → AI refines claim with counter-evidence</text>
+    <!-- Adversarial Critic (3 Lenses) -->
+    <g transform="translate(12, 320)">
+      <rect width="296" height="154" rx="6" fill="#2d1215" stroke="#ef4444" stroke-width="1.4" />
+      <text x="12" y="22" fill="#fca5a5" font-size="11" font-weight="700">Adversarial Critic (3 Challenge Lenses)</text>
+      
+      <!-- Lens 1 -->
+      <g transform="translate(10, 32)">
+        <rect width="276" height="32" rx="4" fill="#3b151a" stroke="#7f1d1d" stroke-width="1" />
+        <text x="8" y="14" fill="#fca5a5" font-size="9.5" font-weight="700">1. Arithmetic Lens</text>
+        <text x="8" y="26" fill="#fecaca" font-size="8.5">Recomputes fee schedules, GST &amp; net settlement</text>
+      </g>
+
+      <!-- Lens 2 -->
+      <g transform="translate(10, 70)">
+        <rect width="276" height="32" rx="4" fill="#3b151a" stroke="#7f1d1d" stroke-width="1" />
+        <text x="8" y="14" fill="#fca5a5" font-size="9.5" font-weight="700">2. Timing Lens</text>
+        <text x="8" y="26" fill="#fecaca" font-size="8.5">Enforces banking holidays &amp; SLA cutoff bounds</text>
+      </g>
+
+      <!-- Lens 3 -->
+      <g transform="translate(10, 108)">
+        <rect width="276" height="32" rx="4" fill="#3b151a" stroke="#7f1d1d" stroke-width="1" />
+        <text x="8" y="14" fill="#fca5a5" font-size="9.5" font-weight="700">3. Relationship Lens</text>
+        <text x="8" y="26" fill="#fecaca" font-size="8.5">Validates gateway-to-merchant graph topology</text>
+      </g>
+
+      <text x="12" y="148" fill="#f87171" font-size="8.5" font-weight="600">→ Emits Concrete Falsification Objections</text>
     </g>
 
-    <g transform="translate(12, 400)">
-      <rect width="296" height="58" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1" />
-      <text x="12" y="20" fill="#92400e" font-size="11" font-weight="700">Bound: AI Cannot Decide</text>
-      <text x="12" y="36" fill="#b45309" font-size="9.5">AI cannot modify balances, bypass gates, or self-approve.</text>
-      <text x="12" y="50" fill="#b45309" font-size="9.5">All outputs pass to mechanical verification gates.</text>
+    <!-- Multi-Pass Reinvestigation Loop -->
+    <g transform="translate(12, 482)">
+      <rect width="296" height="74" rx="6" fill="#241416" stroke="#b91c1c" stroke-width="1.2" />
+      <text x="12" y="20" fill="#f87171" font-size="10.5" font-weight="700">Multi-Pass Reinvestigation Loop</text>
+      <text x="12" y="38" fill="#fecaca" font-size="9">Objection confirmed by mechanical gate:</text>
+      <text x="12" y="52" fill="#fecaca" font-size="9">AI refines hypothesis with counter-evidence</text>
+      <text x="12" y="66" fill="#f87171" font-size="8.5" font-weight="600">3/3 Adversarial cases successfully refined</text>
+    </g>
+
+    <!-- Isolation Bound Warning -->
+    <g transform="translate(12, 564)">
+      <rect width="296" height="84" rx="6" fill="#381b0a" stroke="#d97706" stroke-width="1" />
+      <text x="12" y="20" fill="#fbbf24" font-size="10" font-weight="700">ADVISORY ISOLATION GUARANTEE</text>
+      <text x="12" y="36" fill="#fef3c7" font-size="8.5">· Zero direct database/ledger write access</text>
+      <text x="12" y="50" fill="#fef3c7" font-size="8.5">· Cannot self-approve or disburse funds</text>
+      <text x="12" y="64" fill="#fef3c7" font-size="8.5">· Prompt injection neutralized by data isolation</text>
+      <text x="12" y="78" fill="#fef3c7" font-size="8.5">· All claims pass to Non-LLM mechanical validator</text>
     </g>
   </g>
 
-  <!-- Arrow from AI to Decision Gates -->
-  <path d="M 860 280 L 895 280" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+  <!-- Flow Connector 3 -> 4 -->
+  <path d="M 880 390 L 910 390" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#arr-amber)" />
 
-  <!-- 4. DETERMINISTIC GATES & FINALITY (RIGHT) -->
-  <g transform="translate(900, 90)">
-    <rect width="270" height="470" rx="8" fill="#f8fafc" stroke="#059669" stroke-width="2" />
-    <rect width="270" height="32" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2" />
-    <text x="135" y="21" fill="#065f46" font-size="12" font-weight="700" text-anchor="middle">4. GATES &amp; FINALITY</text>
+  <!-- ========================================================================= -->
+  <!-- ZONE 4: DETERMINISTIC VERIFICATION & EXACT SOLVERS (X: 910, Width: 320)   -->
+  <!-- ========================================================================= -->
+  <g transform="translate(910, 90)">
+    <!-- Zone Container -->
+    <rect width="320" height="660" rx="8" fill="#09181a" stroke="#0d9488" stroke-width="1.5" />
+    <rect width="320" height="34" rx="8" fill="#115e59" stroke="#0d9488" stroke-width="1.5" />
+    <text x="16" y="22" fill="#ccfbf1" font-size="11" font-weight="700" letter-spacing="1">4. VERIFICATION &amp; EXACT SOLVERS</text>
 
-    <!-- Non-LLM Mechanical Verifier -->
-    <g transform="translate(12, 45)">
-      <rect width="246" height="76" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#065f46" font-size="11.5" font-weight="700">Non-LLM Mechanical Gate</text>
-      <text x="12" y="40" fill="#475569" font-size="10">· 10 Bitwise deterministic validation checks</text>
-      <text x="12" y="56" fill="#475569" font-size="10">· Throughput: 134,511 claims/sec</text>
-      <text x="12" y="70" fill="#475569" font-size="10">· Fabricated claims instantly blocked</text>
+    <!-- Stage 1: Non-LLM Mechanical Validator -->
+    <g transform="translate(12, 46)">
+      <rect width="296" height="154" rx="6" fill="#0c2427" stroke="#14b8a6" stroke-width="1.2" />
+      <text x="12" y="22" fill="#2dd4bf" font-size="11" font-weight="700">Non-LLM Mechanical Validator Gate</text>
+      <text x="12" y="40" fill="#e6fffa" font-size="9.5">· Bitwise validation against raw ingested data</text>
+      <text x="12" y="56" fill="#e6fffa" font-size="9.5">· Evaluates 10 deterministic structural checks:</text>
+      <text x="20" y="72" fill="#99f6e4" font-size="8.5">1. EVIDENCE_EXISTS  2. VALUES_MATCH  3. TIMING_CHECKED</text>
+      <text x="20" y="86" fill="#99f6e4" font-size="8.5">4. RECORD_EXISTS    5. ARITHMETIC    6. RELATIONSHIP</text>
+      <text x="20" y="100" fill="#99f6e4" font-size="8.5">7. INVARIANTS       8. POLICIES      9. AUTHORIZATION</text>
+      
+      <rect x="12" y="112" width="272" height="32" rx="4" fill="#042f2e" stroke="#0f766e" stroke-width="1" />
+      <text x="20" y="126" fill="#5eead4" font-size="9" font-weight="700">Micro-Benchmark Throughput: 134,511 claims/sec</text>
+      <text x="20" y="138" fill="#ccfbf1" font-size="8">Fabricated references / hallucinations instantly rejected in &lt;1ms</text>
     </g>
 
-    <!-- OR-Tools & Correction Prover -->
-    <g transform="translate(12, 130)">
-      <rect width="246" height="88" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#0f172a" font-size="11.5" font-weight="700">Exact Solvers &amp; Prover</text>
-      <text x="12" y="40" fill="#475569" font-size="10">· OR-Tools CP-SAT for split matching</text>
-      <text x="12" y="56" fill="#475569" font-size="10">· Minimal correction: 1 pair / 2 lines</text>
-      <text x="12" y="72" fill="#475569" font-size="10">· Invariant restoration proved (Before vs After)</text>
-      <text x="12" y="84" fill="#059669" font-size="9.5" font-weight="600">· Dual-Control Maker/Checker for High Exp</text>
+    <!-- Stage 2: Google OR-Tools CP-SAT Solver -->
+    <g transform="translate(12, 208)">
+      <rect width="296" height="114" rx="6" fill="#0c2427" stroke="#14b8a6" stroke-width="1.2" />
+      <text x="12" y="22" fill="#2dd4bf" font-size="11" font-weight="700">Google OR-Tools CP-SAT Solver</text>
+      <text x="12" y="40" fill="#e6fffa" font-size="9.5">· Combinatorial N:1, 1:N &amp; N:M subset sum</text>
+      <text x="12" y="56" fill="#e6fffa" font-size="9.5">· Split payment &amp; multi-invoice allocation</text>
+      <text x="12" y="72" fill="#e6fffa" font-size="9.5">· Exact mathematical integer constraints</text>
+      <text x="12" y="88" fill="#e6fffa" font-size="9.5">· Sub-2ms execution time per cluster</text>
+      <text x="12" y="104" fill="#5eead4" font-size="8.5" font-weight="600">Zero floating-point rounding or heuristics</text>
     </g>
 
-    <!-- Double Entry Ledger -->
-    <g transform="translate(12, 228)">
-      <rect width="246" height="66" rx="6" fill="#ffffff" stroke="#a7f3d0" stroke-width="1" filter="url(#shadow)" />
-      <text x="12" y="22" fill="#0f172a" font-size="11.5" font-weight="700">Double-Entry Ledger</text>
-      <text x="12" y="40" fill="#475569" font-size="10">· Atomic CAS transaction commit</text>
-      <text x="12" y="56" fill="#475569" font-size="10">· Exact balance conservation (ΣDr ≡ ΣCr)</text>
+    <!-- Stage 3: Dual-Control Maker/Checker -->
+    <g transform="translate(12, 330)">
+      <rect width="296" height="114" rx="6" fill="#0c2427" stroke="#14b8a6" stroke-width="1.2" />
+      <text x="12" y="22" fill="#2dd4bf" font-size="11" font-weight="700">Dual-Control Maker/Checker Gate</text>
+      <text x="12" y="40" fill="#e6fffa" font-size="9.5">· Low Exposure: Auto-commit with audit receipt</text>
+      <text x="12" y="56" fill="#e6fffa" font-size="9.5">· High Exposure (&gt;₹10,000) or Low Confidence:</text>
+      <text x="20" y="72" fill="#fde68a" font-size="9">· REVIEWER: Prepares case (read/draft only)</text>
+      <text x="20" y="86" fill="#fde68a" font-size="9">· ADMIN: Strictly required to sign &amp; approve</text>
+      <text x="12" y="104" fill="#99f6e4" font-size="8.5">Separation of duties enforced server-side (403)</text>
+    </g>
+
+    <!-- Stage 4: Invariant Restoration Prover -->
+    <g transform="translate(12, 452)">
+      <rect width="296" height="196" rx="6" fill="#0b2b28" stroke="#059669" stroke-width="1.5" />
+      <text x="12" y="22" fill="#34d399" font-size="11" font-weight="700">Minimal Correction &amp; Invariant Prover</text>
+      
+      <text x="12" y="42" fill="#a7f3d0" font-size="9.5" font-weight="600">Minimal Adjusting Journal:</text>
+      <text x="12" y="58" fill="#d1fae5" font-size="9">· Exactly 1 balanced pair (2 lines: 1 Dr, 1 Cr)</text>
+      <text x="12" y="72" fill="#d1fae5" font-size="9">· Zero extraneous ledger mutations</text>
+
+      <path d="M 12 82 L 284 82" stroke="#047857" stroke-width="1" />
+
+      <text x="12" y="98" fill="#a7f3d0" font-size="9.5" font-weight="600">Mathematical Invariant Proof:</text>
+      <text x="12" y="116" fill="#6ee7b7" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="9">Δ_pre  ≠ 0  (Imbalance Documented)</text>
+      <text x="12" y="132" fill="#6ee7b7" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="9">Δ_post = 0  (Exact Conservation Restored)</text>
+      
+      <path d="M 12 144 L 284 144" stroke="#047857" stroke-width="1" />
+
+      <text x="12" y="162" fill="#ffffff" font-size="9" font-weight="600">25/25 Invariant Restoration Proofs Passing</text>
+      <text x="12" y="178" fill="#a7f3d0" font-size="8.5">Verified before any ledger state transition</text>
+    </g>
+  </g>
+
+  <!-- Flow Connector 4 -> 5 -->
+  <path d="M 1230 480 L 1260 480" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#arr-green)" />
+
+  <!-- ========================================================================= -->
+  <!-- ZONE 5: IMMUTABLE FINALITY & REPLAY (X: 1260, Width: 390, Y: 90)           -->
+  <!-- ========================================================================= -->
+  <g transform="translate(1260, 90)">
+    <!-- Zone Container -->
+    <rect width="390" height="660" rx="8" fill="#081c16" stroke="#059669" stroke-width="1.8" />
+    <rect width="390" height="34" rx="8" fill="#064e3b" stroke="#059669" stroke-width="1.8" />
+    <text x="16" y="22" fill="#a7f3d0" font-size="11" font-weight="700" letter-spacing="1">5. IMMUTABLE FINALITY &amp; REPLAY</text>
+
+    <!-- Double-Entry General Ledger -->
+    <g transform="translate(14, 46)">
+      <rect width="362" height="128" rx="6" fill="#092e23" stroke="#047857" stroke-width="1.2" />
+      <text x="14" y="22" fill="#34d399" font-size="11.5" font-weight="700">Double-Entry General Ledger</text>
+      <text x="14" y="42" fill="#d1fae5" font-size="9.5">· Atomic CAS transaction commit</text>
+      <text x="14" y="58" fill="#d1fae5" font-size="9.5">· Strict mathematical balance: Σ Debits ≡ Σ Credits</text>
+      <text x="14" y="74" fill="#d1fae5" font-size="9.5">· Optimistic version locking (version = version + 1)</text>
+      <text x="14" y="90" fill="#d1fae5" font-size="9.5">· Zero duplicate payouts or double-claim races</text>
+      <text x="14" y="112" fill="#6ee7b7" font-size="9" font-weight="600">Dual Backend: PostgreSQL (Cloud) / SQLite WAL (Local)</text>
     </g>
 
     <!-- Terminal Decision Receipt -->
-    <g transform="translate(12, 304)">
-      <rect width="246" height="96" rx="6" fill="#0f172a" stroke="#059669" stroke-width="1.5" />
-      <text x="12" y="22" fill="#34d399" font-size="11.5" font-weight="700">Terminal Decision Receipt</text>
-      <text x="12" y="40" fill="#e2e8f0" font-size="10">· Canonical RFC 8785 JSON format</text>
-      <text x="12" y="56" fill="#e2e8f0" font-size="10">· HMAC-SHA256 Cryptographic Signature</text>
-      <text x="12" y="72" fill="#e2e8f0" font-size="10">· Merkle Root Evidence Commitment</text>
-      <text x="12" y="88" fill="#38bdf8" font-size="10" font-weight="600">· 0 LLMs / 0 DBs Deterministic Replay</text>
+    <g transform="translate(14, 184)">
+      <rect width="362" height="194" rx="6" fill="#041f17" stroke="#10b981" stroke-width="1.6" />
+      <text x="14" y="22" fill="#34d399" font-size="11.5" font-weight="700">Signed Terminal Decision Receipt</text>
+      
+      <rect x="14" y="32" width="334" height="106" rx="4" fill="#02140f" stroke="#065f46" stroke-width="1" />
+      <text x="22" y="48" fill="#6ee7b7" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="8.5">"receiptId": "rcpt_m5_live_8829",</text>
+      <text x="22" y="62" fill="#6ee7b7" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="8.5">"canonicalHash": "e3b0c44298fc1c149afbf4c...",</text>
+      <text x="22" y="76" fill="#6ee7b7" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="8.5">"signature": "hmac_sha256:7f83b1657ff1...",</text>
+      <text x="22" y="90" fill="#6ee7b7" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="8.5">"evidenceCommitment": { "merkleRoot": "a1b2..." },</text>
+      <text x="22" y="104" fill="#6ee7b7" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="8.5">"decision": "AUTO_RESOLVED" | "HUMAN_APPROVED"</text>
+      <text x="22" y="124" fill="#a7f3d0" font-size="8.5">RFC 8785 Canonical JSON · Lexicographically sorted keys</text>
+
+      <text x="14" y="156" fill="#d1fae5" font-size="9.5">· Bitwise identical hashes across runtimes &amp; platforms</text>
+      <text x="14" y="172" fill="#d1fae5" font-size="9.5">· Tampering any byte breaks signature instantaneously</text>
+      <text x="14" y="186" fill="#6ee7b7" font-size="8.5" font-weight="600">30/30 Milestone 5 Cryptographic Receipt Proofs Passing</text>
     </g>
 
-    <!-- Replay Badge -->
-    <g transform="translate(12, 410)">
-      <rect width="246" height="48" rx="6" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
-      <text x="123" y="22" fill="#065f46" font-size="11" font-weight="700" text-anchor="middle">Tamper Proof Verified</text>
-      <text x="123" y="38" fill="#047857" font-size="9.5" text-anchor="middle">Bitwise replay verified across 1000 iterations</text>
+    <!-- Standalone Offline Replay -->
+    <g transform="translate(14, 388)">
+      <rect width="362" height="114" rx="6" fill="#092e23" stroke="#047857" stroke-width="1.2" />
+      <text x="14" y="22" fill="#34d399" font-size="11.5" font-weight="700">Zero-LLM Standalone Deterministic Replay</text>
+      <text x="14" y="42" fill="#d1fae5" font-size="9.5">· Independent offline verification in &lt;1ms</text>
+      <text x="14" y="58" fill="#d1fae5" font-size="9.5">· 0 LLM API calls · 0 Database queries</text>
+      <text x="14" y="74" fill="#d1fae5" font-size="9.5">· Full audit verification for external regulators</text>
+      <text x="14" y="94" fill="#6ee7b7" font-size="9" font-weight="600">Micro-Benchmark: 555,555 replays / sec</text>
+      <text x="14" y="106" fill="#a7f3d0" font-size="8.5">1,000 / 1,000 verification scenarios bitwise verified</text>
+    </g>
+
+    <!-- Official Verified Results Box -->
+    <g transform="translate(14, 510)">
+      <rect width="362" height="136" rx="6" fill="#031610" stroke="#059669" stroke-width="1.5" />
+      <text x="14" y="20" fill="#34d399" font-size="10.5" font-weight="700">OFFICIAL VERIFIED EVALUATION BASELINE</text>
+      
+      <g transform="translate(14, 30)">
+        <text x="0" y="14" fill="#a7f3d0" font-size="9.5">Accuracy:</text>
+        <text x="110" y="14" fill="#ffffff" font-size="9.5" font-weight="700">98.1% (Target &gt;85%)</text>
+
+        <text x="0" y="32" fill="#a7f3d0" font-size="9.5">Precision / Recall:</text>
+        <text x="110" y="32" fill="#ffffff" font-size="9.5" font-weight="700">98.0% / 98.0%</text>
+
+        <text x="0" y="50" fill="#a7f3d0" font-size="9.5">Adversarial Detection:</text>
+        <text x="110" y="50" fill="#ffffff" font-size="9.5" font-weight="700">90.0% (9/10 neutralized)</text>
+
+        <text x="0" y="68" fill="#a7f3d0" font-size="9.5">Benchmark Speed:</text>
+        <text x="110" y="68" fill="#ffffff" font-size="9.5" font-weight="700">806.75 – 935.94 rec/s</text>
+
+        <text x="0" y="86" fill="#a7f3d0" font-size="9">Test Matrix Total:</text>
+        <text x="110" y="86" fill="#34d399" font-size="9" font-weight="700">96 / 96 Automated Suites Passing</text>
+
+        <text x="0" y="98" fill="#64748b" font-size="8">Dataset Fingerprint: 81d840cd8cf981e5e69a367b879a8f11...</text>
+      </g>
     </g>
   </g>
 
-  <!-- 5. DURABLE SCALE & SECURITY INFRASTRUCTURE (BOTTOM BANNER) -->
-  <g transform="translate(30, 580)">
-    <rect width="1140" height="250" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
-    <rect width="1140" height="32" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5" />
-    <text x="570" y="21" fill="#0f172a" font-size="12" font-weight="700" text-anchor="middle">5. SCALE ARCHITECTURE &amp; ZERO-TRUST SECURITY BOUNDARY</text>
+  <!-- ========================================================================= -->
+  <!-- ZONE 6A: SCALE & DURABLE BOUNDED EXECUTION (X: 30, Width: 980, Y: 770)    -->
+  <!-- ========================================================================= -->
+  <g transform="translate(30, 770)">
+    <rect width="980" height="280" rx="8" fill="#0c1322" stroke="#1e293b" stroke-width="1.2" />
+    <rect width="980" height="30" rx="8" fill="#131c31" stroke="#1e293b" stroke-width="1.2" />
+    <text x="16" y="20" fill="#38bdf8" font-size="11" font-weight="700" letter-spacing="1">6A. DURABLE BOUNDED EXECUTION &amp; VERIFIED SCALE TIERS</text>
 
-    <!-- Scale Pillar -->
-    <g transform="translate(20, 46)">
-      <rect width="535" height="188" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="16" y="24" fill="#0f172a" font-size="13" font-weight="700">Durable Bounded Execution (Scale Architecture)</text>
-      <text x="16" y="46" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Operations Center Coordination:</tspan> Client steps execution in bounded, authoritative slices.</text>
-      <text x="16" y="66" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Dual Database Engine:</tspan> PostgreSQL (pg.Pool / Neon) + SQLite (better-sqlite3 WAL).</text>
-      <text x="16" y="86" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Resumability &amp; Checkpoints:</tspan> Stalled job detection; crash-safe recovery from disk.</text>
-      <text x="16" y="106" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Authoritative Cancellation:</tspan> Cooperative state machine with &lt;1000ms terminal latency.</text>
-      
-      <!-- Tier Badges -->
-      <g transform="translate(16, 128)">
-        <rect x="0" y="0" width="95" height="42" rx="4" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />
-        <text x="47" y="17" fill="#1e40af" font-size="10" font-weight="700" text-anchor="middle">250 Records</text>
-        <text x="47" y="33" fill="#3b82f6" font-size="9" text-anchor="middle">431ms · Interactive</text>
+    <!-- Execution Loop Step Flow -->
+    <g transform="translate(16, 42)">
+      <!-- Step 1: Ops Center -->
+      <g transform="translate(0, 0)">
+        <rect width="140" height="66" rx="4" fill="#131e33" stroke="#2563eb" stroke-width="1" />
+        <text x="10" y="18" fill="#60a5fa" font-size="9.5" font-weight="700">Operations Center</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">Browser client</text>
+        <text x="10" y="46" fill="#94a3b8" font-size="8.5">stepped coordinator</text>
+        <text x="10" y="58" fill="#60a5fa" font-size="8">Ref mutex / yields</text>
+      </g>
 
-        <rect x="105" y="0" width="95" height="42" rx="4" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />
-        <text x="152" y="17" fill="#1e40af" font-size="10" font-weight="700" text-anchor="middle">10,000 Txns</text>
-        <text x="152" y="33" fill="#3b82f6" font-size="9" text-anchor="middle">1,246 rec/sec</text>
+      <!-- Arrow 1 -> 2 -->
+      <path d="M 140 33 L 158 33" stroke="#38bdf8" stroke-width="1.4" marker-end="url(#arr-blue)" />
 
-        <rect x="210" y="0" width="95" height="42" rx="4" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />
-        <text x="257" y="17" fill="#1e40af" font-size="10" font-weight="700" text-anchor="middle">100,000 Txns</text>
-        <text x="257" y="33" fill="#3b82f6" font-size="9" text-anchor="middle">Durable Chunked</text>
+      <!-- Step 2: Bounded API -->
+      <g transform="translate(162, 0)">
+        <rect width="140" height="66" rx="4" fill="#131e33" stroke="#2563eb" stroke-width="1" />
+        <text x="10" y="18" fill="#60a5fa" font-size="9.5" font-weight="700">Bounded Step API</text>
+        <text x="10" y="34" fill="#cbd5e1" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="8">POST /jobs/:id/step</text>
+        <text x="10" y="48" fill="#94a3b8" font-size="8.5">1k–5k txns/slice</text>
+        <text x="10" y="58" fill="#94a3b8" font-size="8.5">No HTTP timeouts</text>
+      </g>
 
-        <rect x="315" y="0" width="95" height="42" rx="4" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />
-        <text x="362" y="17" fill="#1e40af" font-size="10" font-weight="700" text-anchor="middle">1,000,000 Txns</text>
-        <text x="362" y="33" fill="#3b82f6" font-size="9" text-anchor="middle">Partitioned SLA</text>
+      <!-- Arrow 2 -> 3 -->
+      <path d="M 302 33 L 320 33" stroke="#38bdf8" stroke-width="1.4" marker-end="url(#arr-blue)" />
 
-        <rect x="420" y="0" width="80" height="42" rx="4" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1" />
-        <text x="460" y="17" fill="#1e40af" font-size="10" font-weight="700" text-anchor="middle">10M+ Txns</text>
-        <text x="460" y="33" fill="#3b82f6" font-size="9" text-anchor="middle">Partitioned</text>
+      <!-- Step 3: Durable DB -->
+      <g transform="translate(324, 0)">
+        <rect width="140" height="66" rx="4" fill="#131e33" stroke="#2563eb" stroke-width="1" />
+        <text x="10" y="18" fill="#60a5fa" font-size="9.5" font-weight="700">Durable DB Lease</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">PostgreSQL / SQLite</text>
+        <text x="10" y="48" fill="#94a3b8" font-size="8.5">Optimistic CAS lock</text>
+        <text x="10" y="58" fill="#94a3b8" font-size="8.5">version = version + 1</text>
+      </g>
+
+      <!-- Arrow 3 -> 4 -->
+      <path d="M 464 33 L 482 33" stroke="#38bdf8" stroke-width="1.4" marker-end="url(#arr-blue)" />
+
+      <!-- Step 4: Chunk Execution -->
+      <g transform="translate(486, 0)">
+        <rect width="140" height="66" rx="4" fill="#131e33" stroke="#2563eb" stroke-width="1" />
+        <text x="10" y="18" fill="#60a5fa" font-size="9.5" font-weight="700">Chunk Match Slice</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">Deterministic match</text>
+        <text x="10" y="48" fill="#94a3b8" font-size="8.5">Disjoint partition run</text>
+        <text x="10" y="58" fill="#94a3b8" font-size="8.5">Zero cross-talk error</text>
+      </g>
+
+      <!-- Arrow 4 -> 5 -->
+      <path d="M 626 33 L 644 33" stroke="#38bdf8" stroke-width="1.4" marker-end="url(#arr-blue)" />
+
+      <!-- Step 5: Checkpoint -->
+      <g transform="translate(648, 0)">
+        <rect width="140" height="66" rx="4" fill="#131e33" stroke="#2563eb" stroke-width="1" />
+        <text x="10" y="18" fill="#60a5fa" font-size="9.5" font-weight="700">Checkpoint State</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">Monotonic progress</text>
+        <text x="10" y="48" fill="#94a3b8" font-size="8.5">Atomic slice commit</text>
+        <text x="10" y="58" fill="#94a3b8" font-size="8.5">Survives tab reload</text>
+      </g>
+
+      <!-- Arrow 5 -> 6 -->
+      <path d="M 788 33 L 806 33" stroke="#10b981" stroke-width="1.4" marker-end="url(#arr-green)" />
+
+      <!-- Step 6: Finality / Cancel -->
+      <g transform="translate(810, 0)">
+        <rect width="138" height="66" rx="4" fill="#072218" stroke="#059669" stroke-width="1" />
+        <text x="10" y="18" fill="#34d399" font-size="9.5" font-weight="700">Finality / Cancel</text>
+        <text x="10" y="34" fill="#a7f3d0" font-size="8.5">Next step loop cycle</text>
+        <text x="10" y="48" fill="#a7f3d0" font-size="8.5">Cancel &lt;1000ms SLA</text>
+        <text x="10" y="58" fill="#a7f3d0" font-size="8.5">Receipt on 100% done</text>
       </g>
     </g>
 
-    <!-- Security Pillar -->
-    <g transform="translate(585, 46)">
-      <rect width="535" height="188" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)" />
-      <text x="16" y="24" fill="#0f172a" font-size="13" font-weight="700">Zero-Trust Security &amp; Tenant Isolation</text>
-      <text x="16" y="46" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Strict Multi-Tenant RLS:</tspan> Row-level isolation; cross-tenant access hard blocked (404/403).</text>
-      <text x="16" y="66" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Server-Derived Identity:</tspan> HMAC session tokens; actor and role cannot be forged in payload.</text>
-      <text x="16" y="86" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Separation of Duties:</tspan> REVIEWER investigates; only ADMIN can approve high-exposure writes.</text>
-      <text x="16" y="106" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">Prompt-Injection Quarantining:</tspan> All bank narrations treated as untrusted text.</text>
-      <text x="16" y="126" fill="#475569" font-size="11">· <tspan font-weight="600" fill="#0f172a">SSRF Protection:</tspan> Outbound webhook dispatcher blocks loopback, private CIDRs &amp; metadata IP.</text>
-      
-      <g transform="translate(16, 142)">
-        <rect width="503" height="34" rx="4" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
-        <text x="251" y="22" fill="#0f172a" font-size="10.5" font-weight="600" text-anchor="middle">96 Automated Test Suites · 24/24 Pipeline Scenarios · 30/30 Milestone 5 Proofs Passed</text>
+    <!-- Horizontal Scale Tiers Track -->
+    <g transform="translate(16, 122)">
+      <rect width="948" height="136" rx="6" fill="#080e1a" stroke="#1e293b" stroke-width="1" />
+      <text x="14" y="20" fill="#94a3b8" font-size="10" font-weight="700">EMPIRICALLY VERIFIED WORKLOAD TIERS (NO FLOATING-POINT DRIFT AT ANY SCALE)</text>
+
+      <!-- Tier 1: 250 -->
+      <g transform="translate(12, 32)">
+        <rect width="176" height="88" rx="4" fill="#10192b" stroke="#1e3a5f" stroke-width="1" />
+        <text x="10" y="18" fill="#ffffff" font-size="11" font-weight="700">250 Records</text>
+        <text x="10" y="34" fill="#38bdf8" font-size="9.5" font-weight="600">431ms · Interactive</text>
+        <text x="10" y="50" fill="#94a3b8" font-size="8.5">Official Benchmark Baseline</text>
+        <text x="10" y="64" fill="#94a3b8" font-size="8.5">98.1% Accuracy verified</text>
+        <text x="10" y="78" fill="#94a3b8" font-size="8.5">0 AI calls on clean records</text>
+      </g>
+
+      <!-- Tier 2: 10K -->
+      <g transform="translate(198, 32)">
+        <rect width="176" height="88" rx="4" fill="#10192b" stroke="#1e3a5f" stroke-width="1" />
+        <text x="10" y="18" fill="#ffffff" font-size="11" font-weight="700">10,000 Txns</text>
+        <text x="10" y="34" fill="#38bdf8" font-size="9.5" font-weight="600">1,246 rec/sec</text>
+        <text x="10" y="50" fill="#94a3b8" font-size="8.5">Continuous stepping loop</text>
+        <text x="10" y="64" fill="#94a3b8" font-size="8.5">High-rate limiter capacity</text>
+        <text x="10" y="78" fill="#94a3b8" font-size="8.5">Live UI progress verified</text>
+      </g>
+
+      <!-- Tier 3: 100K -->
+      <g transform="translate(384, 32)">
+        <rect width="176" height="88" rx="4" fill="#10192b" stroke="#1e3a5f" stroke-width="1" />
+        <text x="10" y="18" fill="#ffffff" font-size="11" font-weight="700">100,000 Txns</text>
+        <text x="10" y="34" fill="#38bdf8" font-size="9.5" font-weight="600">Durable Chunked</text>
+        <text x="10" y="50" fill="#94a3b8" font-size="8.5">PostgreSQL checkpointed</text>
+        <text x="10" y="64" fill="#94a3b8" font-size="8.5">Atomic chunk commit</text>
+        <text x="10" y="78" fill="#94a3b8" font-size="8.5">Memory constant &lt;250MB</text>
+      </g>
+
+      <!-- Tier 4: 1M -->
+      <g transform="translate(570, 32)">
+        <rect width="176" height="88" rx="4" fill="#10192b" stroke="#1e3a5f" stroke-width="1" />
+        <text x="10" y="18" fill="#ffffff" font-size="11" font-weight="700">1,000,000 Txns</text>
+        <text x="10" y="34" fill="#38bdf8" font-size="9.5" font-weight="600">Partitioned Scale</text>
+        <text x="10" y="50" fill="#94a3b8" font-size="8.5">Regression-tested</text>
+        <text x="10" y="64" fill="#94a3b8" font-size="8.5">&lt;1000ms cancel latency</text>
+        <text x="10" y="78" fill="#94a3b8" font-size="8.5">Opportunistic finalization</text>
+      </g>
+
+      <!-- Tier 5: 10M+ -->
+      <g transform="translate(756, 32)">
+        <rect width="180" height="88" rx="4" fill="#10192b" stroke="#1e3a5f" stroke-width="1" />
+        <text x="10" y="18" fill="#ffffff" font-size="11" font-weight="700">10,000,000+ Txns</text>
+        <text x="10" y="34" fill="#38bdf8" font-size="9.5" font-weight="600">Bounded Partitioned</text>
+        <text x="10" y="50" fill="#94a3b8" font-size="8.5">Validated scale handling</text>
+        <text x="10" y="64" fill="#94a3b8" font-size="8.5">Disjoint partition queues</text>
+        <text x="10" y="78" fill="#94a3b8" font-size="8.5">Constant memory footprint</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- ZONE 6B: ZERO-TRUST SECURITY BOUNDARY (X: 1030, Width: 620, Y: 770)       -->
+  <!-- ========================================================================= -->
+  <g transform="translate(1030, 770)">
+    <rect width="620" height="280" rx="8" fill="#0c1322" stroke="#1e293b" stroke-width="1.2" />
+    <rect width="620" height="30" rx="8" fill="#131c31" stroke="#1e293b" stroke-width="1.2" />
+    <text x="16" y="20" fill="#38bdf8" font-size="11" font-weight="700" letter-spacing="1">6B. ZERO-TRUST SECURITY &amp; ISOLATION BOUNDARY</text>
+
+    <!-- Grid of 8 Security Pillars -->
+    <g transform="translate(14, 40)">
+      <!-- 1: Multi-Tenant RLS -->
+      <g transform="translate(0, 0)">
+        <rect width="288" height="48" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">1. Strict Multi-Tenant Isolation</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">Row-level security; cross-tenant calls blocked (404/403)</text>
+      </g>
+
+      <!-- 2: Server-Derived Identity -->
+      <g transform="translate(304, 0)">
+        <rect width="288" height="48" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">2. Server-Derived Identity</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">HMAC-SHA256 session; client cannot spoof actor/role</text>
+      </g>
+
+      <!-- 3: Separation of Duties -->
+      <g transform="translate(0, 56)">
+        <rect width="288" height="48" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">3. Separation of Duties (RBAC)</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">REVIEWER prepares cases; only ADMIN approves commits</text>
+      </g>
+
+      <!-- 4: Prompt Injection Quarantine -->
+      <g transform="translate(304, 56)">
+        <rect width="288" height="48" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">4. Prompt-Injection Quarantine</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">Bank narrations isolated as data; output schema enforced</text>
+      </g>
+
+      <!-- 5: Outbound SSRF Protection -->
+      <g transform="translate(0, 112)">
+        <rect width="288" height="48" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">5. Outbound SSRF Protection</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">Webhook guard blocks loopback, private IPs &amp; cloud metadata</text>
+      </g>
+
+      <!-- 6: Token Bucket Rate Limiting -->
+      <g transform="translate(304, 112)">
+        <rect width="288" height="48" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">6. Token-Bucket Rate Limiter</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">100 req/min perimeter protection with standard 429 headers</text>
+      </g>
+
+      <!-- 7: Cryptographic Tamper Detection -->
+      <g transform="translate(0, 168)">
+        <rect width="288" height="52" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">7. Cryptographic Tamper Seal</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">HMAC-SHA256 signature invalidates on any single bit edit</text>
+      </g>
+
+      <!-- 8: Fail-Closed Secrets -->
+      <g transform="translate(304, 168)">
+        <rect width="288" height="52" rx="4" fill="#101827" stroke="#1f293d" stroke-width="1" />
+        <text x="10" y="18" fill="#38bdf8" font-size="10" font-weight="700">8. Fail-Closed Configuration</text>
+        <text x="10" y="34" fill="#94a3b8" font-size="8.5">AUTH_SECRET mandatory in production; zero insecure defaults</text>
       </g>
     </g>
   </g>

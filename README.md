@@ -66,7 +66,7 @@ Large Language Models excel at reading unstructured payment narrations, synthesi
 
 ## Architecture
 
-![Primary SettleMate AI architecture](docs/architecture/settlemate-architecture.svg)
+![SettleMate AI architecture](docs/architecture/settlemate-architecture.svg)
 
 ---
 
