@@ -21,8 +21,10 @@ import { generateSyntheticBatchSlice } from "@/lib/synthetic/generator";
 interface DynamicJobPrisma {
   asyncJob?: {
     findUnique: (args: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+    findMany: (args: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
     create: (args: Record<string, unknown>) => Promise<Record<string, unknown>>;
     update: (args: Record<string, unknown>) => Promise<Record<string, unknown>>;
+    upsert: (args: Record<string, unknown>) => Promise<Record<string, unknown>>;
     updateMany: (args: Record<string, unknown>) => Promise<{ count: number }>;
   };
   jobItem?: {
@@ -450,29 +452,36 @@ export async function recordCompletedDurableJob(params: {
   const key = params.idempotencyKey || `idemp_${id}`;
   const now = new Date();
 
-  if (isPostgres()) {
-    try {
-      await dynamicPrisma.asyncJob?.create({
-        data: {
-          id,
-          tenantId,
-          idempotencyKey: key,
-          jobType: params.jobType,
-          status: "COMPLETED",
-          payload: JSON.stringify(params.payload || { size: params.batchSize }),
-          result: params.result ? JSON.stringify(params.result) : undefined,
-          attempt: 1,
-          maxRetries: 3,
-          progressCurrent: params.batchSize,
-          progressTotal: params.batchSize,
-          createdAt: now,
-          updatedAt: now,
-          completedAt: now,
-        },
-      });
-    } catch {
-      // Ignore conflict
-    }
+  try {
+    await dynamicPrisma.asyncJob?.upsert({
+      where: { id },
+      update: {
+        status: "COMPLETED",
+        result: params.result ? JSON.stringify(params.result) : undefined,
+        progressCurrent: params.batchSize,
+        progressTotal: params.batchSize,
+        updatedAt: now,
+        completedAt: now,
+      },
+      create: {
+        id,
+        tenantId,
+        idempotencyKey: key,
+        jobType: params.jobType,
+        status: "COMPLETED",
+        payload: JSON.stringify(params.payload || { size: params.batchSize }),
+        result: params.result ? JSON.stringify(params.result) : undefined,
+        attempt: 1,
+        maxRetries: 3,
+        progressCurrent: params.batchSize,
+        progressTotal: params.batchSize,
+        createdAt: now,
+        updatedAt: now,
+        completedAt: now,
+      },
+    });
+  } catch {
+    // Ignore conflict
   }
 
   const record: DurableJobRecord = {
@@ -1369,37 +1378,36 @@ export async function getDurableJob(
   jobId: string,
   tenantId?: string
 ): Promise<DurableJobRecord | null> {
-  if (isPostgres()) {
+  try {
     const raw = await dynamicPrisma.asyncJob?.findUnique({
       where: { id: jobId },
     });
-    if (!raw || (tenantId && raw.tenantId !== tenantId)) {
-      return null;
+    if (raw && (!tenantId || raw.tenantId === tenantId)) {
+      return {
+        id: raw.id as string,
+        tenantId: raw.tenantId as string,
+        idempotencyKey: raw.idempotencyKey as string,
+        jobType: raw.jobType as string,
+        status: raw.status as JobStatus,
+        payload: JSON.parse((raw.payload as string) || "{}"),
+        result: raw.result ? JSON.parse(raw.result as string) : undefined,
+        error: (raw.error as string) || undefined,
+        attempt: Number(raw.attempt || 0),
+        maxRetries: Number(raw.maxRetries || 3),
+        workerId: (raw.workerId as string) || undefined,
+        claimedAt: (raw.claimedAt as Date) || undefined,
+        leaseExpiresAt: (raw.leaseExpiresAt as Date) || undefined,
+        heartbeatAt: (raw.heartbeatAt as Date) || undefined,
+        nextRetryAt: (raw.nextRetryAt as Date) || undefined,
+        cancelRequestedAt: (raw.cancelRequestedAt as Date) || undefined,
+        progressCurrent: Number(raw.progressCurrent || 0),
+        progressTotal: Number(raw.progressTotal || 0),
+        createdAt: raw.createdAt as Date,
+        updatedAt: raw.updatedAt as Date,
+        completedAt: (raw.completedAt as Date) || undefined,
+      };
     }
-    return {
-      id: raw.id as string,
-      tenantId: raw.tenantId as string,
-      idempotencyKey: raw.idempotencyKey as string,
-      jobType: raw.jobType as string,
-      status: raw.status as JobStatus,
-      payload: JSON.parse((raw.payload as string) || "{}"),
-      result: raw.result ? JSON.parse(raw.result as string) : undefined,
-      error: (raw.error as string) || undefined,
-      attempt: Number(raw.attempt || 0),
-      maxRetries: Number(raw.maxRetries || 3),
-      workerId: (raw.workerId as string) || undefined,
-      claimedAt: (raw.claimedAt as Date) || undefined,
-      leaseExpiresAt: (raw.leaseExpiresAt as Date) || undefined,
-      heartbeatAt: (raw.heartbeatAt as Date) || undefined,
-      nextRetryAt: (raw.nextRetryAt as Date) || undefined,
-      cancelRequestedAt: (raw.cancelRequestedAt as Date) || undefined,
-      progressCurrent: Number(raw.progressCurrent || 0),
-      progressTotal: Number(raw.progressTotal || 0),
-      createdAt: raw.createdAt as Date,
-      updatedAt: raw.updatedAt as Date,
-      completedAt: (raw.completedAt as Date) || undefined,
-    };
-  }
+  } catch {}
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId && (!tenantId || job.tenantId === tenantId)) {
@@ -1417,55 +1425,48 @@ export async function listDurableJobs(
   tenantId?: string,
   limit: number = 20
 ): Promise<{ activeJobs: DurableJobRecord[]; recentJobs: DurableJobRecord[] }> {
-  if (isPostgres()) {
-    const records = tenantId
-      ? await prisma.$queryRaw<Array<Record<string, unknown>>>`
-          SELECT *
-          FROM "AsyncJob"
-          WHERE "tenantId" = ${tenantId}
-          ORDER BY "createdAt" DESC
-          LIMIT ${limit}
-        `
-      : await prisma.$queryRaw<Array<Record<string, unknown>>>`
-          SELECT *
-          FROM "AsyncJob"
-          ORDER BY "createdAt" DESC
-          LIMIT ${limit}
-        `;
+  try {
+    const records = await dynamicPrisma.asyncJob?.findMany({
+      where: tenantId ? { tenantId } : undefined,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
 
-    const mapped: DurableJobRecord[] = records.map((raw) => ({
-      id: raw.id as string,
-      tenantId: raw.tenantId as string,
-      idempotencyKey: raw.idempotencyKey as string,
-      jobType: raw.jobType as string,
-      status: raw.status as JobStatus,
-      payload: JSON.parse((raw.payload as string) || "{}"),
-      result: raw.result ? JSON.parse(raw.result as string) : undefined,
-      error: (raw.error as string) || undefined,
-      attempt: Number(raw.attempt || 0),
-      maxRetries: Number(raw.maxRetries || 3),
-      workerId: (raw.workerId as string) || undefined,
-      claimedAt: (raw.claimedAt as Date) || undefined,
-      leaseExpiresAt: (raw.leaseExpiresAt as Date) || undefined,
-      heartbeatAt: (raw.heartbeatAt as Date) || undefined,
-      nextRetryAt: (raw.nextRetryAt as Date) || undefined,
-      cancelRequestedAt: (raw.cancelRequestedAt as Date) || undefined,
-      progressCurrent: Number(raw.progressCurrent || 0),
-      progressTotal: Number(raw.progressTotal || 0),
-      createdAt: raw.createdAt as Date,
-      updatedAt: raw.updatedAt as Date,
-      completedAt: (raw.completedAt as Date) || undefined,
-    }));
+    if (Array.isArray(records) && records.length > 0) {
+      const mapped: DurableJobRecord[] = records.map((raw) => ({
+        id: raw.id as string,
+        tenantId: raw.tenantId as string,
+        idempotencyKey: raw.idempotencyKey as string,
+        jobType: raw.jobType as string,
+        status: raw.status as JobStatus,
+        payload: JSON.parse((raw.payload as string) || "{}"),
+        result: raw.result ? JSON.parse(raw.result as string) : undefined,
+        error: (raw.error as string) || undefined,
+        attempt: Number(raw.attempt || 0),
+        maxRetries: Number(raw.maxRetries || 3),
+        workerId: (raw.workerId as string) || undefined,
+        claimedAt: (raw.claimedAt as Date) || undefined,
+        leaseExpiresAt: (raw.leaseExpiresAt as Date) || undefined,
+        heartbeatAt: (raw.heartbeatAt as Date) || undefined,
+        nextRetryAt: (raw.nextRetryAt as Date) || undefined,
+        cancelRequestedAt: (raw.cancelRequestedAt as Date) || undefined,
+        progressCurrent: Number(raw.progressCurrent || 0),
+        progressTotal: Number(raw.progressTotal || 0),
+        createdAt: raw.createdAt as Date,
+        updatedAt: raw.updatedAt as Date,
+        completedAt: (raw.completedAt as Date) || undefined,
+      }));
 
-    const activeJobs = mapped.filter(
-      (j) =>
-        (j.status === "PENDING" || j.status === "CLAIMED" || j.status === "RUNNING" || j.status === "RETRY_WAIT") &&
-        !j.cancelRequestedAt
-    );
-    const recentJobs = mapped.slice(0, limit);
+      const activeJobs = mapped.filter(
+        (j) =>
+          (j.status === "PENDING" || j.status === "CLAIMED" || j.status === "RUNNING" || j.status === "RETRY_WAIT") &&
+          !j.cancelRequestedAt
+      );
+      const recentJobs = mapped.slice(0, limit);
 
-    return { activeJobs, recentJobs };
-  }
+      return { activeJobs, recentJobs };
+    }
+  } catch {}
 
   const all = [...localMemoryQueue.values()].filter((j) => !tenantId || j.tenantId === tenantId);
   all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

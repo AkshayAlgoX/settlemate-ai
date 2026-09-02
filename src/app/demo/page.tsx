@@ -472,47 +472,7 @@ export default function DemoPage() {
 
     setSteps(initialSteps);
 
-    // Progressive stage simulation while backend processes
-    let activeStage = 0;
-    const stageInterval = setInterval(() => {
-      activeStage++;
-      if (activeStage <= 3) {
-        setSteps((prev) =>
-          prev.map((step, idx) => {
-            if (idx < activeStage) {
-              return { ...step, status: "done" as StepStatus };
-            }
-            if (idx === activeStage) {
-              return { ...step, status: "running" as StepStatus };
-            }
-            return step;
-          })
-        );
-      }
-    }, 400);
-
-    try {
-      const response = await safeFetch<MultiPassResponse & { inProgress?: boolean }>(
-        "/api/reconcile/" + result.batchId + "/multi-pass",
-        { method: "POST" }
-      );
-
-      clearInterval(stageInterval);
-      const data = response.data;
-
-      if (response.status === 202 && data?.inProgress) {
-        setError("Reconciliation is currently active for this batch on the server.");
-        setSteps((prev) =>
-          prev.map((step) => ({ ...step, status: "running", detail: "Executing in background" }))
-        );
-        return;
-      }
-
-      if (!response.ok || !data?.success) {
-        throw new Error(response.error || apiErrorMessage(data, "Reconciliation failed."));
-      }
-
-      // Populate final validated metrics from backend
+    const applySnapshotResults = (data: MultiPassResponse) => {
       const pass1 = data.passes?.[0] || { accuracy: 96.4, autoMatched: result.stats?.records || 250, durationMs: 38 };
       const pass2 = data.passes?.[1] || { accuracy: 98.1, aiCallsMade: 1, durationMs: 95, details: "Anomaly review complete" };
       const pass3 = data.passes?.[2] || { accuracy: 99.8, durationMs: 54, details: "Split resolution finalized" };
@@ -548,17 +508,63 @@ export default function DemoPage() {
       setSteps(finalSteps);
       setReconciliationResult(data);
 
-      // Notify operations center
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("operations-updated"));
       }
 
-      // Refresh recent batches list
       safeFetch<{ batches: typeof recentBatches }>("/api/batches").then((b) => {
         if (b.ok && Array.isArray(b.data?.batches)) setRecentBatches(b.data.batches);
       });
+    };
+
+    try {
+      const response = await safeFetch<MultiPassResponse & { inProgress?: boolean }>(
+        "/api/reconcile/" + result.batchId + "/multi-pass",
+        {
+          method: "POST",
+          timeoutMs: 120_000,
+        }
+      );
+
+      const data = response.data;
+
+      if (response.ok && data?.success) {
+        applySnapshotResults(data);
+        return;
+      }
+
+      // If backend reports in-progress or request experienced a client-side timeout, poll for authoritative snapshot
+      if (response.status === 202 || response.code === "CLIENT_TIMEOUT" || !response.ok) {
+        setSteps((prev) =>
+          prev.map((step) => ({
+            ...step,
+            status: "running",
+            detail: "Processing reconciliation on server… synchronizing authoritative state",
+          }))
+        );
+
+        let recovered = false;
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          const snapshotRes = await safeFetch<MultiPassResponse & { persisted?: boolean }>(
+            "/api/reconcile/" + result.batchId + "/multi-pass",
+            { timeoutMs: 10_000 }
+          );
+
+          if (snapshotRes.ok && snapshotRes.data?.success && snapshotRes.data?.passes?.length) {
+            applySnapshotResults(snapshotRes.data);
+            recovered = true;
+            break;
+          }
+        }
+
+        if (recovered) return;
+      }
+
+      if (!response.ok || !data?.success) {
+        throw new Error(response.error || apiErrorMessage(data, "Reconciliation failed on server."));
+      }
     } catch (requestError) {
-      clearInterval(stageInterval);
       const message =
         requestError instanceof Error
           ? requestError.message

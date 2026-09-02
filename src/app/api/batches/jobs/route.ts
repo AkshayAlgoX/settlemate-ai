@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { listDurableJobs, detectAndReclaimStalledJobs } from "@/lib/workers/durable-job-worker";
 import { UnifiedJobRepository } from "@/lib/storage/unified-store";
@@ -146,6 +147,58 @@ export async function GET(req: NextRequest) {
           error: u.error,
         });
       }
+    }
+
+    // In addition to active/recent durable jobs and unified jobs, correlate with persisted batches
+    try {
+      const dbBatches = await prisma.batch.findMany({
+        take: 50,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          size: true,
+          status: true,
+          totalRecords: true,
+          createdAt: true,
+        },
+      });
+
+      for (const b of dbBatches) {
+        const genJobId = `job_gen_${b.id}`;
+        const alreadyTracked =
+          activeMap.has(genJobId) ||
+          recentMap.has(genJobId) ||
+          activeMap.has(b.id) ||
+          recentMap.has(b.id) ||
+          Array.from(recentMap.values()).some(
+            (r) => (r.result as { batchId?: string } | undefined)?.batchId === b.id
+          );
+
+        if (!alreadyTracked) {
+          const isProcessing = b.status === "PROCESSING";
+          const batchSize = b.size || b.totalRecords || 250;
+          const mappedItem = {
+            jobId: genJobId,
+            tenantId: session.tenantId || "tenant_default_sandbox",
+            status: isProcessing ? "PROCESSING" : b.status === "FAILED" ? "FAILED" : "COMPLETED",
+            batchSize,
+            progressCurrent: isProcessing ? 0 : batchSize,
+            progressTotal: batchSize,
+            progressPct: isProcessing ? 0 : 100,
+            createdAt: b.createdAt.toISOString(),
+            result: { batchId: b.id, size: batchSize },
+          };
+
+          if (isProcessing) {
+            activeMap.set(genJobId, mappedItem);
+          } else {
+            recentMap.set(genJobId, mappedItem);
+          }
+        }
+      }
+    } catch (batchErr) {
+      console.warn("[JobsAPI] Batch correlation warning:", batchErr);
     }
 
     const recentJobs = Array.from(recentMap.values()).sort(
