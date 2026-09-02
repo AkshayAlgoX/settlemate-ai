@@ -145,8 +145,11 @@ class VerifyProgressStore {
       rawOutputSnippet: data.rawOutputSnippet,
     };
 
-    job.completedSuites++;
-    job.overallProgressPct = Math.round((job.completedSuites / job.totalSuites) * 100);
+    job.completedSuites = Object.values(job.results).filter(
+      (r) => r.status === "PASS" || r.status === "FAIL"
+    ).length;
+    job.overallProgressPct =
+      job.totalSuites > 0 ? Math.round((job.completedSuites / job.totalSuites) * 100) : 0;
 
     VerifyProgressRepository.save(stateToStored(job));
   }

@@ -123,37 +123,64 @@ export default function VerificationHubPage() {
     setShowCompletionModal(true);
   }, []);
 
-  const startPolling = useCallback((jobId: string) => {
-    stopPolling();
-    pollingRef.current = setInterval(async () => {
-      try {
-        const res = await safeFetch<{ success?: boolean; job?: VerifyJobState }>(`/api/verify/progress/${jobId}`);
-        if (!res.ok || !res.data) return;
+  const isExecutingRef = useRef<boolean>(false);
 
-        const data = res.data;
-        if (data.success && data.job) {
-          const job = data.job;
-          setOverallProgress(job.overallProgressPct);
-          setLiveSuiteStates(job.results);
+  const executeLiveVerification = useCallback(async (jobId: string) => {
+    if (isExecutingRef.current) return;
+    isExecutingRef.current = true;
 
-          if (job.status === "COMPLETED" || job.status === "FAILED") {
-            stopPolling();
-            handleVerificationComplete({
-              success: true,
-              allPassed: job.allPassed ?? false,
-              timestamp: job.completedAt || new Date().toISOString(),
-              totalDurationMs: job.totalDurationMs || 0,
-              totalSuitesExecuted: job.completedSuites,
-              results: job.results,
-              jobId: job.jobId,
-            });
+    try {
+      let isDone = false;
+      let consecutiveErrors = 0;
+
+      while (!isDone && isExecutingRef.current) {
+        // Execute next suite step on the backend
+        const res = await safeFetch<{ success?: boolean; job?: VerifyJobState }>(
+          `/api/verify/progress/${jobId}`,
+          { method: "POST" }
+        );
+
+        if (!res.ok || !res.data?.job) {
+          consecutiveErrors++;
+          if (consecutiveErrors > 4) {
+            throw new Error(res.error || "Failed to advance verification suite.");
           }
+          await new Promise((r) => setTimeout(r, 250));
+          continue;
         }
-      } catch (err) {
-        console.warn("Polling error:", err);
+
+        consecutiveErrors = 0;
+        const job = res.data.job;
+
+        // Authoritative live state updates directly from backend execution
+        setLiveSuiteStates(job.results);
+        setOverallProgress(job.overallProgressPct);
+
+        if (job.status === "COMPLETED" || job.status === "FAILED") {
+          isDone = true;
+          handleVerificationComplete({
+            success: true,
+            allPassed: job.allPassed ?? false,
+            timestamp: job.completedAt || new Date().toISOString(),
+            totalDurationMs: job.totalDurationMs || 0,
+            totalSuitesExecuted: job.completedSuites,
+            results: job.results,
+            jobId: job.jobId,
+          });
+          break;
+        }
+
+        // Brief yield so the UI visibly advances across each completed suite
+        await new Promise((r) => setTimeout(r, 100));
       }
-    }, 1200);
-  }, [stopPolling, handleVerificationComplete]);
+    } catch (err) {
+      console.error("Verification execution error:", err);
+      setActionError(err instanceof Error ? err.message : "Verification execution failed.");
+      setIsRunning(false);
+    } finally {
+      isExecutingRef.current = false;
+    }
+  }, [handleVerificationComplete]);
 
   // Recover active or latest job on mount
   useEffect(() => {
@@ -167,7 +194,7 @@ export default function VerificationHubPage() {
           setIsRunning(true);
           setOverallProgress(job.overallProgressPct);
           setLiveSuiteStates(job.results);
-          startPolling(job.jobId);
+          executeLiveVerification(job.jobId);
         } else if (job.status === "COMPLETED" || job.status === "FAILED") {
           setLiveSuiteStates(job.results);
           setOverallProgress(100);
@@ -186,12 +213,14 @@ export default function VerificationHubPage() {
 
     return () => {
       mounted = false;
+      isExecutingRef.current = false;
       stopPolling();
     };
-  }, [startPolling, stopPolling]);
+  }, [executeLiveVerification, stopPolling]);
 
   const handleRunVerification = async () => {
     stopPolling();
+    isExecutingRef.current = false;
     setIsRunning(true);
     setActionError(null);
     setFinalResponse(null);
@@ -214,14 +243,14 @@ export default function VerificationHubPage() {
       const res = await safeFetch<VerificationHubResponse & { accepted?: boolean; jobId?: string }>("/api/verify/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suites: selectedSuites, async: true }),
+        body: JSON.stringify({ suites: selectedSuites, async: true, mode: "stepped" }),
       });
 
       const data = res.data;
 
       if (res.status === 202 && data?.jobId) {
         setActiveJobId(data.jobId);
-        startPolling(data.jobId);
+        executeLiveVerification(data.jobId);
       } else if (data?.success && data?.results) {
         handleVerificationComplete(data);
       } else {
@@ -387,8 +416,8 @@ export default function VerificationHubPage() {
           </div>
           <div className="h-2 w-full overflow-hidden bg-secondary rounded-full">
             <div
-              className="h-full bg-primary transition-all duration-500 rounded-full"
-              style={{ width: `${Math.max(8, overallProgress)}%` }}
+              className="h-full bg-primary transition-all duration-300 rounded-full"
+              style={{ width: `${overallProgress}%` }}
             />
           </div>
         </div>

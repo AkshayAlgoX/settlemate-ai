@@ -98,44 +98,42 @@ export async function POST(
       ? job.requestedSuites
       : ALL_SUITES;
 
-  const executedCount = Object.values(job.results || {}).filter(
-    (r) => r.status === "PASS" || r.status === "FAIL"
-  ).length;
+  const pendingSuiteId = targetSuites.find(
+    (s) => !job.results[s] || (job.results[s].status !== "PASS" && job.results[s].status !== "FAIL")
+  );
 
-  if (executedCount < targetSuites.length) {
-    const suiteId = targetSuites[executedCount];
-    verifyProgressStore.setSuiteRunning(jobId, suiteId);
+  if (pendingSuiteId) {
+    verifyProgressStore.setSuiteRunning(jobId, pendingSuiteId);
 
     try {
-      const suiteResult = await runSingleSuite(suiteId);
-      verifyProgressStore.setSuiteCompleted(jobId, suiteId, {
+      const suiteResult = await runSingleSuite(pendingSuiteId);
+      verifyProgressStore.setSuiteCompleted(jobId, pendingSuiteId, {
         status: suiteResult.status,
         durationMs: suiteResult.durationMs,
         metrics: suiteResult.metrics,
         rawOutputSnippet: suiteResult.rawOutputSnippet,
       });
-
-      const newJob = verifyProgressStore.getJob(jobId);
-      const newExecutedCount = Object.values(newJob?.results || {}).filter(
-        (r) => r.status === "PASS" || r.status === "FAIL"
-      ).length;
-
-      if (newExecutedCount >= targetSuites.length) {
-        const allPassed = Object.values(newJob?.results || {}).every((r) => r.status === "PASS");
-        const totalDurationMs = Object.values(newJob?.results || {}).reduce(
-          (sum, r) => sum + (r.durationMs || 0),
-          0
-        );
-        verifyProgressStore.completeJob(jobId, allPassed, totalDurationMs);
-      }
     } catch (err: unknown) {
-      verifyProgressStore.setSuiteCompleted(jobId, suiteId, {
+      verifyProgressStore.setSuiteCompleted(jobId, pendingSuiteId, {
         status: "FAIL",
         durationMs: 0,
         metrics: { error: err instanceof Error ? err.message : String(err) },
         rawOutputSnippet: String(err),
       });
-      verifyProgressStore.completeJob(jobId, false, 0);
+    }
+
+    const newJob = verifyProgressStore.getJob(jobId);
+    const unexecuted = targetSuites.filter(
+      (s) => !newJob?.results[s] || (newJob.results[s].status !== "PASS" && newJob.results[s].status !== "FAIL")
+    );
+
+    if (unexecuted.length === 0 && newJob) {
+      const allPassed = targetSuites.every((s) => newJob.results[s]?.status === "PASS");
+      const totalDurationMs = targetSuites.reduce(
+        (sum, s) => sum + (newJob.results[s]?.durationMs || 0),
+        0
+      );
+      verifyProgressStore.completeJob(jobId, allPassed, totalDurationMs);
     }
   }
 

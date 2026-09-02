@@ -40,19 +40,26 @@ export function runSingleSuite(suiteId: string): Promise<SuiteResult> {
 
 async function runSuitesAsync(jobId: string, suites: string[]) {
   const overallStart = performance.now();
-  let allPassed = true;
 
   for (const suiteId of suites) {
+    const job = verifyProgressStore.getJob(jobId);
+    if (!job || job.status === "COMPLETED" || job.status === "FAILED") {
+      return;
+    }
+    if (job.results[suiteId]?.status === "PASS" || job.results[suiteId]?.status === "FAIL") {
+      continue;
+    }
     verifyProgressStore.setSuiteRunning(jobId, suiteId);
     const result = await executeVerificationSuite(suiteId);
-    if (result.status !== "PASS") {
-      allPassed = false;
-    }
     verifyProgressStore.setSuiteCompleted(jobId, suiteId, result);
   }
 
-  const totalDurationMs = Math.round(performance.now() - overallStart);
-  verifyProgressStore.completeJob(jobId, allPassed, totalDurationMs);
+  const finalJob = verifyProgressStore.getJob(jobId);
+  if (finalJob && finalJob.status === "RUNNING") {
+    const allPassed = suites.every((s) => finalJob.results[s]?.status === "PASS");
+    const totalDurationMs = Math.round(performance.now() - overallStart);
+    verifyProgressStore.completeJob(jobId, allPassed, totalDurationMs);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -72,14 +79,16 @@ export async function POST(req: NextRequest) {
         : ["benchmark", "cardinality", "claim-validator", "cross-partition", "chaos", "receipt", "finance-ops"];
 
     const isAsync = Boolean(body.async);
+    const isStepped = (body as { mode?: string; stepped?: boolean }).mode === "stepped" || Boolean((body as { mode?: string; stepped?: boolean }).stepped);
 
     // Asynchronous Execution Mode
     if (isAsync) {
       const job = verifyProgressStore.createJob(requestedSuites);
-      // Run background execution
-      setTimeout(() => {
-        runSuitesAsync(job.jobId, requestedSuites).catch(console.error);
-      }, 10);
+      if (!isStepped) {
+        setTimeout(() => {
+          runSuitesAsync(job.jobId, requestedSuites).catch(console.error);
+        }, 10);
+      }
 
       return applySecurityHeaders(
         NextResponse.json(
@@ -87,9 +96,12 @@ export async function POST(req: NextRequest) {
             success: true,
             jobId: job.jobId,
             status: "RUNNING",
-            message: "Verification execution started asynchronously. Poll /api/verify/progress/:jobId for updates.",
+            message: isStepped
+              ? "Verification job created for stepped execution. Post to /api/verify/progress/:jobId to advance."
+              : "Verification execution started asynchronously. Poll /api/verify/progress/:jobId for updates.",
             totalSuites: requestedSuites.length,
             startedAt: job.startedAt,
+            results: job.results,
           },
           { status: 202 }
         )
