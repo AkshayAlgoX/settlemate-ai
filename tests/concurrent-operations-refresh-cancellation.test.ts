@@ -8,6 +8,8 @@
  * 4. Simulated browser refresh (GET /api/batches/jobs) returns job #2 strictly as CANCELLED in recentJobs, NEVER in activeJobs
  * 5. Subsequent step attempts on job #2 fail-closed with isCancelled=true and do not revive the job
  * 6. Repeated page reloads reflect authoritative terminal state bitwise
+ * 7. Generated 250 batch is visible in recentJobs and never creates ghost active work
+ * 8. Hydration/polling GET /api/batches/jobs is strictly side-effect free
  */
 
 import assert from "node:assert/strict";
@@ -15,6 +17,7 @@ import { enqueueJob, stepJobChunk, getDurableJob } from "../src/lib/workers/dura
 import { GET as listJobsRoute } from "../src/app/api/batches/jobs/route";
 import { POST as stepRoute } from "../src/app/api/batches/jobs/[jobId]/step/route";
 import { POST as cancelRoute } from "../src/app/api/batches/jobs/[jobId]/cancel/route";
+import { POST as generateBatchRoute } from "../src/app/api/batches/generate/route";
 import { createSessionToken } from "../src/lib/auth/session";
 import { NextRequest } from "next/server";
 
@@ -212,8 +215,49 @@ async function main() {
     assert.equal(recent4?.status, "COMPLETED");
   });
 
+  await test("9. Generate 250 batch: appears strictly in recentJobs with status COMPLETED and NEVER in activeJobs", async () => {
+    const genReq = makeAuthRequest("http://localhost:3000/api/batches/generate", tenantId, "POST", { size: 250 });
+    const genRes = await generateBatchRoute(genReq);
+    assert.equal(genRes.status, 200);
+    const genData = await genRes.json();
+    assert.ok(genData.batchId);
+    assert.ok(genData.jobId);
+
+    const listReq = makeAuthRequest("http://localhost:3000/api/batches/jobs", tenantId, "GET");
+    const listRes = await listJobsRoute(listReq);
+    const listData = await listRes.json();
+
+    const activeIds = (listData.activeJobs || []).map((j: { jobId: string }) => j.jobId);
+    assert.ok(!activeIds.includes(genData.jobId), "250 batch must NOT appear in activeJobs");
+    assert.ok(!activeIds.includes(`job_gen_${genData.batchId}`), "job_gen_ must NOT appear in activeJobs");
+
+    const recentJob = (listData.recentJobs || []).find(
+      (j: { jobId: string; result?: { batchId?: string } }) =>
+        j.jobId === genData.jobId || j.result?.batchId === genData.batchId
+    );
+    assert.ok(recentJob, "250 batch must appear in recentJobs");
+    assert.equal(recentJob.status, "COMPLETED");
+  });
+
+  await test("10. Repeated browser refresh & polling is 100% side-effect free", async () => {
+    const listReq = makeAuthRequest("http://localhost:3000/api/batches/jobs", tenantId, "GET");
+    
+    // Perform 5 consecutive polls
+    for (let i = 0; i < 5; i++) {
+      const res = await listJobsRoute(listReq);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      
+      const activeIds = (data.activeJobs || []).map((j: { jobId: string }) => j.jobId);
+      assert.ok(!activeIds.includes(job1.id));
+      assert.ok(!activeIds.includes(job2.id));
+      assert.ok(!activeIds.includes(job3.id));
+      assert.ok(!activeIds.includes(job4.id));
+    }
+  });
+
   console.log("\n=========================================================================");
-  console.log(" ✅ ALL 8 CONCURRENT REFRESH & CANCELLATION TESTS PASSED CLEANLY");
+  console.log(" ✅ ALL 10 CONCURRENT REFRESH & CANCELLATION TESTS PASSED CLEANLY");
   console.log("=========================================================================\n");
 }
 

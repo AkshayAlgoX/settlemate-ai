@@ -231,9 +231,14 @@ export function OperationsCenter() {
               );
             }
           } else if (!res.ok) {
-            if (res.status === 409) {
-              // Conflict / cancelled on server: remove from active pool
+            if (res.status === 409 || res.status === 404) {
+              // Terminal state, cancelled, or not found: remove from active pool immediately
               setActiveJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
+              setCancellingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(job.jobId);
+                return next;
+              });
               if (res.data?.job) {
                 const updated = res.data.job;
                 setRecentJobs((prev) => {
@@ -242,13 +247,6 @@ export function OperationsCenter() {
                     ? prev.map((j) => (j.jobId === updated.jobId ? { ...j, ...updated } : j))
                     : [updated, ...prev];
                 });
-                if (updated.status === "CANCELLED" || updated.status === "COMPLETED" || updated.status === "FAILED") {
-                  setCancellingIds((prev) => {
-                    const next = new Set(prev);
-                    next.delete(updated.jobId);
-                    return next;
-                  });
-                }
               }
             }
           }

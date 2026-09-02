@@ -178,26 +178,21 @@ export async function GET(req: NextRequest) {
         if (!alreadyTracked) {
           const isCancelled = b.status === "CANCELLED";
           const isFailed = b.status === "FAILED";
-          const isFresh = Date.now() - b.createdAt.getTime() < 300_000;
-          const isProcessing = b.status === "PROCESSING" && !isCancelled && isFresh;
           const batchSize = b.size || b.totalRecords || 250;
           const mappedItem = {
             jobId: genJobId,
             tenantId: session.tenantId || "tenant_default_sandbox",
-            status: isCancelled ? "CANCELLED" : isFailed ? "FAILED" : isProcessing ? "PROCESSING" : "COMPLETED",
+            status: isCancelled ? "CANCELLED" : isFailed ? "FAILED" : "COMPLETED",
             batchSize,
-            progressCurrent: isProcessing ? 0 : batchSize,
+            progressCurrent: batchSize,
             progressTotal: batchSize,
-            progressPct: isProcessing ? 0 : 100,
+            progressPct: 100,
             createdAt: b.createdAt.toISOString(),
             result: { batchId: b.id, size: batchSize },
           };
 
-          if (isProcessing) {
-            activeMap.set(genJobId, mappedItem);
-          } else {
-            recentMap.set(genJobId, mappedItem);
-          }
+          // Persisted batches are historical records and belong strictly in recentMap
+          recentMap.set(genJobId, mappedItem);
         }
       }
     } catch (batchErr) {
