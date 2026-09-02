@@ -293,7 +293,7 @@ export function calculateAdaptiveChunkSize(params: {
  */
 export async function enqueueJob(params: {
   tenantId?: string;
-  idempotencyKey: string;
+  idempotencyKey?: string;
   jobType: string;
   payload: Record<string, unknown>;
   maxRetries?: number;
@@ -302,20 +302,21 @@ export async function enqueueJob(params: {
   const tenantId = params.tenantId || getRequiredTenantId();
   const maxRetries = params.maxRetries ?? 3;
   const progressTotal = params.progressTotal ?? 0;
+  const idempotencyKey = params.idempotencyKey || `idemp_${randomUUID()}`;
   const now = new Date();
 
-  if (isPostgres()) {
+  try {
     const existing = await dynamicPrisma.asyncJob?.findUnique({
       where: {
         tenantId_idempotencyKey: {
           tenantId,
-          idempotencyKey: params.idempotencyKey,
+          idempotencyKey,
         },
       },
     });
 
     if (existing) {
-      return {
+      const record: DurableJobRecord = {
         id: existing.id as string,
         tenantId: existing.tenantId as string,
         idempotencyKey: existing.idempotencyKey as string,
@@ -338,38 +339,58 @@ export async function enqueueJob(params: {
         updatedAt: existing.updatedAt as Date,
         completedAt: (existing.completedAt as Date) || undefined,
       };
+      const queueKey = `${tenantId}:${idempotencyKey}`;
+      localMemoryQueue.set(queueKey, record);
+      return record;
     }
 
-    const createdId = randomUUID();
+    const createdId = `job_${randomUUID().slice(0, 12)}`;
+    await dynamicPrisma.asyncJob?.create({
+      data: {
+        id: createdId,
+        tenantId,
+        idempotencyKey,
+        jobType: params.jobType,
+        status: "PENDING",
+        payload: JSON.stringify(params.payload),
+        attempt: 0,
+        maxRetries,
+        progressCurrent: 0,
+        progressTotal,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    const record: DurableJobRecord = {
+      id: createdId,
+      tenantId,
+      idempotencyKey,
+      jobType: params.jobType,
+      status: "PENDING",
+      payload: params.payload,
+      attempt: 0,
+      maxRetries,
+      progressCurrent: 0,
+      progressTotal,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const queueKey = `${tenantId}:${idempotencyKey}`;
+    localMemoryQueue.set(queueKey, record);
+    return record;
+  } catch {
     try {
-      await dynamicPrisma.asyncJob?.create({
-        data: {
-          id: createdId,
-          tenantId,
-          idempotencyKey: params.idempotencyKey,
-          jobType: params.jobType,
-          status: "PENDING",
-          payload: JSON.stringify(params.payload),
-          attempt: 0,
-          maxRetries,
-          progressCurrent: 0,
-          progressTotal,
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-    } catch (createErr: unknown) {
-      // If a concurrent request inserted the same (tenantId, idempotencyKey), return the winning record
       const raced = await dynamicPrisma.asyncJob?.findUnique({
         where: {
           tenantId_idempotencyKey: {
             tenantId,
-            idempotencyKey: params.idempotencyKey,
+            idempotencyKey,
           },
         },
       });
       if (raced) {
-        return {
+        const record: DurableJobRecord = {
           id: raced.id as string,
           tenantId: raced.tenantId as string,
           idempotencyKey: raced.idempotencyKey as string,
@@ -392,35 +413,22 @@ export async function enqueueJob(params: {
           updatedAt: raced.updatedAt as Date,
           completedAt: (raced.completedAt as Date) || undefined,
         };
+        const queueKey = `${tenantId}:${idempotencyKey}`;
+        localMemoryQueue.set(queueKey, record);
+        return record;
       }
-      throw createErr;
-    }
-
-    return {
-      id: createdId,
-      tenantId,
-      idempotencyKey: params.idempotencyKey,
-      jobType: params.jobType,
-      status: "PENDING",
-      payload: params.payload,
-      attempt: 0,
-      maxRetries,
-      progressCurrent: 0,
-      progressTotal,
-      createdAt: now,
-      updatedAt: now,
-    };
+    } catch {}
   }
 
   // Local fallback queue
-  const queueKey = `${tenantId}:${params.idempotencyKey}`;
+  const queueKey = `${tenantId}:${idempotencyKey}`;
   const existing = localMemoryQueue.get(queueKey);
   if (existing) return existing;
 
   const jobRecord: DurableJobRecord = {
     id: `job_${randomUUID().slice(0, 12)}`,
     tenantId,
-    idempotencyKey: params.idempotencyKey,
+    idempotencyKey,
     jobType: params.jobType,
     status: "PENDING",
     payload: params.payload,
@@ -606,7 +614,8 @@ export async function renewLease(
   const now = new Date();
   const newLeaseExpiresAt = new Date(now.getTime() + extensionDurationMs);
 
-  if (isPostgres()) {
+  let updated = false;
+  try {
     const res = await dynamicPrisma.asyncJob?.updateMany({
       where: {
         id: jobId,
@@ -619,19 +628,21 @@ export async function renewLease(
         updatedAt: now,
       },
     });
-    return (res?.count ?? 0) > 0;
-  }
+    if ((res?.count ?? 0) > 0) {
+      updated = true;
+    }
+  } catch {}
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId && job.workerId === workerId && job.status === "RUNNING") {
       job.leaseExpiresAt = newLeaseExpiresAt;
       job.heartbeatAt = now;
       job.updatedAt = now;
-      return true;
+      updated = true;
     }
   }
 
-  return false;
+  return updated;
 }
 
 /**
@@ -645,7 +656,7 @@ export async function updateJobProgress(
 ): Promise<void> {
   const now = new Date();
 
-  if (isPostgres()) {
+  try {
     await dynamicPrisma.asyncJob?.updateMany({
       where: {
         id: jobId,
@@ -659,8 +670,7 @@ export async function updateJobProgress(
         updatedAt: now,
       },
     });
-    return;
-  }
+  } catch {}
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId && job.workerId === workerId) {
@@ -680,56 +690,45 @@ export async function updateJobProgress(
 export async function requestJobCancellation(jobId: string, tenantId?: string): Promise<boolean> {
   const targetTenant = tenantId || getRequiredTenantId();
   const now = new Date();
+  let batchIdToCancel: string | undefined;
 
-  if (isPostgres()) {
+  try {
     const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
-    if (!job || (job.tenantId && job.tenantId !== targetTenant)) {
-      return false;
-    }
-
-    const currentStatus = job.status as JobStatus;
-
-    if (currentStatus === "CANCELLED") {
-      return true;
-    }
-
-    if (currentStatus === "COMPLETED" || currentStatus === "FAILED" || currentStatus === "DEAD_LETTER") {
-      return false;
-    }
-
-    // Atomically transition to CANCELLED and record cancelRequestedAt
-    await dynamicPrisma.asyncJob?.updateMany({
-      where: { id: jobId, tenantId: targetTenant },
-      data: {
-        status: "CANCELLED",
-        cancelRequestedAt: now,
-        completedAt: now,
-        error: "Cancelled by user request",
-        updatedAt: now,
-      },
-    });
-
-    await dynamicPrisma.jobItem?.updateMany({
-      where: { jobId, status: { in: ["PENDING", "PROCESSING", "RETRYABLE_FAILED"] } },
-      data: { status: "CANCELLED", updatedAt: now },
-    });
-
-    const payload = JSON.parse((job.payload as string) || "{}");
-    if (payload.batchId) {
-      try {
-        await prisma.batch.update({
-          where: { id: payload.batchId },
-          data: { status: "CANCELLED" },
-        });
-      } catch {
-        // Ignore if batch not present
+    if (job) {
+      if (job.tenantId && job.tenantId !== targetTenant) {
+        return false;
       }
+
+      const currentStatus = job.status as JobStatus;
+      if (currentStatus === "CANCELLED") {
+        return true;
+      }
+      if (currentStatus === "COMPLETED" || currentStatus === "FAILED" || currentStatus === "DEAD_LETTER") {
+        return false;
+      }
+
+      await dynamicPrisma.asyncJob?.updateMany({
+        where: { id: jobId, tenantId: targetTenant },
+        data: {
+          status: "CANCELLED",
+          cancelRequestedAt: now,
+          completedAt: now,
+          error: "Cancelled by user request",
+          updatedAt: now,
+        },
+      });
+
+      await dynamicPrisma.jobItem?.updateMany({
+        where: { jobId, status: { in: ["PENDING", "PROCESSING", "RETRYABLE_FAILED"] } },
+        data: { status: "CANCELLED", updatedAt: now },
+      });
+
+      const payload = typeof job.payload === "string" ? JSON.parse(job.payload || "{}") : (job.payload || {});
+      const result = typeof job.result === "string" ? JSON.parse(job.result || "{}") : (job.result || {});
+      batchIdToCancel = payload.batchId || result.batchId;
     }
+  } catch {}
 
-    return true;
-  }
-
-  // Local memory queue
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId) {
       if (job.tenantId !== targetTenant) {
@@ -758,31 +757,35 @@ export async function requestJobCancellation(jobId: string, tenantId?: string): 
       }
 
       if (job.payload?.batchId) {
-        try {
-          await prisma.batch.update({
-            where: { id: job.payload.batchId as string },
-            data: { status: "CANCELLED" },
-          });
-        } catch {
-          // Ignore
-        }
+        batchIdToCancel = job.payload.batchId as string;
+      } else if (job.result?.batchId) {
+        batchIdToCancel = job.result.batchId as string;
       }
-
-      return true;
     }
   }
 
-  return false;
+  if (batchIdToCancel) {
+    try {
+      await prisma.batch.update({
+        where: { id: batchIdToCancel },
+        data: { status: "CANCELLED" },
+      });
+    } catch {}
+  }
+
+  return true;
 }
 
 /**
  * Checks whether cancellation has been requested for a job.
  */
 export async function checkCancellationRequested(jobId: string): Promise<boolean> {
-  if (isPostgres()) {
+  try {
     const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
-    return Boolean(job?.cancelRequestedAt || job?.status === "CANCEL_REQUESTED" || job?.status === "CANCELLED");
-  }
+    if (job) {
+      return Boolean(job.cancelRequestedAt || job.status === "CANCEL_REQUESTED" || job.status === "CANCELLED");
+    }
+  } catch {}
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId) {
@@ -802,8 +805,9 @@ export async function cancelJob(
   reason: string = "Cancelled by user request"
 ): Promise<void> {
   const now = new Date();
+  let batchIdToCancel: string | undefined;
 
-  if (isPostgres()) {
+  try {
     await dynamicPrisma.asyncJob?.updateMany({
       where: {
         id: jobId,
@@ -829,21 +833,12 @@ export async function cancelJob(
     });
 
     const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
-    if (job?.payload) {
-      const payload = JSON.parse((job.payload as string) || "{}");
-      if (payload.batchId) {
-        try {
-          await prisma.batch.update({
-            where: { id: payload.batchId },
-            data: { status: "CANCELLED" },
-          });
-        } catch {
-          // Ignore
-        }
-      }
+    if (job) {
+      const payload = typeof job.payload === "string" ? JSON.parse(job.payload || "{}") : (job.payload || {});
+      const result = typeof job.result === "string" ? JSON.parse(job.result || "{}") : (job.result || {});
+      batchIdToCancel = payload.batchId || result.batchId;
     }
-    return;
-  }
+  } catch {}
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId) {
@@ -855,14 +850,9 @@ export async function cancelJob(
       job.updatedAt = now;
 
       if (job.payload?.batchId) {
-        try {
-          await prisma.batch.update({
-            where: { id: job.payload.batchId as string },
-            data: { status: "CANCELLED" },
-          });
-        } catch {
-          // Ignore
-        }
+        batchIdToCancel = job.payload.batchId as string;
+      } else if (job.result?.batchId) {
+        batchIdToCancel = job.result.batchId as string;
       }
     }
   }
@@ -872,6 +862,15 @@ export async function cancelJob(
       item.status = "CANCELLED";
       item.updatedAt = now;
     }
+  }
+
+  if (batchIdToCancel) {
+    try {
+      await prisma.batch.update({
+        where: { id: batchIdToCancel },
+        data: { status: "CANCELLED" },
+      });
+    } catch {}
   }
 }
 
@@ -884,8 +883,9 @@ export async function completeJob(
   result: Record<string, unknown>
 ): Promise<void> {
   const now = new Date();
+  let batchIdToComplete: string | undefined = result.batchId as string | undefined;
 
-  if (isPostgres()) {
+  try {
     await dynamicPrisma.asyncJob?.updateMany({
       where: {
         id: jobId,
@@ -899,8 +899,13 @@ export async function completeJob(
         updatedAt: now,
       },
     });
-    return;
-  }
+
+    const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
+    if (job && !batchIdToComplete) {
+      const payload = typeof job.payload === "string" ? JSON.parse(job.payload || "{}") : (job.payload || {});
+      batchIdToComplete = payload.batchId;
+    }
+  } catch {}
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId && job.workerId === workerId) {
@@ -909,8 +914,20 @@ export async function completeJob(
       job.result = result;
       job.completedAt = now;
       job.updatedAt = now;
-      return;
+
+      if (!batchIdToComplete) {
+        batchIdToComplete = (job.payload?.batchId as string) || (job.result?.batchId as string);
+      }
     }
+  }
+
+  if (batchIdToComplete) {
+    try {
+      await prisma.batch.update({
+        where: { id: batchIdToComplete },
+        data: { status: "COMPLETED", completedAt: now },
+      });
+    } catch {}
   }
 }
 
@@ -925,38 +942,37 @@ export async function failJob(
   retryDelayMs?: number
 ): Promise<JobStatus> {
   const now = new Date();
+  let nextStatus: JobStatus = "PENDING";
 
-  if (isPostgres()) {
+  try {
     const job = await dynamicPrisma.asyncJob?.findUnique({ where: { id: jobId } });
-    if (!job) return "FAILED";
+    if (job) {
+      const attempt = Number(job.attempt || 1);
+      const maxRetries = Number(job.maxRetries || 3);
 
-    const attempt = Number(job.attempt || 1);
-    const maxRetries = Number(job.maxRetries || 3);
+      const isDeadLetter =
+        classification === "INVARIANT_FAILURE" ||
+        classification === "VALIDATION_FAILURE" ||
+        classification === "PERMANENT" ||
+        attempt >= maxRetries;
 
-    const isDeadLetter =
-      classification === "INVARIANT_FAILURE" ||
-      classification === "VALIDATION_FAILURE" ||
-      classification === "PERMANENT" ||
-      attempt >= maxRetries;
+      nextStatus = isDeadLetter ? "DEAD_LETTER" : "PENDING";
+      const delay = retryDelayMs !== undefined ? retryDelayMs : calculateBackoffMs(attempt);
+      const nextRetryAt = isDeadLetter ? null : new Date(now.getTime() + delay);
 
-    const nextStatus: JobStatus = isDeadLetter ? "DEAD_LETTER" : "PENDING";
-    const delay = retryDelayMs !== undefined ? retryDelayMs : calculateBackoffMs(attempt);
-    const nextRetryAt = isDeadLetter ? null : new Date(now.getTime() + delay);
-
-    await dynamicPrisma.asyncJob?.update({
-      where: { id: jobId },
-      data: {
-        status: nextStatus,
-        error: errorMsg,
-        leaseExpiresAt: null,
-        workerId: null,
-        nextRetryAt,
-        updatedAt: now,
-      },
-    });
-
-    return nextStatus;
-  }
+      await dynamicPrisma.asyncJob?.updateMany({
+        where: { id: jobId },
+        data: {
+          status: nextStatus,
+          error: errorMsg,
+          leaseExpiresAt: null,
+          workerId: null,
+          nextRetryAt,
+          updatedAt: now,
+        },
+      });
+    }
+  } catch {}
 
   for (const job of localMemoryQueue.values()) {
     if (job.id === jobId) {
@@ -966,7 +982,7 @@ export async function failJob(
         classification === "PERMANENT" ||
         job.attempt >= job.maxRetries;
 
-      const nextStatus: JobStatus = isDeadLetter ? "DEAD_LETTER" : "PENDING";
+      nextStatus = isDeadLetter ? "DEAD_LETTER" : "PENDING";
       assertValidTransition(job.status, nextStatus);
 
       const delay = retryDelayMs !== undefined ? retryDelayMs : calculateBackoffMs(job.attempt);
@@ -980,7 +996,7 @@ export async function failJob(
     }
   }
 
-  return "FAILED";
+  return nextStatus;
 }
 
 
@@ -1574,7 +1590,7 @@ export async function stepJobChunk(
     const leaseExpiresAt = new Date(now.getTime() + 30000);
 
     // 4. Atomically claim/check lease and cancellation
-    if (isPostgres()) {
+    try {
       const claimResult = await dynamicPrisma.asyncJob?.updateMany({
         where: {
           id: job.id,
@@ -1614,35 +1630,35 @@ export async function stepJobChunk(
           };
         }
       }
-    } else {
-      for (const localJob of localMemoryQueue.values()) {
-        if (localJob.id === job.id) {
-          if (localJob.cancelRequestedAt || localJob.status === "CANCEL_REQUESTED" || localJob.status === "CANCELLED") {
-            await cancelJob(job.id, workerId, "Cancellation requested by user");
-            return {
-              jobId: job.id,
-              tenantId: job.tenantId,
-              jobType: job.jobType,
-              status: "CANCELLED",
-              progressCurrent: localJob.progressCurrent,
-              progressTotal: localJob.progressTotal,
-              progressPct: localJob.progressTotal > 0 ? Math.round((localJob.progressCurrent / localJob.progressTotal) * 100) : 0,
-              completedSliceCount: 0,
-              isComplete: false,
-              isCancelled: true,
-              durationMs: performance.now() - t0,
-              recordsPerSecond: 0,
-              estimatedRemainingMs: null,
-              recommendedNextChunkSize: chunkSize,
-            };
-          }
-          localJob.status = "RUNNING";
-          localJob.workerId = workerId;
-          localJob.claimedAt = now;
-          localJob.heartbeatAt = now;
-          localJob.leaseExpiresAt = leaseExpiresAt;
-          localJob.updatedAt = now;
+    } catch {}
+
+    for (const localJob of localMemoryQueue.values()) {
+      if (localJob.id === job.id) {
+        if (localJob.cancelRequestedAt || localJob.status === "CANCEL_REQUESTED" || localJob.status === "CANCELLED") {
+          await cancelJob(job.id, workerId, "Cancellation requested by user");
+          return {
+            jobId: job.id,
+            tenantId: job.tenantId,
+            jobType: job.jobType,
+            status: "CANCELLED",
+            progressCurrent: localJob.progressCurrent,
+            progressTotal: localJob.progressTotal,
+            progressPct: localJob.progressTotal > 0 ? Math.round((localJob.progressCurrent / localJob.progressTotal) * 100) : 0,
+            completedSliceCount: 0,
+            isComplete: false,
+            isCancelled: true,
+            durationMs: performance.now() - t0,
+            recordsPerSecond: 0,
+            estimatedRemainingMs: null,
+            recommendedNextChunkSize: chunkSize,
+          };
         }
+        localJob.status = "RUNNING";
+        localJob.workerId = workerId;
+        localJob.claimedAt = now;
+        localJob.heartbeatAt = now;
+        localJob.leaseExpiresAt = leaseExpiresAt;
+        localJob.updatedAt = now;
       }
     }
 

@@ -79,6 +79,12 @@ export function OperationsCenter() {
       }>("/api/batches/jobs");
 
       if (res.ok && res.data) {
+        const terminalServerIds = new Set(
+          (res.data.recentJobs || [])
+            .filter((j) => j.status === "CANCELLED" || j.status === "COMPLETED" || j.status === "FAILED" || j.status === "DEAD_LETTER")
+            .map((j) => j.jobId)
+        );
+
         if (res.data.activeJobs) {
           const filteredActive = res.data.activeJobs.filter(
             (j) =>
@@ -87,17 +93,15 @@ export function OperationsCenter() {
                 j.status === "PROCESSING" ||
                 j.status === "RUNNING" ||
                 j.status === "RETRY_WAIT") &&
-              !cancellingIds.has(j.jobId)
+              !cancellingIds.has(j.jobId) &&
+              !terminalServerIds.has(j.jobId)
           );
           setActiveJobs(filteredActive);
         }
         if (res.data.recentJobs) {
           setRecentJobs(res.data.recentJobs);
           // Clean up cancellingIds for jobs that the server now confirms as CANCELLED or terminal
-          const terminalServerIds = res.data.recentJobs
-            .filter((j) => j.status === "CANCELLED" || j.status === "COMPLETED" || j.status === "FAILED")
-            .map((j) => j.jobId);
-          if (terminalServerIds.length > 0) {
+          if (terminalServerIds.size > 0) {
             setCancellingIds((prev) => {
               const next = new Set(prev);
               let changed = false;

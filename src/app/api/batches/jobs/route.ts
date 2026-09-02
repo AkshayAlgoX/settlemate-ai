@@ -176,12 +176,15 @@ export async function GET(req: NextRequest) {
           );
 
         if (!alreadyTracked) {
-          const isProcessing = b.status === "PROCESSING";
+          const isCancelled = b.status === "CANCELLED";
+          const isFailed = b.status === "FAILED";
+          const isFresh = Date.now() - b.createdAt.getTime() < 300_000;
+          const isProcessing = b.status === "PROCESSING" && !isCancelled && isFresh;
           const batchSize = b.size || b.totalRecords || 250;
           const mappedItem = {
             jobId: genJobId,
             tenantId: session.tenantId || "tenant_default_sandbox",
-            status: isProcessing ? "PROCESSING" : b.status === "FAILED" ? "FAILED" : "COMPLETED",
+            status: isCancelled ? "CANCELLED" : isFailed ? "FAILED" : isProcessing ? "PROCESSING" : "COMPLETED",
             batchSize,
             progressCurrent: isProcessing ? 0 : batchSize,
             progressTotal: batchSize,
@@ -199,6 +202,40 @@ export async function GET(req: NextRequest) {
       }
     } catch (batchErr) {
       console.warn("[JobsAPI] Batch correlation warning:", batchErr);
+    }
+
+    // Strict invariant: Ensure no cancelled or terminal job ever leaks into activeJobs
+    for (const [id, job] of activeMap.entries()) {
+      if (
+        job.status === "CANCELLED" ||
+        job.status === "CANCEL_REQUESTED" ||
+        job.status === "COMPLETED" ||
+        job.status === "FAILED" ||
+        job.status === "DEAD_LETTER"
+      ) {
+        activeMap.delete(id);
+        if (!recentMap.has(id)) {
+          recentMap.set(id, job);
+        }
+      }
+    }
+
+    // Also remove from activeMap anything confirmed cancelled or completed in recentMap
+    for (const [id, recentJob] of recentMap.entries()) {
+      if (
+        recentJob.status === "CANCELLED" ||
+        recentJob.status === "COMPLETED" ||
+        recentJob.status === "FAILED"
+      ) {
+        activeMap.delete(id);
+        if (recentJob.result && typeof recentJob.result === "object" && "batchId" in recentJob.result) {
+          const bId = (recentJob.result as { batchId?: string }).batchId;
+          if (bId) {
+            activeMap.delete(`job_gen_${bId}`);
+            activeMap.delete(bId);
+          }
+        }
+      }
     }
 
     const recentJobs = Array.from(recentMap.values()).sort(
