@@ -1,91 +1,144 @@
-# SettleMate AI — System Architecture & Design Specification
-**Track 04: AI Finance Controller · Razorpay AI Buildathon**
+# SettleMate AI — System Architecture & Technical Specification
+### Track 04: AI Finance Controller · Razorpay AI Buildathon
 
 ---
 
-## 1. High-Level System Architecture
+## 1. High-Level Architecture Overview
 
-SettleMate AI is designed around a multi-tier, zero-trust financial architecture where high-throughput deterministic computation handles 96%+ of straightforward matches, and isolated AI agents investigate edge-case discrepancies under strict mechanical validation.
+SettleMate AI is engineered as a **deterministic financial control plane with AI-assisted exception investigation**. High-throughput deterministic algorithms process $>96\%$ of standard transactions in sub-millisecond execution times, while advisory AI investigators formulate hypotheses for ambiguous anomalies under strict non-LLM mechanical verification.
 
-```mermaid
-graph TD
-    subgraph Ingestion["1. Multi-Source Ingestion Engine"]
-        Orders[E-Commerce Orders]
-        Payments[Gateway Payments]
-        Settlements[Gateway Settlements]
-        Bank[Core Banking Credits / CAMT.053]
-        Refunds[Refund Feeds]
-        CB[Chargeback Feeds]
-    end
-
-    subgraph Deterministic["2. Deterministic Core Engine (806.75 rec/s)"]
-        Norm[Integer Minor Units Normalizer]
-        Pass1[Pass 1: Exact 1:1 Reference & UTR Match]
-        Pass2[Pass 2: Temporal Sliding Window Matching]
-        Pass3[Pass 3: Meet-in-the-Middle Combinatorics]
-        InvGate[6-Invariant Conservation Gate]
-    end
-
-    subgraph AIControl["3. Grounded Advisory AI Loop"]
-        Vault[Context Vault Evidence Graph]
-        Agent[Investigator AI Agent]
-        Claims[Structured AI Claims AST]
-        NonLLMGate[Non-LLM Mechanical Validator 134k/s]
-        MakerChecker[Dual-Control Maker/Checker Gate]
-    end
-
-    subgraph Persistence["4. Immutable State & Lineage"]
-        Ledger[Double-Entry General Ledger]
-        Receipt[Canonical Decision Receipts]
-        Merkle[Merkle DAG Proofs]
-        OfflineVerifier[Standalone Offline Verifier (0 LLMs, 0 DBs)]
-    end
-
-    Ingestion --> Norm --> Pass1 --> Pass2 --> Pass3 --> InvGate
-    InvGate -- Auto-Matched (96.4%) --> Ledger
-    InvGate -- Exceptions (3.6%) --> Vault --> Agent --> Claims --> NonLLMGate
-    NonLLMGate -- Validated --> MakerChecker --> Ledger
-    NonLLMGate -- Fabricated --> Blocked[Disputed & Locked]
-    Ledger --> Receipt --> Merkle --> OfflineVerifier
+```
+                    ┌────────────────────────────────────────────────────────┐
+                    │            1. Multi-Source Ingestion Engine            │
+                    │  (Orders, Payments, Settlements, Bank Credits, Refunds)│
+                    └───────────────────────────┬────────────────────────────┘
+                                                │
+                                                ▼
+                    ┌────────────────────────────────────────────────────────┐
+                    │         2. Deterministic Financial Control Plane       │
+                    │  - Integer minor-unit normalizer (paise arithmetic)    │
+                    │  - O(1) Hash Map Indexing (UTR, Order ID, Payment ID)  │
+                    │  - Temporal Sliding Window Matching (T+2 SLA)          │
+                    │  - Financial Conservation Gate (ΣDr ≡ ΣCr)             │
+                    │  - Confidence × Exposure Decision Router               │
+                    └───────────┬────────────────────────────────┬───────────┘
+                                │                                │
+              Clean Fast Path   │ (96.4% Auto-Matched)           │ Exceptions (3.6%)
+                                │                                ▼
+                                │   ┌────────────────────────────────────────┐
+                                │   │     3. Advisory AI & Adversarial Loop  │
+                                │   │  - Context Vault Evidence Assembly     │
+                                │   │  - Advisory LLM Investigator           │
+                                │   │  - Structured Claims AST (AIClaim[])   │
+                                │   │  - Adversarial Critic (3 Lenses)       │
+                                │   │  - Multi-Pass Reinvestigation Engine   │
+                                │   └────────────────────┬───────────────────┘
+                                │                        │
+                                │                        ▼
+                                │   ┌────────────────────────────────────────┐
+                                │   │     4. Deterministic Decision Gates    │
+                                │   │  - Non-LLM Mechanical Gate (134k/s)    │
+                                │   │  - Google OR-Tools CP-SAT Split Solver │
+                                │   │  - Minimal Correction Journal Engine   │
+                                │   │  - Invariant Restoration Prover (Δ=0)  │
+                                │   │  - Dual-Control Human Review (ADMIN)   │
+                                │   └────────────────────┬───────────────────┘
+                                │                        │
+                                ▼                        ▼
+                    ┌────────────────────────────────────────────────────────┐
+                    │               5. Immutable Finality & Replay           │
+                    │  - Atomic CAS Double-Entry Ledger Commit               │
+                    │  - Canonical RFC 8785 Decision Receipts (HMAC-SHA256)  │
+                    │  - Merkle DAG Evidence Commitments                     │
+                    │  - Zero-LLM / Zero-DB Offline Deterministic Replay     │
+                    └────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Core Subsystems
+## 2. Core Subsystem Specifications
 
 ### 2.1 Integer Normalization & Minor Units
-- All currencies stored in integer paise (₹1.00 = 100 paise).
-- Eliminates IEEE 754 binary floating-point drift.
-- Native `BigInt` support for micro-transactions.
+- All financial balances, fees, and taxes are normalized into integer minor units (paise for INR; cents for USD/EUR).
+- Prohibits IEEE 754 floating-point arithmetic across all reconciliation calculations.
+- Native `BigInt` and integer `number` types prevent binary rounding drift.
 
-### 2.2 3-Pass Deterministic Reconciliation Engine
-1. **Pass 1 (Exact Reference Match):** Matches by Gateway Payment ID, Order ID, and UTR with $O(1)$ hash map lookup.
-2. **Pass 2 (Temporal Sliding Window):** Matches delayed bank credits within configurable SLA bounds (e.g. $T+2$ days, $\pm 48$ hours).
-3. **Pass 3 (Meet-in-the-Middle Combinatorial Solver):** Solves $N:1$, $1:N$, and $N:M$ aggregated payouts up to $2^{16}$ combinations in $<1\text{ms}$ with zero dynamic array allocation.
+### 2.2 Deterministic Matching & Classification
+- **O(1) Hash-Map Indexing**: Indexed by Gateway Payment ID, Order ID, and Bank UTR.
+- **Temporal Sliding Window**: Reconciles delayed banking settlements across standard $T+1$ and $T+2$ business-day windows ($\pm 48\text{h}$).
+- **Conservation of Money**: Enforces the invariant:
+  $$S_{\text{expected}} = P_{\text{gross}} - F_{\text{fee}} - T_{\text{tax}} - R_{\text{refunds}} - D_{\text{chargebacks}}$$
 
-### 2.3 Grounded Advisory AI & Non-LLM Verification Council
-- AI cannot directly write to the ledger.
-- AI formulates a structured claim AST (`AIClaim[]`).
-- Deterministic Non-LLM Validator tests claims against 10 mechanical checks:
-  1. `EVIDENCE_EXISTS`: All cited evidence IDs present in Context Vault.
-  2. `EVIDENCE_AUTHORIZED`: Caller possesses clearance for cited evidence.
-  3. `EVIDENCE_LINKED`: Evidence links to target transaction via bounded BFS.
-  4. `RECORD_EXISTS`: Financial records exist in source datasets.
-  5. `VALUES_MATCH`: Numeric assertions equal raw ingested amounts.
-  6. `ARITHMETIC_RECOMPUTED`: Claims recomputed to integer paise.
-  7. `TIMING_CHECKED`: Timestamps within policy SLA limits.
-  8. `RELATIONSHIP_CHECKED`: Graph topology matches claim.
-  9. `POLICY_CHECKED`: Variances within active policy tolerance.
-  10. `INVARIANTS_CHECKED`: No contradictory claims in Context Vault.
+### 2.3 Advisory AI Investigator & Structured Claims AST
+- AI is restricted to advisory hypothesis formulation and can never directly mutate account balances or self-approve exceptions.
+- Emits strongly typed `AIClaim[]` AST structures with explicit claim types (`AMOUNT`, `DATE`, `REFERENCE`, `ENTITY`).
+- **Multi-Model Provider Support**: Pluggable support for OpenAI (`gpt-4o-mini`), Anthropic (`claude-3-5-sonnet`), Google Gemini (`gemini-2.5-flash`), or deterministic offline fallbacks.
 
-### 2.4 Immutable Ledger & Cryptographic Decision Receipts
-- Double-entry postings preserve $\sum \text{Debits} \equiv \sum \text{Credits}$.
-- Every decision emits a self-contained `CanonicalDecisionReceipt` with bitwise canonical JSON serialization and SHA-256 seal.
-- Offline standalone verification executes in $<1\text{ms}$ with **zero LLMs and zero DB dependencies**.
+### 2.4 Adversarial Critic & Multi-Pass Reinvestigation
+- Every AI claim is evaluated by an Adversarial Critic across three challenge lenses:
+  1. *Arithmetic Lens*: Independently recomputes fees, taxes, and deduction schedules.
+  2. *Timing Lens*: Enforces banking cutoff times, settlement SLAs, and holiday calendars.
+  3. *Relationship Lens*: Verifies gateway-to-merchant entity relationships.
+- When an objection is confirmed, the claim is rejected and returned to the investigator in an automated multi-pass reinvestigation loop.
 
-### 2.5 Security, Rate Limiting & Concurrency Control
-- Token bucket rate limiter: 100 req/min with `429 Too Many Requests`.
-- Max payload byte limit: 1 MB cap (`validateBodySize`).
-- Max object recursion depth: 10 levels (`checkObjectDepth`).
-- Full security headers: `nosniff`, `DENY`, `CSP`, `HSTS`.
-- Optimistic CAS locks on orphan leases with atomic monotonic versioning.
+### 2.5 Non-LLM Mechanical Validator
+- Validates all AI claims against raw immutable transaction feeds before workflow transitions:
+  - Verifies all cited evidence IDs exist in the Context Vault.
+  - Verifies numeric values match raw ingested records bitwise.
+  - Micro-benchmark throughput: **134,511 claims/second**.
+  - Fabricated or hallucinated claims are instantly blocked.
+
+### 2.6 Google OR-Tools CP-SAT Combinatorial Solver
+- Solves complex $N:1$, $1:N$, and $N:M$ aggregate invoice and settlement splits.
+- Exact combinatorial optimization guarantees zero heuristic drift on multi-invoice reconciliations in $<2\text{ms}$.
+
+### 2.7 Minimal Correction Engine & Invariant Prover
+- Formulates minimal correcting journal entries containing exactly 1 balancing pair (2 lines: 1 debit, 1 credit).
+- The **Invariant Restoration Prover** proves state restoration mathematically:
+  $$\Delta_{\text{pre}} \neq 0 \implies \text{Imbalance}, \quad \Delta_{\text{post}} = 0 \implies \text{Invariant Restored}$$
+
+### 2.8 Terminal Decision Receipts & Zero-LLM Deterministic Replay
+- Every finalized decision produces a self-contained `TerminalDecisionReceipt`.
+- Formatted as canonical RFC 8785 JSON with lexicographically sorted keys.
+- Cryptographically signed with HMAC-SHA256 and Merkle DAG root evidence commitments.
+- Replays offline in $<1\text{ms}$ with **zero LLM invocations and zero database queries**.
+
+---
+
+## 3. Scale & Durable Execution Architecture
+
+```
+[Operations Center (Browser / Client Coordinator)]
+                      │
+                      │ POST /api/batches/jobs/:jobId/step
+                      ▼
+[Durable State Store (PostgreSQL / SQLite with Optimistic CAS)]
+                      │
+                      │ Chunk Lease Allocation (1,000–5,000 txns)
+                      ▼
+[Partitioned Chunk Match Engine (Constant Memory Footprint)]
+                      │
+                      │ Atomic State Checkpoint
+                      ▼
+[Monotonic Progress Persistence & Resumability] ──► [<1000ms SLA Cooperative Cancel]
+```
+
+* **Operations Center Step Coordinator**: Bounded client-driven step requests eliminate monolithic request timeouts.
+* **Dual Database Architecture**:
+  - *Cloud Production*: PostgreSQL via `pg.Pool` and Neon Serverless (`prisma/schema.postgresql.prisma`).
+  - *Local Dev & Offline Demo*: SQLite via `better-sqlite3` in WAL mode (`prisma/schema.prisma`).
+* **Cooperative Cancellation State Machine**: Guaranteed terminal cancellation latency SLA $<1,000\text{ms}$.
+* **Resumability**: Automatically resumes from the last completed chunk checkpoint upon process restart.
+
+---
+
+## 4. Zero-Trust Security Boundary
+
+1. **Authentication**: Signed HTTP-only session cookies with HMAC-SHA256 and `timingSafeEqual` constant-time verification.
+2. **Server-Derived Identity**: User identity, tenant ID, and role are derived strictly server-side; request body overrides are rejected.
+3. **Role-Based Authorization**:
+   - `REVIEWER`: Exception investigation and preliminary triage.
+   - `ADMIN`: Strictly required for high-exposure approvals and correcting journal commits.
+4. **Row-Level Security (RLS)**: Multi-tenant partitioning guarantees tenant isolation; cross-tenant queries fail closed (404/403).
+5. **SSRF Guard**: Webhook dispatch blocks loopback addresses, private CIDRs, and the cloud metadata service (`169.254.169.254`).
+6. **Rate Limiting**: Token-bucket algorithm enforcing 100 req/min for general APIs and 10 req/min for authentication.
