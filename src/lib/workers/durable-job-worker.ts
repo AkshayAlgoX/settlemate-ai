@@ -434,6 +434,70 @@ export async function enqueueJob(params: {
 }
 
 /**
+ * Atomically records an already completed job into the durable jobs register.
+ */
+export async function recordCompletedDurableJob(params: {
+  tenantId?: string;
+  idempotencyKey?: string;
+  jobId?: string;
+  jobType: string;
+  batchSize: number;
+  result?: Record<string, unknown>;
+  payload?: Record<string, unknown>;
+}): Promise<DurableJobRecord> {
+  const tenantId = params.tenantId || getRequiredTenantId();
+  const id = params.jobId || `job_${randomUUID().slice(0, 12)}`;
+  const key = params.idempotencyKey || `idemp_${id}`;
+  const now = new Date();
+
+  if (isPostgres()) {
+    try {
+      await dynamicPrisma.asyncJob?.create({
+        data: {
+          id,
+          tenantId,
+          idempotencyKey: key,
+          jobType: params.jobType,
+          status: "COMPLETED",
+          payload: JSON.stringify(params.payload || { size: params.batchSize }),
+          result: params.result ? JSON.stringify(params.result) : undefined,
+          attempt: 1,
+          maxRetries: 3,
+          progressCurrent: params.batchSize,
+          progressTotal: params.batchSize,
+          createdAt: now,
+          updatedAt: now,
+          completedAt: now,
+        },
+      });
+    } catch {
+      // Ignore conflict
+    }
+  }
+
+  const record: DurableJobRecord = {
+    id,
+    tenantId,
+    idempotencyKey: key,
+    jobType: params.jobType,
+    status: "COMPLETED",
+    payload: params.payload || { size: params.batchSize },
+    result: params.result,
+    attempt: 1,
+    maxRetries: 3,
+    progressCurrent: params.batchSize,
+    progressTotal: params.batchSize,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: now,
+  };
+
+  const queueKey = `${tenantId}:${key}`;
+  localMemoryQueue.set(queueKey, record);
+  return record;
+}
+
+/**
  * Atomically claims the next pending or expired job using PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED`.
  */
 export async function claimNextJob(

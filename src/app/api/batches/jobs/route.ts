@@ -83,19 +83,74 @@ export async function GET(req: NextRequest) {
     }
 
 
-    const recentJobs = durableRecent.map((d) => ({
-      jobId: d.id,
-      tenantId: d.tenantId,
-      status: d.status,
-      batchSize: d.progressTotal || (d.payload?.size as number) || 0,
-      progressCurrent: d.progressCurrent,
-      progressTotal: d.progressTotal,
-      progressPct: d.progressTotal > 0 ? Math.round((d.progressCurrent / d.progressTotal) * 100) : (d.status === "COMPLETED" ? 100 : 0),
-      cancelRequestedAt: d.cancelRequestedAt ? d.cancelRequestedAt.toISOString() : undefined,
-      createdAt: d.createdAt.toISOString(),
-      result: d.result,
-      error: d.error,
-    }));
+    const recentMap = new Map<string, {
+      jobId: string;
+      tenantId: string;
+      status: string;
+      batchSize: number;
+      progressCurrent: number;
+      progressTotal: number;
+      progressPct: number;
+      cancelRequestedAt?: string;
+      createdAt: string;
+      result?: unknown;
+      error?: string;
+    }>();
+
+    for (const d of durableRecent) {
+      recentMap.set(d.id, {
+        jobId: d.id,
+        tenantId: d.tenantId,
+        status: d.status,
+        batchSize: d.progressTotal || (d.payload?.size as number) || 0,
+        progressCurrent: d.progressCurrent,
+        progressTotal: d.progressTotal,
+        progressPct: d.progressTotal > 0 ? Math.round((d.progressCurrent / d.progressTotal) * 100) : (d.status === "COMPLETED" ? 100 : 0),
+        cancelRequestedAt: d.cancelRequestedAt ? d.cancelRequestedAt.toISOString() : undefined,
+        createdAt: d.createdAt.toISOString(),
+        result: d.result,
+        error: d.error,
+      });
+    }
+
+    for (const u of unifiedAll) {
+      if (!recentMap.has(u.jobId) && !activeMap.has(u.jobId)) {
+        const batchSize = u.batchSize || 0;
+        let resultObj: { batchId?: string; size?: number } | undefined;
+        if (u.summary) {
+          try {
+            const parsed = JSON.parse(u.summary);
+            if (parsed && typeof parsed === "object") {
+              resultObj = {
+                batchId: (parsed.batchId as string) || u.jobId.replace(/^job_gen_/, ""),
+                size: (parsed.size as number) || batchSize,
+              };
+            }
+          } catch {
+            resultObj = { batchId: u.jobId.replace(/^job_gen_/, ""), size: batchSize };
+          }
+        } else {
+          resultObj = { batchId: u.jobId.replace(/^job_gen_/, ""), size: batchSize };
+        }
+
+        recentMap.set(u.jobId, {
+          jobId: u.jobId,
+          tenantId: u.tenantId || session.tenantId || "tenant_default_sandbox",
+          status: u.status,
+          batchSize,
+          progressCurrent: batchSize,
+          progressTotal: batchSize,
+          progressPct: u.progressPct ?? 100,
+          createdAt: u.createdAt || new Date().toISOString(),
+          result: resultObj,
+          error: u.error,
+        });
+      }
+    }
+
+    const recentJobs = Array.from(recentMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
     return applySecurityHeaders(
       NextResponse.json({

@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
 
 
 
-    const res = await executeBatchGeneration(size, batchName);
+    const res = await executeBatchGeneration(size, batchName, session.tenantId);
     return NextResponse.json(res);
   } catch (error) {
     console.error("Batch generation error:", error);
@@ -202,7 +202,7 @@ interface CreateManyModel {
   createMany: (args: { data: Record<string, unknown>[] }) => Promise<unknown>;
 }
 
-async function executeBatchGeneration(size: number, batchName: string) {
+async function executeBatchGeneration(size: number, batchName: string, tenantId?: string) {
   const data = generateSyntheticBatch(size);
   const batch = await prisma.batch.create({
     data: {
@@ -340,5 +340,38 @@ async function executeBatchGeneration(size: number, batchName: string) {
     },
   });
 
-  return { batchId: batch.id, stats };
+  const now = new Date().toISOString();
+  const jobId = `job_gen_${batch.id}`;
+
+  // Record completed job in UnifiedJobRepository so Operations Center immediately registers it
+  UnifiedJobRepository.save({
+    jobId,
+    tenantId: tenantId || "tenant_default_sandbox",
+    type: "BATCH_GENERATION",
+    jobType: "BATCH_GENERATION",
+    status: "COMPLETED",
+    batchSize: size,
+    progressPct: 100,
+    createdAt: now,
+    startedAt: now,
+    completedAt: now,
+    summary: JSON.stringify({ batchId: batch.id, size, stats }),
+  });
+
+  try {
+    const { recordCompletedDurableJob } = await import("@/lib/workers/durable-job-worker");
+    await recordCompletedDurableJob({
+      tenantId: tenantId || "tenant_default_sandbox",
+      jobId,
+      idempotencyKey: `idemp_${jobId}`,
+      jobType: "BATCH_GENERATION",
+      batchSize: size,
+      result: { batchId: batch.id, size, stats },
+      payload: { batchId: batch.id, size, batchName },
+    });
+  } catch {
+    // Memory mode fallback
+  }
+
+  return { batchId: batch.id, jobId, stats };
 }

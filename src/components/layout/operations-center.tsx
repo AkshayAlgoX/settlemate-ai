@@ -156,10 +156,16 @@ export function OperationsCenter() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
+    const handleCustomUpdate = () => {
+      if (mounted) void refreshJobs();
+    };
+    window.addEventListener("operations-updated", handleCustomUpdate);
+
     return () => {
       mounted = false;
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("operations-updated", handleCustomUpdate);
     };
   }, [refreshJobs]);
 
