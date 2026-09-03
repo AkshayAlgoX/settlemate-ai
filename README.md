@@ -5,6 +5,19 @@
 
 ---
 
+## Judge Quick Access
+
+> 🚀 **Live Demo:** [**https://settlemate-ai.onrender.com**](https://settlemate-ai.onrender.com)
+
+| Surface | Link |
+|---|---|
+| 🛡️ Verification Hub | [/verify](https://settlemate-ai.onrender.com/verify) |
+| ⚖️ Judge Mode | [/judge-mode](https://settlemate-ai.onrender.com/judge-mode) |
+| 🏢 Multi-Tenant / RLS | [/multi-tenant](https://settlemate-ai.onrender.com/multi-tenant) |
+| 🔬 Security Lab | [/security-lab](https://settlemate-ai.onrender.com/security-lab) |
+
+---
+
 High-volume payment reconciliation across fragmented financial systems—e-commerce orders, gateway payment captures, batch settlement summaries, bank credits, refunds, chargebacks, and gateway fee deductions—is historically error-prone and vulnerable to silent ledger drift. In production finance operations, naive string matching produces false reconciliations, delayed bank payouts trigger unmonitored liquidity drag, and complex multi-invoice or split-payment deductions lead to cash leakage.
 
 Applying Large Language Models directly to financial balances introduces severe risks: models hallucinate transaction identifiers, invent bank credits, hallucinate balancing journal entries, or succumb to prompt injections embedded in bank narrations. A financial reconciliation engine cannot tolerate stochastic decision-making.
