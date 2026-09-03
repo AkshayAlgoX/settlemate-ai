@@ -66,6 +66,7 @@ data/*.db-shm
 .storage_staging/
 
 # Local QA inspection reports and browser screenshots
+test-results/
 canvas-geometry-report.json
 login-geometry-report.json
 rendered-inspection-report.json

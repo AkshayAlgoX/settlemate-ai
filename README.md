@@ -7,7 +7,8 @@
 
 ## Judge Quick Access
 
-> 🚀 **Live Demo:** [**https://settlemate-ai.onrender.com**](https://settlemate-ai.onrender.com)
+> 🚀 **Live Demo:** [**https://settlemate-ai.onrender.com**](https://settlemate-ai.onrender.com)  
+> *Note: Live deployment is authentication-protected.*
 
 | Surface | Link |
 |---|---|
@@ -247,7 +248,7 @@ SettleMate AI implements defense-in-depth across the entire financial execution 
    - `ADMIN`: Strictly required to approve correcting journal entries and finalize high-exposure resolutions (enforced server-side with 403 Forbidden).
 4. **Multi-Tenant Row-Level Security (RLS)**: Every query enforces tenant isolation (`tenantId`). Cross-tenant read, update, or receipt verification attempts fail closed (404/403).
 5. **Prompt-Injection Quarantine**: External bank narrations and CSV metadata are treated as untrusted data strings. The AI prompt template isolates inputs, and outputs must match the strict `AIClaim[]` AST schema.
-6. **Outbound SSRF Protection**: Webhook dispatch validates target URLs against an IP whitelist, blocking `localhost`, private subnets (RFC 1918), and the `169.254.169.254` cloud metadata endpoint (`src/lib/security/ssrf-guard.ts`).
+6. **Outbound SSRF Protection**: Webhook dispatch validates target URLs against an IP whitelist, blocking local loopback interfaces, private subnets (RFC 1918), and the `169.254.169.254` cloud metadata endpoint (`src/lib/security/ssrf-guard.ts`).
 7. **Rate Limiting**: Token bucket rate limiters protect public APIs (100 req/min) and auth endpoints (10 attempts/min) with standard `429 Too Many Requests` headers.
 8. **Fail-Closed Configuration**: In production (`NODE_ENV=production`), missing `AUTH_SECRET` causes an immediate startup crash rather than falling back to default keys.
 
@@ -287,19 +288,21 @@ For competition judges evaluating the repository, follow this recommended sequen
 
 ## Additional engineering surfaces
 
+> *Note: Live deployment is authentication-protected.*
+
 | Evaluation Surface | Route / URL | Core Capability |
 | :--- | :--- | :--- |
-| **Judge Mode Terminal** | [`/judge-mode`](http://localhost:3000/judge-mode) | Full-screen 7-step guided walkthrough with interactive injection buttons. |
-| **Interactive Sandbox** | [`/sandbox`](http://localhost:3000/sandbox) | Drag-and-drop custom CSV upload with 1-click sample dataset generation. |
-| **Risk Command Center** | [`/risk-dashboard`](http://localhost:3000/risk-dashboard) | Aggregate financial exposure, SLA breaches, and severity-weighted risk scoring. |
-| **Confidence Calibration** | [`/calibration`](http://localhost:3000/calibration) | Empirical reliability diagram, ECE calibration curve, and Brier score telemetry. |
-| **Resolution Playbooks** | [`/playbook`](http://localhost:3000/playbook) | Automated SOP resolution playbooks for 5 standard financial exception types. |
-| **Multi-Currency Engine** | [`/multi-currency`](http://localhost:3000/multi-currency) | Multi-currency FX conversion (USD, EUR, GBP, SGD, AED, JPY, INR) with GST isolation. |
-| **Multi-Tenant Simulator** | [`/multi-tenant`](http://localhost:3000/multi-tenant) | Strict multi-tenant partition isolation across 4 enterprise tenants. |
-| **Developer API Portal** | [`/developer`](http://localhost:3000/developer) | Interactive REST console, OpenAPI 3.0 specification (`/api/docs`), and code snippets. |
-| **Live Red-Team Console** | [`/red-team`](http://localhost:3000/red-team) | Hostile payload testbed for prompt injection, fake vouchers, and SSRF attacks. |
-| **Security Lab** | [`/security-lab`](http://localhost:3000/security-lab) | Real-time simulator executing all 10 defended adversarial vectors. |
-| **Track 04 Compliance** | [`/track04-compliance`](http://localhost:3000/track04-compliance) | Direct mapping from official judging criteria to empirical implementation proofs. |
+| **Judge Mode Terminal** | [`/judge-mode`](https://settlemate-ai.onrender.com/judge-mode) | Full-screen 7-step guided walkthrough with interactive injection buttons. |
+| **Interactive Sandbox** | [`/sandbox`](https://settlemate-ai.onrender.com/sandbox) | Drag-and-drop custom CSV upload with 1-click sample dataset generation. |
+| **Risk Command Center** | [`/risk-dashboard`](https://settlemate-ai.onrender.com/risk-dashboard) | Aggregate financial exposure, SLA breaches, and severity-weighted risk scoring. |
+| **Confidence Calibration** | [`/calibration`](https://settlemate-ai.onrender.com/calibration) | Empirical reliability diagram, ECE calibration curve, and Brier score telemetry. |
+| **Resolution Playbooks** | [`/playbook`](https://settlemate-ai.onrender.com/playbook) | Automated SOP resolution playbooks for 5 standard financial exception types. |
+| **Multi-Currency Engine** | [`/multi-currency`](https://settlemate-ai.onrender.com/multi-currency) | Multi-currency FX conversion (USD, EUR, GBP, SGD, AED, JPY, INR) with GST isolation. |
+| **Multi-Tenant Simulator** | [`/multi-tenant`](https://settlemate-ai.onrender.com/multi-tenant) | Strict multi-tenant partition isolation across 4 enterprise tenants. |
+| **Developer API Portal** | [`/developer`](https://settlemate-ai.onrender.com/developer) | Interactive REST console, OpenAPI 3.0 specification (`/api/docs`), and code snippets. |
+| **Live Red-Team Console** | [`/red-team`](https://settlemate-ai.onrender.com/red-team) | Hostile payload testbed for prompt injection, fake vouchers, and SSRF attacks. |
+| **Security Lab** | [`/security-lab`](https://settlemate-ai.onrender.com/security-lab) | Real-time simulator executing all 10 defended adversarial vectors. |
+| **Track 04 Compliance** | [`/track04-compliance`](https://settlemate-ai.onrender.com/track04-compliance) | Direct mapping from official judging criteria to empirical implementation proofs. |
 
 ---
 
@@ -346,7 +349,6 @@ npm run prisma:generate
 # 3. Start Next.js development server
 npm run dev
 ```
-*Sign in at [http://localhost:3000](http://localhost:3000) with demo credentials: `admin` / `admin123` (Admin) or `reviewer` / `review123` (Reviewer).*
 
 ---
 

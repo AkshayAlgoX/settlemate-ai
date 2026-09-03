@@ -91,8 +91,8 @@
   },
   "liveDeploymentAndStreaming": {
     "serverlessReady": true,
-    "vercelConfiguration": "vercel.json (maxDuration: 60s, mem: 1024MB)",
-    "oneCommandDeploy": "scripts/deploy-live.sh",
+    "renderConfiguration": "render.yaml (build: npm ci && npm run build:prod, healthCheckPath: /api/v1/health)",
+    "preDeploymentVerificationGate": "scripts/deploy-check.sh",
     "realTimeStreamingMonitor": true,
     "downloadableAuditReport": "/api/report/generate"
   },
