@@ -396,7 +396,14 @@ function checkLedgerConsistency(
   counts: Record<string, number>,
   amounts: Record<string, number>,
 ): void {
-  const exceptions = results.filter((r) => r.status !== "AUTO_MATCHED");
+  // Mirror evaluator.ts exactly: orphan_* rows (paymentId starts with "orphan_") are
+  // synthetic records injected by the matcher for unmatched bank CREDIT transactions —
+  // they are not submitted payment records. Exclude them from exceptionsFound (and from
+  // amountAtRisk, which sums the same exceptions array) so the recomputed values match
+  // metrics produced by evaluateResults() and the invariant does not spuriously fail.
+  const exceptions = results.filter(
+    (r) => r.status !== "AUTO_MATCHED" && !r.paymentId.startsWith("orphan_")
+  );
   const recomputed: Record<string, number> = {
     totalRecords: results.length,
     autoMatched: results.filter((r) => r.status === "AUTO_MATCHED").length,
