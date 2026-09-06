@@ -254,7 +254,11 @@ async function computeAccuracy(batchId: string): Promise<{
   return {
     accuracy: evaluated > 0 ? Math.round((correct / evaluated) * 10000) / 100 : 0,
     autoMatched,
-    exceptions: results.length - autoMatched,
+    // Exclude orphan_* rows (synthetic engine records for unmatched bank credits) so that
+    // autoMatched + exceptions = total payment record count (not payment + orphan count).
+    exceptions: results.filter(
+      (r) => r.status !== "AUTO_MATCHED" && !r.paymentId.startsWith("orphan_")
+    ).length,
     unresolved,
     total: results.length,
   };

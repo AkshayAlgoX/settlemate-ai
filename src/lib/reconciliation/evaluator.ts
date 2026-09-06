@@ -102,8 +102,14 @@ export function evaluateResults(
   const recall = totalTP + totalFN > 0 ? totalTP / (totalTP + totalFN) : 0;
 
   // Financial metrics
+  // Orphan bank-credit rows (paymentId starts with "orphan_") are synthetic records
+  // injected by the matcher for unmatched bank CREDIT transactions — they are not
+  // submitted payment records. Exclude them from exceptionsFound so that:
+  //   autoMatched + exceptionsFound = totalRecords (payment count)
   const autoMatched = results.filter((r) => r.status === "AUTO_MATCHED").length;
-  const exceptions = results.filter((r) => r.status !== "AUTO_MATCHED");
+  const exceptions = results.filter(
+    (r) => r.status !== "AUTO_MATCHED" && !r.paymentId.startsWith("orphan_")
+  );
   const unresolved = results.filter((r) => r.status === "NEEDS_MANUAL_REVIEW").length;
 
   const grossOrderAmount = data.orders.reduce((sum, o) => sum + o.amount, 0);
