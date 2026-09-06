@@ -384,7 +384,7 @@ function DashboardContent() {
       <section className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <MetricTile
           label="Records processed"
-          value={formatNumber(batch.totalRecords)}
+          value={formatNumber(batch.totalRecords ?? batch.size)}
           icon={Database}
         />
 
