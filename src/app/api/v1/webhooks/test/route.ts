@@ -12,6 +12,7 @@ import {
   sanitizeObject,
 } from "@/lib/security/api-security";
 import { v1Store, dispatchWebhook } from "@/lib/api/v1-store";
+import { getDefaultWebhookSigningSecret } from "@/lib/webhooks/webhook-secrets";
 import { instrument } from "@/lib/observability/route";
 
 export async function OPTIONS() {
@@ -127,7 +128,7 @@ async function handlePost(req: NextRequest) {
       targetUrl,
       eventName,
       testPayload,
-      targetSecret || "whsec_settlemate_live_signing_key_001",
+      targetSecret || getDefaultWebhookSigningSecret(),
       webhookId
     );
 

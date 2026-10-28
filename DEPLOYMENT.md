@@ -69,16 +69,19 @@ NODE_ENV=production
 PORT=3000
 HOSTNAME=0.0.0.0
 
-# Session & JWT Cryptographic Secret (Required min 32 chars)
-AUTH_SECRET=sk_live_replace_with_a_real_32_char_cryptographic_secret
+# Session & JWT Cryptographic Secret (Required; generate with: openssl rand -hex 32)
+AUTH_SECRET=
+
+# Webhook secrets (Required in production; generate each with: openssl rand -hex 32).
+# Values committed to this repository in the past are public and are rejected.
 
 # Unified Persistent Storage Locations
 DATABASE_URL="file:/app/data/dev.db"
 SETTLEMATE_DB_PATH="/app/data/settlemate.db"
 
-# Webhook Cryptographic Signing Secrets
-WEBHOOK_SECRET=whsec_live_replace_with_webhook_signing_secret
-WEBHOOK_SHARED_SECRET=whsec_settlemate_live_signing_key_001
+WEBHOOK_SECRET=
+# AES-256-GCM key for webhook secrets stored at rest: exactly 64 hex characters.
+WEBHOOK_ENCRYPTION_KEY=
 
 # Telemetry Token (Optional)
 METRICS_TOKEN=
