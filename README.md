@@ -281,7 +281,7 @@ SettleMate AI implements defense-in-depth across the entire financial execution 
 5. **Prompt-Injection Quarantine**: External bank narrations and CSV metadata are treated as untrusted strings. The AI prompt template isolates inputs, and outputs must match the strict `AIClaim[]` AST schema.
 6. **Outbound SSRF Protection**: Webhook dispatch validates target URLs against an IP whitelist, blocking local loopback interfaces, private subnets (RFC 1918), and cloud metadata endpoints (`169.254.169.254`) via `src/lib/security/ssrf-guard.ts`.
 7. **Rate Limiting**: Token bucket rate limiters protect public APIs (100 req/min) and auth endpoints (10 attempts/min) with standard `429 Too Many Requests` headers.
-8. **Fail-Closed Configuration**: In production (`NODE_ENV=production`), a missing `AUTH_SECRET` triggers an immediate startup crash rather than falling back to default keys.
+8. **Fail-Closed Session Configuration**: In production (`NODE_ENV=production`), a missing `AUTH_SECRET` triggers an immediate startup crash rather than falling back to default keys. *(Note: Unlike session auth, receipt signing currently falls back to development constants if omitted; production environments must explicitly supply `RECEIPT_SIGNING_SECRET_V1`).*
 
 ---
 
@@ -338,7 +338,7 @@ cp .env.example .env
 | `DATABASE_URL` | Yes | Prisma relational connection string | `file:./dev.db` |
 | `SETTLEMATE_DB_PATH` | Yes | Local SQLite database file path | `./dev.db` |
 | `WEBHOOK_SECRET` | No | Webhook payload authentication | Random hex string |
-| `RECEIPT_SIGNING_SECRET_V1` | No | Terminal decision receipt HMAC secret | Internal fallback key |
+| `RECEIPT_SIGNING_SECRET_V1` | Recommended | Terminal decision receipt HMAC secret | Required for secure production; falls back to dev key if omitted |
 | `GEMINI_API_KEY` | No | Advisory AI investigator integration | Optional (falls back to rules) |
 | `OPENAI_API_KEY` | No | Alternate advisory AI model | Optional |
 
