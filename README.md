@@ -14,7 +14,7 @@
 
 ---
 
-## 30-Second Recruiter Summary
+## Project Overview
 
 High-volume digital commerce payment reconciliation across asynchronous boundaries—merchant orders, payment gateway captures, batch settlements, bank statement credits, refunds, chargebacks, and MDR fees with GST—is historically error-prone and vulnerable to silent ledger drift. Applying Large Language Models directly to financial balances introduces catastrophic risks: models hallucinate transaction identifiers, invent bank credits, balance books with phantom journal entries, and succumb to prompt injection embedded in bank narrations.
 
@@ -30,18 +30,10 @@ High-volume digital commerce payment reconciliation across asynchronous boundari
 
 ---
 
-## Live Demo & Offline Evaluation
+## Deployment Status
 
-| Surface | Target Route | Status / Access |
-|---|---|---|
-| 🌐 **Live Demo Web App** | [`https://settlemate-ai.onrender.com`](https://settlemate-ai.onrender.com) | Hosted on Render Free Tier *(sleeps when idle)* |
-| 🛡️ **Verification Hub** | [`/verify`](https://settlemate-ai.onrender.com/verify) | Interactive real-time test of all 7 financial invariants |
-| ⚖️ **Judge Mode Terminal** | [`/judge-mode`](https://settlemate-ai.onrender.com/judge-mode) | 7-step guided presentation with pre-canned edge cases |
-| 🏢 **Multi-Tenant / RLS** | [`/multi-tenant`](https://settlemate-ai.onrender.com/multi-tenant) | Row-level partition security across 4 isolated tenants |
-| 🔬 **Security Lab** | [`/security-lab`](https://settlemate-ai.onrender.com/security-lab) | Real-time simulator executing 10 adversarial exploit vectors |
-
-> [!NOTE]
-> **Deployment State Disclosure**: The live deployment is hosted on Render's free tier, which suspends containers after periods of inactivity (causing an initial 50-second wake-up or HTTP 503 while spinning up). SettleMate AI requires **zero external cloud services** to run locally. For an instantaneous, zero-latency evaluation, follow the [Local Development Setup](#local-development-setup) or run `docker compose up`.
+> [!WARNING]
+> **Public Deployment Status (October 2026):** Public deployment is currently unavailable following exhaustion of the previous Render free-tier limits. The application can be evaluated locally using the setup instructions below.
 
 ---
 
@@ -323,6 +315,33 @@ npm run test:10k-progress       # Continuous 10k bounded step execution
 npm run test:cancellation:1m   # 1M workload cooperative cancellation (<1000ms latency)
 ```
 
+### Prerequisites & Required Runtimes
+
+* **Node.js**: v20.x or v22.x LTS (`node -v`)
+* **Package Manager**: npm v10+ (`npm -v`)
+* **Python** (for OR-Tools CP-SAT microservice, optional): Python 3.10+ / 3.12 (`python3 --version`)
+* **Database**: Local SQLite via `better-sqlite3` (default) or PostgreSQL 15+ (for production mode)
+
+### Environment Configuration
+
+Copy the example environment template and configure local values:
+
+```bash
+cp .env.example .env
+```
+
+| Variable Name | Required | Purpose | Default / Example |
+| :--- | :--- | :--- | :--- |
+| `NODE_ENV` | Yes | Runtime environment mode | `development` |
+| `PORT` | No | HTTP server port | `3000` |
+| `AUTH_SECRET` | Yes | HMAC session and token signing key | Random 32+ char hex string |
+| `DATABASE_URL` | Yes | Prisma relational connection string | `file:./dev.db` |
+| `SETTLEMATE_DB_PATH` | Yes | Local SQLite database file path | `./dev.db` |
+| `WEBHOOK_SECRET` | No | Webhook payload authentication | Random hex string |
+| `RECEIPT_SIGNING_SECRET_V1` | No | Terminal decision receipt HMAC secret | Internal fallback key |
+| `GEMINI_API_KEY` | No | Advisory AI investigator integration | Optional (falls back to rules) |
+| `OPENAI_API_KEY` | No | Alternate advisory AI model | Optional |
+
 ### Local Development Setup
 
 ```bash
@@ -333,11 +352,19 @@ cd settlemate-ai
 # 2. Install dependencies
 npm install
 
-# 3. Initialize local SQLite database
+# 3. Initialize local database schemas and Prisma client
 npm run db:init
 npm run prisma:generate
 
-# 4. Start Next.js development server
+# 4. (Optional) Setup Python OR-Tools CP-SAT solver service
+cd services/solver
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --port 8000 &
+cd ../..
+
+# 5. Start Next.js development server
 npm run dev
 ```
 
@@ -345,8 +372,10 @@ Visit [`http://localhost:3000`](http://localhost:3000) to access the application
 
 ### Docker Compose Setup
 
+For a containerized environment running Next.js alongside PostgreSQL:
+
 ```bash
-# Start Next.js application and PostgreSQL database container
+# Start application and PostgreSQL containers
 docker compose up -d
 ```
 
@@ -357,8 +386,8 @@ docker compose up -d
 * **Combinatorial Boundary**: The in-memory meet-in-the-middle solver is bounded at $2^{16}$ ($65,536$) combinations. Larger unindexed combinations route to Google OR-Tools CP-SAT or human review.
 * **Sub-Tolerance Rounding**: Settlement variances under ₹1.00 (such as ₹0.47 fractional tax rounding) are intentionally not flagged as exceptions to prevent operational alert fatigue.
 * **Confidence Bucket Calibration**: The 41–60% confidence bucket exhibits 89% empirical accuracy on ambiguous multi-candidate rows; confidence weights are deliberately not inflated to falsely claim 100% precision on noisy data.
-* **Database Target**: Local development uses SQLite (`better-sqlite3` in WAL mode) for zero-dependency portability; multi-node production deployments require PostgreSQL with `pg.Pool` connection pooling.
-* **Hosted Demo Availability**: The public Render instance is on a free-tier sleep schedule. Local and Docker environments provide the primary, zero-latency evaluation experience.
+* **Database Target**: Local development uses SQLite (`better-sqlite3` in WAL mode) for portability; multi-node deployments require PostgreSQL with `pg.Pool` connection pooling.
+* **Public Cloud Deployment**: The previous Render free-tier instance is offline following platform quota exhaustion. Full application functionality is evaluated locally via the documented environment setup or Docker Compose.
 
 ---
 
@@ -396,14 +425,11 @@ settlemate-ai/
 
 ---
 
-## Author & Engineering Contact
+## Authorship & Attribution
 
-**Akshaya R**<br>
-- **GitHub**: [@AkshayAlgoX](https://github.com/AkshayAlgoX)<br>
-- **Portfolio**: [akshayalgox.github.io](https://akshayalgox.github.io/)<br>
-- **Education**: Computer Science Undergraduate (Graduating 2027)<br>
-- **Industry Experience**: Software Engineer Intern at Veanka Innosol · Former Team Lead & Java Developer Intern at Infosys Springboard<br>
-- **Competition Track Record**: HackerRank Orchestrate Global Rank #85/3,062 (Top 2.78%) · Amazon ML Challenge Team Duty_Drive (Rank #1,200)
+* **Author:** Akshaya R ([@AkshayAlgoX](https://github.com/AkshayAlgoX))
+* **Specification:** Built for the Razorpay Track 04 Autonomous Finance-Ops challenge.
+* **License:** MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
