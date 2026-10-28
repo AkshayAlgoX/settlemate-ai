@@ -1,14 +1,24 @@
 /*
- * SettleMate AI — Milestone 5: Cryptographic Signing & Key Rotation Engine
+ * SettleMate AI — Milestone 5: Receipt Signing & Key Rotation
  *
- * Implements:
- *   - Deterministic SHA-256 Proof Hashing
- *   - HMAC-SHA256 Signing with Server-Side Key Management & Governance
- *   - Cryptographic Entropy & Format Validation (rejects predictable keys)
- *   - Production Fail-Closed Key Policy (prohibits known public fallback keys)
- *   - Multi-Version Key Rotation (v1, v2, etc.)
- *   - Constant-time signature verification (timingSafeEqual)
- *   - Transparent Legacy Fallback Key Classification
+ * HMAC-SHA256 over the RFC 8785-style canonical receipt body, with a versioned
+ * server-side key ring. One trust policy governs both signing and verification:
+ *
+ *   - Keys come only from the environment (RECEIPT_SIGNING_SECRET_V<n>).
+ *     Callers cannot supply a key for signing or verification.
+ *   - Production (NODE_ENV=production) fails closed on a missing active key, a
+ *     key shorter than 32 bytes, a key reused across versions, a placeholder,
+ *     or one of the publicly known secrets from this repository's history.
+ *   - Outside production, an unset v1/v2 key is replaced by a random key that
+ *     lives only for this process. Receipts signed with it verify, but are
+ *     reported as untrusted development receipts.
+ *   - Receipts whose signature matches a publicly known legacy secret are
+ *     classified as LEGACY_PUBLIC_KEY: inspectable, never trusted.
+ *
+ * Key checks here are configuration guards, not a proof of randomness. No
+ * test on a string can show that it was generated unpredictably; keys must be
+ * produced by a CSPRNG (see docs/receipt-signing.md) and held in a secret
+ * manager.
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -16,143 +26,133 @@ import { type TerminalDecisionReceipt, TerminalDecisionReceiptSchema } from "./t
 import { canonicalizeReceiptForSigning, canonicalizeJson } from "./canonicalizer";
 
 /**
- * Publicly known development/testing fallback secrets.
- * Any key matching these values is strictly rejected in production environments.
+ * Secrets that were committed to this repository as defaults and are therefore
+ * public. They are never accepted as keys; they are kept only so that receipts
+ * signed with them can be recognised and classified as untrusted.
  */
-export const KNOWN_INSECURE_FALLBACK_KEYS = new Set<string>([
-  "settlemate_terminal_secret_v1_auth_2026",
-  "settlemate_terminal_secret_v2_rotated_2026",
-]);
+export const KNOWN_PUBLIC_LEGACY_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  v1: "settlemate_terminal_secret_v1_auth_2026",
+  v2: "settlemate_terminal_secret_v2_rotated_2026",
+});
 
-export const CURRENT_SIGNING_KEY_VERSION = "v1";
+const KNOWN_PUBLIC_VALUES = new Set(Object.values(KNOWN_PUBLIC_LEGACY_KEYS));
 
-/**
- * Generates a cryptographically strong 256-bit random signing key (64 hex characters).
- */
-export function generateSecureSigningKey(): string {
-  return randomBytes(32).toString("hex");
+/** Versions that get an ephemeral development key when unset outside production. */
+const DEVELOPMENT_VERSIONS = ["v1", "v2"] as const;
+
+const DEFAULT_ACTIVE_VERSION = "v1";
+const MIN_KEY_BYTES = 32;
+const KEY_VERSION_PATTERN = /^v[1-9]\d{0,3}$/;
+const ENV_KEY_PATTERN = /^RECEIPT_SIGNING_SECRET_V([1-9]\d{0,3})$/;
+const PLACEHOLDER_PATTERN = /change[-_ ]?me|replace[-_ ]?(me|this)|placeholder|example|your[-_ ]?(secret|key)|<.*>/i;
+
+export type KeyTrust = "GOVERNED" | "DEVELOPMENT_EPHEMERAL";
+
+export type SignatureTrust =
+  | "TRUSTED"
+  | "UNTRUSTED_DEVELOPMENT_KEY"
+  | "UNTRUSTED_LEGACY_PUBLIC_KEY"
+  | "INVALID";
+
+interface KeyEntry {
+  secret: Buffer;
+  trust: KeyTrust;
+}
+
+export interface ReceiptKeyRing {
+  activeVersion: string;
+  keys: ReadonlyMap<string, KeyEntry>;
+  production: boolean;
+}
+
+export class ReceiptKeyConfigError extends Error {
+  constructor(message: string) {
+    super(`[SettleMate receipt keys] ${message}`);
+    this.name = "ReceiptKeyConfigError";
+  }
 }
 
 /**
- * Computes the Shannon entropy of a string (in bits per character).
- * Shannon Entropy: H(X) = -SUM( p(x) * log2(p(x)) )
+ * Generate a 256-bit key from the OS CSPRNG, base64-encoded (44 characters).
+ * Equivalent shell command: `openssl rand -base64 32`.
  */
-export function calculateShannonEntropy(str: string): number {
-  if (!str || str.length === 0) return 0;
-  const freq: Record<string, number> = {};
-  for (const ch of str) {
-    freq[ch] = (freq[ch] || 0) + 1;
-  }
-  let entropy = 0;
-  const len = str.length;
-  for (const count of Object.values(freq)) {
-    const p = count / len;
-    entropy -= p * Math.log2(p);
-  }
-  return entropy;
+export function generateSigningKey(): string {
+  return randomBytes(32).toString("base64");
 }
 
 /**
- * Validates cryptographic entropy and format of a candidate signing key.
- * Enforces:
- * 1. Minimum 32 characters in length.
- * 2. Minimum Shannon entropy of 3.0 bits per character (rejects repeated patterns like "aaaa...").
- * 3. No single character may exceed 35% of the total key length.
- * 4. Must not match known-insecure development fallback strings.
+ * Configuration guard for one key. Returns a reason when the key must not be
+ * used; null when it passes. Passing does not mean the key is random.
  */
-export function validateKeyEntropy(
-  key: string,
-  keyName = "Signing key"
-): { isValid: boolean; reason?: string } {
-  if (!key || typeof key !== "string") {
-    return { isValid: false, reason: `${keyName} is missing or not a string` };
+export function checkKeyMaterial(value: string): string | null {
+  if (Buffer.byteLength(value, "utf8") < MIN_KEY_BYTES) {
+    return `must be at least ${MIN_KEY_BYTES} bytes (generate one with \`openssl rand -base64 32\`)`;
   }
-
-  if (key.length < 32) {
-    return {
-      isValid: false,
-      reason: `${keyName} length is ${key.length} characters; minimum required is 32 characters (256 bits)`,
-    };
-  }
-
-  if (KNOWN_INSECURE_FALLBACK_KEYS.has(key)) {
-    return {
-      isValid: false,
-      reason: `${keyName} matches a known-public development fallback secret`,
-    };
-  }
-
-  const entropy = calculateShannonEntropy(key);
-  if (entropy < 3.0) {
-    return {
-      isValid: false,
-      reason: `${keyName} has insufficient Shannon entropy (${entropy.toFixed(2)} bits/char; minimum required is 3.00 bits/char)`,
-    };
-  }
-
-  // Check character repetition (e.g. repeated sequence)
-  const freq: Record<string, number> = {};
-  for (const ch of key) {
-    freq[ch] = (freq[ch] || 0) + 1;
-    if (freq[ch] / key.length > 0.35) {
-      return {
-        isValid: false,
-        reason: `${keyName} has excessive repetition of character '${ch}' (${((freq[ch] / key.length) * 100).toFixed(1)}% of string)`,
-      };
-    }
-  }
-
-  return { isValid: true };
+  if (KNOWN_PUBLIC_VALUES.has(value)) return "is a publicly known secret from the repository history";
+  if (PLACEHOLDER_PATTERN.test(value)) return "looks like a placeholder value";
+  return null;
 }
 
 /**
- * Retrieves the raw configured key and its provenance for a specific key version.
+ * Build the key ring from an environment. Throws ReceiptKeyConfigError for
+ * any configured key that fails the guards (in every environment), and, in
+ * production, when the active version has no configured key.
  */
-export function getKeyEntry(keyVersion: string): { key: string | null; isFallback: boolean } {
-  const isProd = process.env.NODE_ENV === "production";
+export function loadReceiptKeyRing(env: NodeJS.ProcessEnv = process.env): ReceiptKeyRing {
+  const production = env.NODE_ENV === "production";
+  const keys = new Map<string, KeyEntry>();
+  const seen = new Map<string, string>();
 
-  if (keyVersion === "v1") {
-    const envVal = process.env.RECEIPT_SIGNING_SECRET_V1;
-    if (envVal) {
-      return { key: envVal, isFallback: false };
-    }
-    if (isProd) {
-      return { key: null, isFallback: false };
-    }
-    return { key: "settlemate_terminal_secret_v1_auth_2026", isFallback: true };
+  for (const [name, raw] of Object.entries(env)) {
+    const match = ENV_KEY_PATTERN.exec(name);
+    if (!match || raw === undefined || raw === "") continue;
+    const version = `v${match[1]}`;
+    const problem = checkKeyMaterial(raw);
+    if (problem) throw new ReceiptKeyConfigError(`${name} ${problem}`);
+    const reusedBy = seen.get(raw);
+    if (reusedBy) throw new ReceiptKeyConfigError(`${name} reuses the key of ${reusedBy}; each version needs its own key`);
+    seen.set(raw, name);
+    keys.set(version, { secret: Buffer.from(raw, "utf8"), trust: "GOVERNED" });
   }
 
-  if (keyVersion === "v2") {
-    const envVal = process.env.RECEIPT_SIGNING_SECRET_V2;
-    if (envVal) {
-      return { key: envVal, isFallback: false };
-    }
-    if (isProd) {
-      return { key: null, isFallback: false };
-    }
-    return { key: "settlemate_terminal_secret_v2_rotated_2026", isFallback: true };
+  const activeVersion = env.RECEIPT_SIGNING_ACTIVE_VERSION || DEFAULT_ACTIVE_VERSION;
+  if (!KEY_VERSION_PATTERN.test(activeVersion)) {
+    throw new ReceiptKeyConfigError(`RECEIPT_SIGNING_ACTIVE_VERSION '${activeVersion}' is not of the form v<n>`);
   }
 
-  return { key: null, isFallback: false };
+  if (production) {
+    if (!keys.has(activeVersion)) {
+      throw new ReceiptKeyConfigError(
+        `RECEIPT_SIGNING_SECRET_${activeVersion.toUpperCase()} must be set in production (active version ${activeVersion})`
+      );
+    }
+  } else {
+    for (const version of DEVELOPMENT_VERSIONS) {
+      if (!keys.has(version)) keys.set(version, { secret: randomBytes(32), trust: "DEVELOPMENT_EPHEMERAL" });
+    }
+    if (!keys.has(activeVersion)) {
+      throw new ReceiptKeyConfigError(`active version ${activeVersion} has no RECEIPT_SIGNING_SECRET_${activeVersion.toUpperCase()}`);
+    }
+  }
+
+  return { activeVersion, keys, production };
 }
 
-/**
- * Retrieves the signing key for a specific key version.
- * In production mode, fails closed if the key is missing or uses a known development fallback.
- */
-export function getSigningKeyForVersion(keyVersion: string): string | null {
-  const { key, isFallback } = getKeyEntry(keyVersion);
-  if (!key) return null;
+let cachedRing: ReceiptKeyRing | null = null;
 
-  if (process.env.NODE_ENV === "production") {
-    if (isFallback) return null;
-    const validation = validateKeyEntropy(key, `RECEIPT_SIGNING_SECRET_${keyVersion.toUpperCase()}`);
-    if (!validation.isValid) {
-      throw new Error(`[SettleMate Security] ${validation.reason}`);
-    }
-  }
+/** The process-wide key ring, loaded from process.env on first use. */
+export function getReceiptKeyRing(): ReceiptKeyRing {
+  cachedRing ??= loadReceiptKeyRing();
+  return cachedRing;
+}
 
-  return key;
+/** Test hook: drop the cached ring so the next call re-reads process.env. */
+export function resetReceiptKeyRingForTests(): void {
+  cachedRing = null;
+}
+
+export function getActiveSigningKeyVersion(): string {
+  return getReceiptKeyRing().activeVersion;
 }
 
 /**
@@ -165,54 +165,38 @@ export function computeProofHash(
   return createHash("sha256").update(canonicalBytes, "utf8").digest("hex");
 }
 
-export interface VerificationOptions {
-  customSecret?: string;
-  allowLegacyFallback?: boolean;
+function hmacHex(secret: Buffer | string, canonical: string): string {
+  return createHmac("sha256", secret).update(canonical, "utf8").digest("hex");
+}
+
+function hexEqual(a: string, b: string): boolean {
+  if (!/^[0-9a-f]+$/i.test(a) || !/^[0-9a-f]+$/i.test(b) || a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
 }
 
 /**
- * Signs a receipt and produces the final sealed TerminalDecisionReceipt.
- * 
- * In production (NODE_ENV === "production"):
- * - customSecret is prohibited to prevent arbitrary signing key bypass.
- * - Missing or fallback keys throw immediately (fail closed).
+ * Signs a receipt with a key from the server key ring. In production only the
+ * active version may sign, so a retired key cannot produce new receipts.
  */
 export function signReceipt(
   unsignedReceipt: Omit<TerminalDecisionReceipt, "proofHash" | "signature">,
-  keyVersion: string = CURRENT_SIGNING_KEY_VERSION,
-  customSecret?: string
+  keyVersion?: string
 ): TerminalDecisionReceipt {
-  const isProd = process.env.NODE_ENV === "production";
-
-  // Validate customSecret boundary in production
-  if (customSecret && isProd) {
-    throw new Error(
-      "[SettleMate Security] customSecret is strictly prohibited for signing in production mode. Use governed environment keys."
+  const ring = getReceiptKeyRing();
+  const version = keyVersion ?? ring.activeVersion;
+  const entry = ring.keys.get(version);
+  if (!entry) {
+    throw new ReceiptKeyConfigError(`Cannot sign receipt: unknown signing key version '${version}'`);
+  }
+  if (ring.production && version !== ring.activeVersion) {
+    throw new ReceiptKeyConfigError(
+      `Cannot sign receipt with '${version}': only the active version '${ring.activeVersion}' may sign in production`
     );
   }
 
-  let secret: string | null = null;
-
-  if (customSecret) {
-    const val = validateKeyEntropy(customSecret, "customSecret");
-    if (!val.isValid && isProd) {
-      throw new Error(`[SettleMate Security] Cannot sign receipt: ${val.reason}`);
-    }
-    secret = customSecret;
-  } else {
-    secret = getSigningKeyForVersion(keyVersion);
-  }
-
-  if (!secret) {
-    throw new Error(
-      `Cannot sign receipt: Signing key for version '${keyVersion}' is unavailable or not configured in ${isProd ? "production" : "current"} environment`
-    );
-  }
-
-  // Pre-populate required envelope fields
   const candidate = {
     ...unsignedReceipt,
-    signingKeyVersion: keyVersion,
+    signingKeyVersion: version,
     canonicalizationVersion: "RFC8785-v1" as const,
     signatureAlgorithm: "HMAC-SHA256" as const,
     proofHash: "0".repeat(64),
@@ -223,152 +207,96 @@ export function signReceipt(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { proofHash: _p, signature: _s, ...signableBody } = parsed;
 
-  // 1. Canonicalize receipt body (excluding proofHash & signature)
   const canonicalString = canonicalizeJson(signableBody);
-
-  // 2. Compute Proof Hash (SHA-256)
   const proofHash = createHash("sha256").update(canonicalString, "utf8").digest("hex");
+  const signature = hmacHex(entry.secret, canonicalString);
 
-  // 3. Compute Cryptographic Signature (HMAC-SHA256)
-  const signature = createHmac("sha256", secret).update(canonicalString, "utf8").digest("hex");
-
-  return {
-    ...signableBody,
-    proofHash,
-    signature,
-  };
+  return { ...signableBody, proofHash, signature };
 }
 
-/**
- * Verifies the HMAC-SHA256 signature of a TerminalDecisionReceipt using constant-time comparison.
- * 
- * Supports both function signatures:
- *   verifyReceiptSignature(receipt, customSecret)
- *   verifyReceiptSignature(receipt, options)
- */
-export function verifyReceiptSignature(
-  receipt: TerminalDecisionReceipt,
-  secretOrOptions?: string | VerificationOptions
-): {
+export interface SignatureVerification {
+  /** Hash and HMAC both match a key in the ring. */
   isValid: boolean;
+  /** What the result may be relied on for. Only TRUSTED is financial proof. */
+  trust: SignatureTrust;
+  keyVersion: string;
   error?: string;
   recomputedHash: string;
   recomputedSignature: string;
-  keyVersion: string;
-  isLegacyFallbackKey?: boolean;
-} {
-  const isProd = process.env.NODE_ENV === "production";
+}
 
-  // Normalize options
-  let customSecret: string | undefined;
-  let allowLegacyFallback = !isProd; // default: allow in dev/test, disallow in production
-
-  if (typeof secretOrOptions === "string") {
-    customSecret = secretOrOptions;
-  } else if (secretOrOptions && typeof secretOrOptions === "object") {
-    customSecret = secretOrOptions.customSecret;
-    if (typeof secretOrOptions.allowLegacyFallback === "boolean") {
-      allowLegacyFallback = secretOrOptions.allowLegacyFallback;
-    }
+/**
+ * Verifies a receipt's proof hash and HMAC signature against the server key
+ * ring, using constant-time comparison.
+ */
+export function verifyReceiptSignature(receipt: TerminalDecisionReceipt, customSecret?: undefined): SignatureVerification {
+  if (customSecret !== undefined) {
+    throw new ReceiptKeyConfigError("verifyReceiptSignature no longer accepts a caller-supplied secret");
   }
+  const ring = getReceiptKeyRing();
 
-  const keyVersion = receipt.signingKeyVersion || "v1";
-  let secret: string | null = null;
-  let isLegacyFallback = false;
-
-  if (customSecret) {
-    if (isProd) {
-      const val = validateKeyEntropy(customSecret, "customSecret");
-      if (!val.isValid) {
-        return {
-          isValid: false,
-          error: `CUSTOM_SECRET_INSECURE: ${val.reason}`,
-          recomputedHash: "",
-          recomputedSignature: "",
-          keyVersion,
-        };
-      }
-    }
-    secret = customSecret;
-  } else {
-    const entry = getKeyEntry(keyVersion);
-    secret = entry.key;
-    isLegacyFallback = entry.isFallback;
-  }
-
-  if (!secret) {
-    return {
-      isValid: false,
-      error: `KEY_UNAVAILABLE: Signing key version '${keyVersion}' is not configured or unavailable`,
-      recomputedHash: "",
-      recomputedSignature: "",
-      keyVersion,
-    };
-  }
-
-  // Reject legacy fallback keys if not explicitly permitted
-  if (isLegacyFallback && !allowLegacyFallback) {
-    return {
-      isValid: false,
-      error: `LEGACY_FALLBACK_KEY_UNTRUSTED: Receipt references key version '${keyVersion}' which resolves to a known development constant; untrusted in production`,
-      recomputedHash: "",
-      recomputedSignature: "",
-      keyVersion,
-      isLegacyFallbackKey: true,
-    };
-  }
-
-  // Parse if possible to normalize defaults
   const parsed = TerminalDecisionReceiptSchema.safeParse(receipt);
   const target = parsed.success ? parsed.data : receipt;
+  const keyVersion = typeof target.signingKeyVersion === "string" ? target.signingKeyVersion : "";
 
-  // 1. Recompute canonical string
   const canonicalString = canonicalizeReceiptForSigning(target);
-
-  // 2. Recompute Proof Hash
   const recomputedHash = createHash("sha256").update(canonicalString, "utf8").digest("hex");
-  const hashMatches = recomputedHash === receipt.proofHash;
 
-  // 3. Recompute Signature
-  const recomputedSignature = createHmac("sha256", secret).update(canonicalString, "utf8").digest("hex");
+  const entry = KEY_VERSION_PATTERN.test(keyVersion) ? ring.keys.get(keyVersion) : undefined;
+  const recomputedSignature = entry ? hmacHex(entry.secret, canonicalString) : "";
 
-  // Constant-time signature comparison
-  let sigMatches = false;
-  try {
-    const expectedBuf = Buffer.from(receipt.signature, "hex");
-    const actualBuf = Buffer.from(recomputedSignature, "hex");
-    sigMatches = expectedBuf.length === actualBuf.length && timingSafeEqual(expectedBuf, actualBuf);
-  } catch {
-    sigMatches = false;
-  }
-
-  if (!hashMatches) {
+  if (recomputedHash !== receipt.proofHash) {
     return {
       isValid: false,
+      trust: "INVALID",
+      keyVersion,
       error: "HASH_MISMATCH: Stored proofHash does not match canonical SHA-256",
       recomputedHash,
       recomputedSignature,
-      keyVersion,
-      isLegacyFallbackKey: isLegacyFallback,
     };
   }
 
-  if (!sigMatches) {
+  if (entry && hexEqual(receipt.signature, recomputedSignature)) {
     return {
-      isValid: false,
-      error: "SIGNATURE_MISMATCH: HMAC-SHA256 signature verification failed",
+      isValid: true,
+      trust: entry.trust === "GOVERNED" ? "TRUSTED" : "UNTRUSTED_DEVELOPMENT_KEY",
+      keyVersion,
       recomputedHash,
       recomputedSignature,
+    };
+  }
+
+  // Not signed by the ring. If a public legacy secret reproduces the signature,
+  // say so explicitly so historical receipts can be inspected without being trusted.
+  const legacy = KNOWN_PUBLIC_LEGACY_KEYS[keyVersion];
+  if (legacy && hexEqual(receipt.signature, hmacHex(legacy, canonicalString))) {
+    return {
+      isValid: false,
+      trust: "UNTRUSTED_LEGACY_PUBLIC_KEY",
       keyVersion,
-      isLegacyFallbackKey: isLegacyFallback,
+      error: `LEGACY_PUBLIC_KEY: signed with the publicly known ${keyVersion} default secret; not trusted`,
+      recomputedHash,
+      recomputedSignature,
+    };
+  }
+
+  if (!entry) {
+    return {
+      isValid: false,
+      trust: "INVALID",
+      keyVersion,
+      error: `UNKNOWN_KEY_VERSION: Signing key version '${keyVersion}' is not configured`,
+      recomputedHash,
+      recomputedSignature: "",
     };
   }
 
   return {
-    isValid: true,
+    isValid: false,
+    trust: "INVALID",
+    keyVersion,
+    error: "SIGNATURE_MISMATCH: HMAC-SHA256 signature verification failed",
     recomputedHash,
     recomputedSignature,
-    keyVersion,
-    isLegacyFallbackKey: isLegacyFallback,
   };
 }

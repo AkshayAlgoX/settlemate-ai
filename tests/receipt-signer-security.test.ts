@@ -1,26 +1,44 @@
 /*
- * SettleMate AI — Security Regression Suite: Receipt Signing & Key Governance
+ * SettleMate AI — Security regression suite: receipt signing trust policy
  *
- * Verifies:
- *   1. Production fail-closed behavior for missing or unconfigured signing keys
- *   2. Cryptographic entropy and format validation (rejects low-entropy / predictable keys)
- *   3. Strict prohibition of publicly known development fallback keys in production
- *   4. Prohibition of customSecret signing bypass in production mode
- *   5. Multi-version key rotation (v1 -> v2) isolation and integrity
- *   6. Explicit untrusted classification for legacy fallback-signed receipts
- *   7. Constant-time signature verification and tamper detection
+ * Exercises src/lib/receipts/signer.ts and its consumers under explicit
+ * environments. Each case states the trust decision it protects:
+ *
+ *   1. Key configuration fails closed (missing, short, placeholder, public,
+ *      reused, malformed active version) in production and outside it.
+ *   2. Signing and verification share one key ring; callers cannot inject keys.
+ *   3. Rotation: old versions keep verifying, only the active version signs in
+ *      production, removed versions stop verifying.
+ *   4. Tampering and version substitution are detected.
+ *   5. Receipts signed with the publicly known legacy secrets are classified
+ *      LEGACY_PUBLIC_KEY and never trusted.
+ *   6. Development keys are ephemeral and their receipts are never trusted.
+ *   7. Downstream: verification report, readiness check and the verify route.
+ *
+ * Secrets used here are generated at runtime; none are real.
  */
 
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { NextRequest } from "next/server";
 import {
+  KNOWN_PUBLIC_LEGACY_KEYS,
+  ReceiptKeyConfigError,
+  checkKeyMaterial,
+  generateSigningKey,
+  getActiveSigningKeyVersion,
+  loadReceiptKeyRing,
+  resetReceiptKeyRingForTests,
   signReceipt,
   verifyReceiptSignature,
-  validateKeyEntropy,
-  calculateShannonEntropy,
-  generateSecureSigningKey,
-  KNOWN_INSECURE_FALLBACK_KEYS,
 } from "../src/lib/receipts/signer";
+import { canonicalizeReceiptForSigning } from "../src/lib/receipts/canonicalizer";
+import { verifyTerminalReceipt } from "../src/lib/receipts/verifier";
 import { DEFAULT_POLICY_VERSIONS } from "../src/lib/receipts/builder";
+import { TerminalReceiptRepository } from "../src/lib/receipts/repository";
+import { validateStartupConfig } from "../src/lib/config/startup-validation";
+import { SESSION_COOKIE, createSessionToken } from "../src/lib/auth/session";
+import { POST as verifyRoutePost } from "../src/app/api/receipts/[id]/verify/route";
 import type { TerminalDecisionReceipt } from "../src/lib/receipts/types";
 
 function buildSampleUnsignedReceipt(overrides: Partial<TerminalDecisionReceipt> = {}) {
@@ -82,223 +100,328 @@ function buildSampleUnsignedReceipt(overrides: Partial<TerminalDecisionReceipt> 
   };
 }
 
-async function runTest(name: string, fn: () => void | Promise<void>) {
+const env = process.env as Record<string, string | undefined>;
+const ORIGINAL_ENV = { ...process.env };
+const KEY_A = generateSigningKey();
+const KEY_B = generateSigningKey();
+
+/** Replace receipt-related environment variables and reload the key ring. */
+function useEnv(vars: Record<string, string | undefined>) {
+  for (const name of Object.keys(env)) {
+    if (name.startsWith("RECEIPT_SIGNING_")) delete env[name];
+  }
+  delete env.NODE_ENV;
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined) delete env[k];
+    else env[k] = v;
+  }
+  resetReceiptKeyRingForTests();
+}
+
+function signedReceipt(overrides: Partial<TerminalDecisionReceipt> = {}, version?: string): TerminalDecisionReceipt {
+  return signReceipt(buildSampleUnsignedReceipt(overrides), version);
+}
+
+/** Re-sign a receipt body with an arbitrary secret, as a forger or a legacy deployment would. */
+function resignWith(receipt: TerminalDecisionReceipt, secret: string): TerminalDecisionReceipt {
+  const signature = createHmac("sha256", secret).update(canonicalizeReceiptForSigning(receipt), "utf8").digest("hex");
+  return { ...receipt, signature };
+}
+
+function expectConfigError(fn: () => unknown, pattern: RegExp) {
+  assert.throws(fn, (err: unknown) => err instanceof ReceiptKeyConfigError && pattern.test((err as Error).message));
+}
+
+let passed = 0;
+let failed = 0;
+
+async function test(name: string, fn: () => void | Promise<void>) {
   try {
     await fn();
+    passed++;
     console.log(`  ✓ [PASS] ${name}`);
-  } catch (err: any) {
-    console.error(`  ✗ [FAIL] ${name}`);
-    console.error(err);
-    process.exitCode = 1;
-    throw err;
+  } catch (err) {
+    failed++;
+    console.error(`  ✗ [FAIL] ${name} — ${(err as Error).message}`);
   }
 }
 
 async function main() {
-  console.log("\n=========================================================================");
-  console.log(" 🔐 SETTLEMATE AI — RECEIPT SIGNING KEY GOVERNANCE & SECURITY SUITE");
-  console.log("=========================================================================\n");
+  console.log("\n=== SettleMate receipt signing trust policy ===\n");
 
-  const origEnv = { ...process.env };
+  console.log("--- 1. Key configuration fails closed ---");
 
-  try {
-    // -------------------------------------------------------------------------
-    // 1. CRYPTOGRAPHIC ENTROPY & KEY VALIDATION
-    // -------------------------------------------------------------------------
-    console.log("--- 1. CRYPTOGRAPHIC ENTROPY & KEY VALIDATION ---");
+  await test("1.1 production without the active key refuses to load and to sign", () => {
+    useEnv({ NODE_ENV: "production" });
+    expectConfigError(() => loadReceiptKeyRing(process.env), /RECEIPT_SIGNING_SECRET_V1 must be set in production/);
+    expectConfigError(() => signedReceipt(), /must be set in production/);
+  });
 
-    await runTest("1.1 Rejects repeated characters with zero Shannon entropy", () => {
-      const repeatedKey = "a".repeat(32);
-      const entropy = calculateShannonEntropy(repeatedKey);
-      assert.equal(entropy, 0);
-      const res = validateKeyEntropy(repeatedKey);
-      assert.equal(res.isValid, false);
-      assert.ok(res.reason?.includes("Shannon entropy"));
-    });
-
-    await runTest("1.2 Rejects short keys (< 32 characters)", () => {
-      const shortKey = "weak_secret_key_12345";
-      const res = validateKeyEntropy(shortKey);
-      assert.equal(res.isValid, false);
-      assert.ok(res.reason?.includes("minimum required is 32"));
-    });
-
-    await runTest("1.3 Rejects known development fallback strings", () => {
-      for (const knownKey of KNOWN_INSECURE_FALLBACK_KEYS) {
-        const res = validateKeyEntropy(knownKey);
-        assert.equal(res.isValid, false);
-        assert.ok(res.reason?.includes("known-public development fallback"));
+  await test("1.2 the old public default secrets are rejected as keys in every environment", () => {
+    for (const nodeEnv of ["production", undefined]) {
+      for (const [version, secret] of Object.entries(KNOWN_PUBLIC_LEGACY_KEYS)) {
+        useEnv({ NODE_ENV: nodeEnv, [`RECEIPT_SIGNING_SECRET_${version.toUpperCase()}`]: secret, RECEIPT_SIGNING_SECRET_V1: version === "v1" ? secret : KEY_A });
+        expectConfigError(() => loadReceiptKeyRing(process.env), /publicly known secret/);
       }
+    }
+  });
+
+  await test("1.3 short keys, placeholders and cross-version reuse are rejected", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: "too-short-key-1234567890" });
+    expectConfigError(() => loadReceiptKeyRing(process.env), /at least 32 bytes/);
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: "please-change-me-before-deploying-this-service" });
+    expectConfigError(() => loadReceiptKeyRing(process.env), /placeholder/);
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_SECRET_V2: KEY_A });
+    expectConfigError(() => loadReceiptKeyRing(process.env), /reuses the key/);
+    // The same rules apply outside production: a bad configured key is never silently replaced.
+    useEnv({ RECEIPT_SIGNING_SECRET_V1: "short" });
+    expectConfigError(() => loadReceiptKeyRing(process.env), /at least 32 bytes/);
+  });
+
+  await test("1.4 malformed or unconfigured active version is rejected", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_ACTIVE_VERSION: "latest" });
+    expectConfigError(() => loadReceiptKeyRing(process.env), /not of the form v<n>/);
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_ACTIVE_VERSION: "v2" });
+    expectConfigError(() => loadReceiptKeyRing(process.env), /RECEIPT_SIGNING_SECRET_V2 must be set/);
+  });
+
+  await test("1.5 configuration errors never echo the key value", () => {
+    const leaky = "x".repeat(20) + "SENTINEL";
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: leaky });
+    assert.throws(() => loadReceiptKeyRing(process.env), (err: unknown) => !(err as Error).message.includes("SENTINEL"));
+    const report = validateStartupConfig();
+    assert.ok(!JSON.stringify(report).includes("SENTINEL"));
+  });
+
+  await test("1.6 readiness reports receipt key misconfiguration as a failed check", () => {
+    useEnv({ NODE_ENV: "production" });
+    const bad = validateStartupConfig().checks.find((c) => c.name === "RECEIPT_SIGNING_KEYS");
+    assert.equal(bad?.passed, false);
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const good = validateStartupConfig().checks.find((c) => c.name === "RECEIPT_SIGNING_KEYS");
+    assert.equal(good?.passed, true);
+  });
+
+  await test("1.7 checkKeyMaterial accepts CSPRNG output but makes no randomness claim", () => {
+    assert.equal(checkKeyMaterial(generateSigningKey()), null);
+    // A long, non-random string passes the guard: the guard cannot detect predictability.
+    assert.equal(checkKeyMaterial("abcdefghijklmnopqrstuvwxyz0123456789"), null);
+  });
+
+  console.log("\n--- 2. One trust policy for signing and verification ---");
+
+  await test("2.1 governed key: sign then verify is TRUSTED and the report is trusted", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const receipt = signedReceipt();
+    const sig = verifyReceiptSignature(receipt);
+    assert.equal(sig.isValid, true);
+    assert.equal(sig.trust, "TRUSTED");
+    const report = verifyTerminalReceipt(receipt);
+    assert.equal(report.verdict, "VALID");
+    assert.equal(report.trusted, true);
+    assert.equal(report.signatureTrust, "TRUSTED");
+  });
+
+  await test("2.2 a caller-supplied secret is refused by both verification entry points", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const forged = resignWith(signedReceipt(), "attacker-chosen-secret-0123456789abcdef");
+    const anyVerify = verifyReceiptSignature as (r: TerminalDecisionReceipt, s?: string) => unknown;
+    const anyReport = verifyTerminalReceipt as (r: unknown, s?: string, t?: string) => unknown;
+    expectConfigError(() => anyVerify(forged, "attacker-chosen-secret-0123456789abcdef"), /caller-supplied secret/);
+    expectConfigError(() => anyReport(forged, "attacker-chosen-secret-0123456789abcdef"), /caller-supplied secret/);
+    // And the forged receipt is rejected through the normal path.
+    assert.equal(verifyTerminalReceipt(forged).failureReason, "SIGNATURE_MISMATCH");
+  });
+
+  await test("2.3 an extra secret argument to signReceipt is ignored, never used as the key", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const anySign = signReceipt as (...args: unknown[]) => TerminalDecisionReceipt;
+    const receipt = anySign(buildSampleUnsignedReceipt(), "v1", "attacker-chosen-secret-0123456789abcdef");
+    assert.equal(verifyReceiptSignature(receipt).trust, "TRUSTED");
+    assert.notEqual(receipt.signature, resignWith(receipt, "attacker-chosen-secret-0123456789abcdef").signature);
+  });
+
+  await test("2.4 signing with an unknown version fails; verifying one reports KEY_VERSION_UNKNOWN", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    expectConfigError(() => signedReceipt({}, "v9"), /unknown signing key version 'v9'/);
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_SECRET_V9: KEY_B, RECEIPT_SIGNING_ACTIVE_VERSION: "v9" });
+    const v9 = signedReceipt();
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const report = verifyTerminalReceipt(v9);
+    assert.equal(report.verdict, "INVALID");
+    assert.equal(report.failureReason, "KEY_VERSION_UNKNOWN");
+  });
+
+  await test("2.5 malformed signatures are rejected without throwing", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const receipt = signedReceipt();
+    for (const signature of ["", "zz".repeat(32), receipt.signature.slice(0, 62), receipt.signature + "00"]) {
+      const sig = verifyReceiptSignature({ ...receipt, signature });
+      assert.equal(sig.isValid, false);
+      assert.equal(sig.trust, "INVALID");
+    }
+  });
+
+  console.log("\n--- 3. Rotation ---");
+
+  await test("3.1 after rotating to v2, v1 receipts stay TRUSTED and new receipts use v2", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const old = signedReceipt();
+    assert.equal(old.signingKeyVersion, "v1");
+
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_SECRET_V2: KEY_B, RECEIPT_SIGNING_ACTIVE_VERSION: "v2" });
+    assert.equal(getActiveSigningKeyVersion(), "v2");
+    const fresh = signedReceipt();
+    assert.equal(fresh.signingKeyVersion, "v2");
+    assert.equal(verifyReceiptSignature(old).trust, "TRUSTED");
+    assert.equal(verifyReceiptSignature(fresh).trust, "TRUSTED");
+  });
+
+  await test("3.2 production refuses to sign with a retired (non-active) version", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_SECRET_V2: KEY_B, RECEIPT_SIGNING_ACTIVE_VERSION: "v2" });
+    expectConfigError(() => signedReceipt({}, "v1"), /only the active version 'v2' may sign/);
+  });
+
+  await test("3.3 removing a version from the ring stops its receipts verifying", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_SECRET_V2: KEY_B, RECEIPT_SIGNING_ACTIVE_VERSION: "v2" });
+    const v2 = signedReceipt();
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    assert.equal(verifyTerminalReceipt(v2).failureReason, "KEY_VERSION_UNKNOWN");
+  });
+
+  console.log("\n--- 4. Tampering and version substitution ---");
+
+  await test("4.1 changing the amount breaks the proof hash", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const receipt = signedReceipt();
+    const tampered = { ...receipt, inputCommitment: { ...receipt.inputCommitment, amountMinor: receipt.inputCommitment.amountMinor + 1 } };
+    assert.equal(verifyTerminalReceipt(tampered).failureReason, "HASH_MISMATCH");
+  });
+
+  await test("4.2 tampering plus a recomputed proof hash still fails the HMAC", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const receipt = signedReceipt();
+    const tampered = { ...receipt, finalDecision: "HUMAN_APPROVED" as const };
+    const rehashed = { ...tampered, proofHash: verifyReceiptSignature(tampered).recomputedHash };
+    const report = verifyTerminalReceipt(rehashed);
+    assert.equal(report.verdict, "INVALID");
+    assert.equal(report.failureReason, "SIGNATURE_MISMATCH");
+    assert.equal(report.trusted, false);
+  });
+
+  await test("4.3 relabelling a v1 receipt as v2 is detected (version is inside the signed body)", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_SECRET_V2: KEY_B });
+    const receipt = signedReceipt();
+    const relabelled = { ...receipt, signingKeyVersion: "v2" };
+    assert.equal(verifyTerminalReceipt(relabelled).failureReason, "HASH_MISMATCH");
+    const rehashed = { ...relabelled, proofHash: verifyReceiptSignature(relabelled).recomputedHash };
+    assert.equal(verifyTerminalReceipt(rehashed).failureReason, "SIGNATURE_MISMATCH");
+  });
+
+  console.log("\n--- 5. Legacy receipts signed with public secrets ---");
+
+  for (const [version, secret] of Object.entries(KNOWN_PUBLIC_LEGACY_KEYS)) {
+    await test(`5.${version.slice(1)} a ${version} receipt signed with the public default is LEGACY_PUBLIC_KEY, never trusted`, () => {
+      useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A, RECEIPT_SIGNING_SECRET_V2: KEY_B, RECEIPT_SIGNING_ACTIVE_VERSION: version });
+      const legacy = resignWith(signedReceipt(), secret);
+      const sig = verifyReceiptSignature(legacy);
+      assert.equal(sig.isValid, false);
+      assert.equal(sig.trust, "UNTRUSTED_LEGACY_PUBLIC_KEY");
+      const report = verifyTerminalReceipt(legacy);
+      assert.equal(report.verdict, "INVALID");
+      assert.equal(report.failureReason, "LEGACY_PUBLIC_KEY");
+      assert.equal(report.trusted, false);
+      // The receipt remains inspectable: identifiers and decision are reported.
+      assert.equal(report.receiptId, legacy.receiptId);
+      assert.equal(report.finalDecision, legacy.finalDecision);
     });
-
-    await runTest("1.4 Rejects predictable pattern with excessive character frequency", () => {
-      const biasedKey = "xxxxxxxxxxxxxxxxxxxx1234567890ab";
-      const res = validateKeyEntropy(biasedKey);
-      assert.equal(res.isValid, false);
-      assert.ok(res.reason?.includes("Shannon entropy") || res.reason?.includes("excessive repetition"));
-    });
-
-    await runTest("1.5 Accepts cryptographically generated 256-bit random keys", () => {
-      const secureKey = generateSecureSigningKey();
-      assert.equal(secureKey.length, 64);
-      const entropy = calculateShannonEntropy(secureKey);
-      assert.ok(entropy >= 3.0, `Entropy was ${entropy}, expected >= 3.0`);
-      const res = validateKeyEntropy(secureKey);
-      assert.equal(res.isValid, true);
-    });
-
-    // -------------------------------------------------------------------------
-    // 2. PRODUCTION FAIL-CLOSED BEHAVIOR
-    // -------------------------------------------------------------------------
-    console.log("\n--- 2. PRODUCTION FAIL-CLOSED BEHAVIOR ---");
-
-    await runTest("2.1 Fails closed when signing in production without configured secrets", () => {
-      process.env.NODE_ENV = "production";
-      delete process.env.RECEIPT_SIGNING_SECRET_V1;
-      delete process.env.RECEIPT_SIGNING_SECRET_V2;
-
-      const unsigned = buildSampleUnsignedReceipt();
-      assert.throws(
-        () => signReceipt(unsigned, "v1"),
-        /Cannot sign receipt: Signing key for version 'v1' is unavailable or not configured in production/
-      );
-    });
-
-    await runTest("2.2 Prohibits customSecret signing bypass in production", () => {
-      process.env.NODE_ENV = "production";
-      const unsigned = buildSampleUnsignedReceipt();
-      const randomSecret = generateSecureSigningKey();
-
-      assert.throws(
-        () => signReceipt(unsigned, "v1", randomSecret),
-        /customSecret is strictly prohibited for signing in production mode/
-      );
-    });
-
-    await runTest("2.3 Rejects known fallback keys configured into production env vars", () => {
-      process.env.NODE_ENV = "production";
-      process.env.RECEIPT_SIGNING_SECRET_V1 = "settlemate_terminal_secret_v1_auth_2026";
-
-      const unsigned = buildSampleUnsignedReceipt();
-      assert.throws(
-        () => signReceipt(unsigned, "v1"),
-        /matches a known-public development fallback secret/
-      );
-    });
-
-    await runTest("2.4 Fails closed for verification when key is unavailable in production", () => {
-      process.env.NODE_ENV = "production";
-      delete process.env.RECEIPT_SIGNING_SECRET_V1;
-
-      const receipt = {
-        ...buildSampleUnsignedReceipt(),
-        proofHash: "0".repeat(64),
-        signature: "0".repeat(64),
-      };
-
-      const result = verifyReceiptSignature(receipt);
-      assert.equal(result.isValid, false);
-      assert.ok(result.error?.includes("KEY_UNAVAILABLE"));
-    });
-
-    // -------------------------------------------------------------------------
-    // 3. KEY ROTATION & VERSION ISOLATION
-    // -------------------------------------------------------------------------
-    console.log("\n--- 3. KEY ROTATION & VERSION ISOLATION ---");
-
-    await runTest("3.1 Key rotation: v1 and v2 receipts sign and verify with distinct secrets", () => {
-      const secretV1 = generateSecureSigningKey();
-      const secretV2 = generateSecureSigningKey();
-
-      process.env.NODE_ENV = "development";
-      process.env.RECEIPT_SIGNING_SECRET_V1 = secretV1;
-      process.env.RECEIPT_SIGNING_SECRET_V2 = secretV2;
-
-      const unsignedV1 = buildSampleUnsignedReceipt({ signingKeyVersion: "v1" });
-      const receiptV1 = signReceipt(unsignedV1, "v1");
-
-      const unsignedV2 = buildSampleUnsignedReceipt({ signingKeyVersion: "v2" });
-      const receiptV2 = signReceipt(unsignedV2, "v2");
-
-      assert.equal(receiptV1.signingKeyVersion, "v1");
-      assert.equal(receiptV2.signingKeyVersion, "v2");
-
-      const verV1 = verifyReceiptSignature(receiptV1);
-      const verV2 = verifyReceiptSignature(receiptV2);
-
-      assert.equal(verV1.isValid, true);
-      assert.equal(verV2.isValid, true);
-    });
-
-    await runTest("3.2 Cross-verification failure: v1 receipt cannot be verified with v2 key", () => {
-      const secretV1 = generateSecureSigningKey();
-      const secretV2 = generateSecureSigningKey();
-
-      process.env.RECEIPT_SIGNING_SECRET_V1 = secretV1;
-      process.env.RECEIPT_SIGNING_SECRET_V2 = secretV2;
-
-      const unsigned = buildSampleUnsignedReceipt({ signingKeyVersion: "v1" });
-      const receiptV1 = signReceipt(unsigned, "v1");
-
-      // Verify with wrong secret
-      const res = verifyReceiptSignature(receiptV1, secretV2);
-      assert.equal(res.isValid, false);
-      assert.ok(res.error?.includes("SIGNATURE_MISMATCH"));
-    });
-
-    await runTest("3.3 Unknown key version fails closed immediately", () => {
-      const unsigned = buildSampleUnsignedReceipt();
-      assert.throws(
-        () => signReceipt(unsigned, "v99_non_existent"),
-        /Signing key for version 'v99_non_existent' is unavailable/
-      );
-
-      const dummyReceipt: TerminalDecisionReceipt = {
-        ...unsigned,
-        signingKeyVersion: "v99_non_existent",
-        proofHash: "0".repeat(64),
-        signature: "0".repeat(64),
-      };
-      const ver = verifyReceiptSignature(dummyReceipt);
-      assert.equal(ver.isValid, false);
-      assert.ok(ver.error?.includes("KEY_UNAVAILABLE"));
-    });
-
-    // -------------------------------------------------------------------------
-    // 4. LEGACY FALLBACK RECEIPT CLASSIFICATION
-    // -------------------------------------------------------------------------
-    console.log("\n--- 4. LEGACY FALLBACK RECEIPT CLASSIFICATION ---");
-
-    await runTest("4.1 Receipts signed with dev fallback keys are flagged as untrusted in strict mode", () => {
-      process.env.NODE_ENV = "development";
-      delete process.env.RECEIPT_SIGNING_SECRET_V1;
-
-      // Signed using fallback key in dev mode
-      const unsigned = buildSampleUnsignedReceipt({ signingKeyVersion: "v1" });
-      const legacyReceipt = signReceipt(unsigned, "v1");
-
-      // Verifying with allowLegacyFallback: false (production simulation)
-      const strictRes = verifyReceiptSignature(legacyReceipt, { allowLegacyFallback: false });
-      assert.equal(strictRes.isValid, false);
-      assert.equal(strictRes.isLegacyFallbackKey, true);
-      assert.ok(strictRes.error?.includes("LEGACY_FALLBACK_KEY_UNTRUSTED"));
-
-      // Verifying with allowLegacyFallback: true (audit / dev inspection)
-      const auditRes = verifyReceiptSignature(legacyReceipt, { allowLegacyFallback: true });
-      assert.equal(auditRes.isValid, true);
-      assert.equal(auditRes.isLegacyFallbackKey, true);
-    });
-
-  } finally {
-    process.env = origEnv;
   }
 
-  console.log("\n=========================================================================");
-  console.log(" ✅ ALL 11 RECEIPT SIGNER SECURITY SCENARIOS PASSED");
-  console.log("=========================================================================\n");
+  await test("5.3 legacy classification also applies outside production", () => {
+    useEnv({});
+    const legacy = resignWith(signedReceipt(), KNOWN_PUBLIC_LEGACY_KEYS.v1);
+    assert.equal(verifyTerminalReceipt(legacy).failureReason, "LEGACY_PUBLIC_KEY");
+  });
+
+  console.log("\n--- 6. Development keys ---");
+
+  await test("6.1 unset keys outside production are ephemeral: VALID but not trusted", () => {
+    useEnv({});
+    const receipt = signedReceipt();
+    const report = verifyTerminalReceipt(receipt);
+    assert.equal(report.verdict, "VALID");
+    assert.equal(report.trusted, false);
+    assert.equal(report.signatureTrust, "UNTRUSTED_DEVELOPMENT_KEY");
+    // A new process (new ring) cannot verify it: nothing about the key is fixed or public.
+    resetReceiptKeyRingForTests();
+    assert.equal(verifyTerminalReceipt(receipt).failureReason, "SIGNATURE_MISMATCH");
+  });
+
+  await test("6.2 a development-signed receipt does not verify in production", () => {
+    useEnv({});
+    const devReceipt = signedReceipt();
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const report = verifyTerminalReceipt(devReceipt);
+    assert.equal(report.verdict, "INVALID");
+    assert.equal(report.trusted, false);
+  });
+
+  await test("6.3 configured keys outside production are governed and trusted", () => {
+    useEnv({ RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    assert.equal(verifyTerminalReceipt(signedReceipt()).trusted, true);
+  });
+
+  console.log("\n--- 7. Verify route ---");
+
+  async function callVerifyRoute(receipt: TerminalDecisionReceipt, body: unknown) {
+    env.AUTH_SECRET = "test-only-auth-secret-0123456789abcdef";
+    const token = createSessionToken({ sub: "u1", name: "Reviewer", role: "REVIEWER", tenantId: receipt.tenantId, exp: Math.floor(Date.now() / 1000) + 600 });
+    const req = new NextRequest(`http://localhost:3000/api/receipts/${receipt.receiptId}/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+      body: JSON.stringify(body),
+    });
+    const res = await verifyRoutePost(req, { params: Promise.resolve({ id: receipt.receiptId }) });
+    return { status: res.status, json: await res.json() };
+  }
+
+  await test("7.1 production rejects tamper simulation; the stored receipt verifies as trusted", async () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const receipt = signedReceipt({ receiptId: `rcpt_route_${Date.now()}` });
+    await TerminalReceiptRepository.saveReceipt(receipt);
+
+    const tamper = await callVerifyRoute(receipt, { tamperedFields: { finalDecision: "HUMAN_REJECTED" } });
+    assert.equal(tamper.status, 400);
+    assert.equal(tamper.json.error, "TAMPER_SIMULATION_DISABLED");
+
+    const plain = await callVerifyRoute(receipt, {});
+    assert.equal(plain.status, 200);
+    assert.equal(plain.json.simulated, false);
+    assert.equal(plain.json.report.verdict, "VALID");
+    assert.equal(plain.json.report.trusted, true);
+  });
+
+  await test("7.2 outside production, tamper simulation is labelled simulated and reports INVALID", async () => {
+    useEnv({ RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const receipt = signedReceipt({ receiptId: `rcpt_route_dev_${Date.now()}` });
+    await TerminalReceiptRepository.saveReceipt(receipt);
+    const res = await callVerifyRoute(receipt, { tamperedFields: { finalDecision: "HUMAN_REJECTED" } });
+    assert.equal(res.status, 200);
+    assert.equal(res.json.simulated, true);
+    assert.equal(res.json.report.verdict, "INVALID");
+    assert.equal(res.json.report.trusted, false);
+  });
+
+  // Restore the environment for anything that runs after this file.
+  for (const name of Object.keys(env)) delete env[name];
+  Object.assign(env, ORIGINAL_ENV);
+  resetReceiptKeyRingForTests();
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
 }
 
 main().catch((err) => {
-  console.error("Test execution aborted:", err);
+  console.error("Receipt signing suite crashed:", err);
   process.exit(1);
 });

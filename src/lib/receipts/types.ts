@@ -261,7 +261,8 @@ export type VerificationFailureReason =
   | "REPLAY_DIVERGENCE"
   | "POLICY_MISMATCH"
   | "TENANT_MISMATCH"
-  | "KEY_VERSION_UNKNOWN";
+  | "KEY_VERSION_UNKNOWN"
+  | "LEGACY_PUBLIC_KEY";
 
 export interface ReceiptVerificationStep {
   step:
@@ -278,7 +279,17 @@ export interface ReceiptVerificationStep {
 }
 
 export interface TerminalReceiptVerificationReport {
+  /** VALID means hash, signature and replay all check out against the server key ring. */
   verdict: "VALID" | "INVALID";
+  /**
+   * True only when verdict is VALID and the receipt was signed with a governed
+   * (environment-configured) key. Development-key receipts are VALID but not
+   * trusted; legacy public-key receipts are INVALID. Treat only trusted
+   * receipts as financial proof.
+   */
+  trusted: boolean;
+  /** Signature trust classification; absent when verification stopped earlier. */
+  signatureTrust?: "TRUSTED" | "UNTRUSTED_DEVELOPMENT_KEY" | "UNTRUSTED_LEGACY_PUBLIC_KEY" | "INVALID";
   receiptId: string;
   transactionId: string;
   tenantId: string;
