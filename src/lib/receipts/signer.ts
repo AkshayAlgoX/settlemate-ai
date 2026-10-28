@@ -268,7 +268,9 @@ export function verifyReceiptSignature(receipt: TerminalDecisionReceipt, customS
 
   // Not signed by the ring. If a public legacy secret reproduces the signature,
   // say so explicitly so historical receipts can be inspected without being trusted.
-  const legacy = KNOWN_PUBLIC_LEGACY_KEYS[keyVersion];
+  // Own-property lookup: signingKeyVersion comes from the receipt, so values
+  // such as "__proto__" or "constructor" must not resolve to prototype members.
+  const legacy = Object.hasOwn(KNOWN_PUBLIC_LEGACY_KEYS, keyVersion) ? KNOWN_PUBLIC_LEGACY_KEYS[keyVersion] : undefined;
   if (legacy && hexEqual(receipt.signature, hmacHex(legacy, canonicalString))) {
     return {
       isValid: false,

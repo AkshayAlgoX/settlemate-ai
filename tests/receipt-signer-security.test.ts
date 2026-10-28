@@ -252,6 +252,21 @@ async function main() {
     assert.equal(report.failureReason, "KEY_VERSION_UNKNOWN");
   });
 
+  await test("2.6 prototype-member key versions are INVALID, never a crash", () => {
+    useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
+    const receipt = signedReceipt();
+    for (const signingKeyVersion of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+      const crafted = { ...receipt, signingKeyVersion };
+      const rehashed = { ...crafted, proofHash: verifyReceiptSignature(crafted).recomputedHash };
+      const sig = verifyReceiptSignature(rehashed);
+      assert.equal(sig.isValid, false);
+      assert.equal(sig.trust, "INVALID");
+      const report = verifyTerminalReceipt(rehashed);
+      assert.equal(report.verdict, "INVALID");
+      assert.equal(report.failureReason, "KEY_VERSION_UNKNOWN");
+    }
+  });
+
   await test("2.5 malformed signatures are rejected without throwing", () => {
     useEnv({ NODE_ENV: "production", RECEIPT_SIGNING_SECRET_V1: KEY_A });
     const receipt = signedReceipt();
