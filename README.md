@@ -163,7 +163,7 @@ SettleMate AI addresses this with a two-tiered combinatorial solver ([`src/lib/s
 
 ### 3. SMT-LIB v2 Formal Logic Generator & Deterministic Invariant Gating
 
-To guarantee mathematical financial safety ([`src/lib/ai/z3-prover.ts`](src/lib/ai/z3-prover.ts)):
+Invariant checks and their formal export ([`src/lib/ai/z3-prover.ts`](src/lib/ai/z3-prover.ts)). Despite the file name, no SMT solver runs inside the application:
 - **SMT-LIB v2 Specification Generation**: Formulates formal theorems in Quantifier-Free Linear Integer Arithmetic (`set-logic QF_LIA`):
   - `THEOREM_MONEY_CONSERVATION`:
     $$(P_{\text{gross}} - F_{\text{fee}} - T_{\text{tax}} - R_{\text{refund}} - D_{\text{chargeback}} = S_{\text{settled}} + \Delta_{\text{variance}})$$
@@ -183,7 +183,7 @@ Every terminal financial decision produces an immutable audit receipt ([`src/lib
 - **Cryptographic Authentication**: A deterministic SHA-256 proof hash is computed over canonical bytes, followed by an HMAC-SHA256 signature using server-managed secret keys.
 - **Key Rotation**: Supports versioned keys (`v1`, `v2`) with backward-compatible verification.
 - **Constant-Time Verification**: Uses Node.js `timingSafeEqual` to prevent timing side-channel attacks.
-- **Zero-LLM Replay**: Any third-party auditor can verify the receipt offline in $<1\text{ms}$ with zero AI invocation and zero database queries.
+- **Zero-LLM Replay**: A holder of the server's receipt key can re-verify a receipt and replay its decision offline, with no AI invocation and no database query. HMAC is a shared-secret scheme: verifying requires the same key that signs, so it does not let an independent third party verify receipts, and anyone holding the key can create valid ones. Key management, rotation, and how legacy receipts are classified: [`docs/receipt-signing.md`](docs/receipt-signing.md).
 
 ---
 
@@ -281,7 +281,7 @@ SettleMate AI implements defense-in-depth across the entire financial execution 
 5. **Prompt-Injection Quarantine**: External bank narrations and CSV metadata are treated as untrusted strings. The AI prompt template isolates inputs, and outputs must match the strict `AIClaim[]` AST schema.
 6. **Outbound SSRF Protection**: Webhook dispatch validates target URLs against an IP whitelist, blocking local loopback interfaces, private subnets (RFC 1918), and cloud metadata endpoints (`169.254.169.254`) via `src/lib/security/ssrf-guard.ts`.
 7. **Rate Limiting**: Token bucket rate limiters protect public APIs (100 req/min) and auth endpoints (10 attempts/min) with standard `429 Too Many Requests` headers.
-8. **Fail-Closed Session Configuration**: In production (`NODE_ENV=production`), a missing `AUTH_SECRET` triggers an immediate startup crash rather than falling back to default keys. *(Note: Unlike session auth, receipt signing currently falls back to known-public development constants if `RECEIPT_SIGNING_SECRET_V1` or `RECEIPT_SIGNING_SECRET_V2` are omitted. Both variables must be set to cryptographically random secrets in production environments to prevent signature forgery using the public fallback strings.)*
+8. **Fail-Closed Secret Configuration**: In production (`NODE_ENV=production`), session signing refuses to run without `AUTH_SECRET`. Receipt signing refuses to run without the active `RECEIPT_SIGNING_SECRET_V<n>`, and `/api/v1/ready` reports it as failed. Webhook signing and encryption refuse to run without `WEBHOOK_SECRET` and `WEBHOOK_ENCRYPTION_KEY`. Secrets that were committed to this repository as defaults in the past are rejected everywhere. Receipts that reproduce with those old public secrets verify as `INVALID / LEGACY_PUBLIC_KEY` and are never trusted.
 
 ---
 
@@ -337,9 +337,11 @@ cp .env.example .env
 | `AUTH_SECRET` | Yes | HMAC session and token signing key | Random 32+ char hex string |
 | `DATABASE_URL` | Yes | Prisma relational connection string | `file:./dev.db` |
 | `SETTLEMATE_DB_PATH` | Yes | Local SQLite database file path | `./dev.db` |
-| `WEBHOOK_SECRET` | No | Webhook payload authentication | Random hex string |
-| `RECEIPT_SIGNING_SECRET_V1` | Recommended | Terminal decision receipt HMAC secret (active signing key) | Required for secure production; falls back to a known-public development constant if omitted |
-| `RECEIPT_SIGNING_SECRET_V2` | Recommended | Terminal decision receipt HMAC secret (rotation key) | Defined in key store for future key rotation; falls back to a known-public development constant if omitted |
+| `WEBHOOK_SECRET` | Production | Default outbound webhook signing secret (at least 32 bytes) | `openssl rand -hex 32` |
+| `WEBHOOK_ENCRYPTION_KEY` | Production | AES-256-GCM key for webhook secrets at rest (64 hex characters) | `openssl rand -hex 32` |
+| `RECEIPT_SIGNING_SECRET_V1` | Production | Receipt HMAC key for version v1 (at least 32 bytes) | `openssl rand -base64 32`; unset outside production = ephemeral, untrusted development key |
+| `RECEIPT_SIGNING_ACTIVE_VERSION` | No | Key version used to sign new receipts | `v1` (default) |
+| `RECEIPT_SIGNING_SECRET_V2` | For rotation | Receipt HMAC key for version v2; must differ from v1 | Set together with `RECEIPT_SIGNING_ACTIVE_VERSION=v2` to rotate |
 | `GEMINI_API_KEY` | No | Advisory AI investigator integration | Optional (falls back to rules) |
 | `OPENAI_API_KEY` | No | Alternate advisory AI model | Optional |
 
