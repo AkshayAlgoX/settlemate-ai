@@ -1,49 +1,57 @@
 # SettleMate AI
-### Deterministic financial control with AI-assisted exception investigation
+### Deterministic Financial Reconciliation & Autonomous Exception Investigation Engine
 
-> **AI investigates. Critics challenge. Deterministic systems verify. Exposure determines human intervention. Every terminal decision becomes a replayable financial artifact.**
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15.0_App_Router-black?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![OR-Tools](https://img.shields.io/badge/Google_OR--Tools-CP--SAT_Solver-FF6F00?logo=google&logoColor=white)](https://developers.google.com/optimization)
+[![RFC 8785](https://img.shields.io/badge/RFC_8785-JSON_Canonicalization-green)](https://www.rfc-editor.org/rfc/rfc8785)
+[![HMAC-SHA256](https://img.shields.io/badge/HMAC--SHA256-Key_Rotated_Receipts-blueviolet)](src/lib/receipts/signer.ts)
+[![SMT-LIB v2](https://img.shields.io/badge/Formal_Logic-SMT--LIB_v2_QF__LIA-red)](src/lib/ai/z3-prover.ts)
 
----
-
-## Judge Quick Access
-
-> 🚀 **Live Demo:** [**https://settlemate-ai.onrender.com**](https://settlemate-ai.onrender.com)  
-> *Note: Live deployment is authentication-protected.*
-
-| Surface | Link |
-|---|---|
-| 🛡️ Verification Hub | [/verify](https://settlemate-ai.onrender.com/verify) |
-| ⚖️ Judge Mode | [/judge-mode](https://settlemate-ai.onrender.com/judge-mode) |
-| 🏢 Multi-Tenant / RLS | [/multi-tenant](https://settlemate-ai.onrender.com/multi-tenant) |
-| 🔬 Security Lab | [/security-lab](https://settlemate-ai.onrender.com/security-lab) |
+> **AI investigates anomalies. Critics challenge hypotheses. Deterministic systems verify facts. Financial exposure governs human intervention. Every finalized decision is sealed into a tamper-evident, replayable cryptographic receipt.**
 
 ---
 
-High-volume payment reconciliation across fragmented financial systems—e-commerce orders, gateway payment captures, batch settlement summaries, bank credits, refunds, chargebacks, and gateway fee deductions—is historically error-prone and vulnerable to silent ledger drift. In production finance operations, naive string matching produces false reconciliations, delayed bank payouts trigger unmonitored liquidity drag, and complex multi-invoice or split-payment deductions lead to cash leakage.
+## 30-Second Recruiter Summary
 
-Applying Large Language Models directly to financial balances introduces severe risks: models hallucinate transaction identifiers, invent bank credits, hallucinate balancing journal entries, or succumb to prompt injections embedded in bank narrations. A financial reconciliation engine cannot tolerate stochastic decision-making.
+High-volume digital commerce payment reconciliation across asynchronous boundaries—merchant orders, payment gateway captures, batch settlements, bank statement credits, refunds, chargebacks, and MDR fees with GST—is historically error-prone and vulnerable to silent ledger drift. Applying Large Language Models directly to financial balances introduces catastrophic risks: models hallucinate transaction identifiers, invent bank credits, balance books with phantom journal entries, and succumb to prompt injection embedded in bank narrations.
 
-**SettleMate AI** enforces an absolute separation of responsibilities: **Deterministic systems remain the sole financial authority; AI is restricted to investigative assistance.** Clean, unambiguous transactions execute across an integer-math deterministic engine at sub-millisecond speeds, completely bypassing AI. When complex anomalies occur, advisory AI investigators synthesize hypotheses that are immediately attacked by an **Adversarial Critic** across three challenge lenses, mechanically verified against raw transaction context by non-LLM gates, mathematically balanced via **Google OR-Tools CP-SAT solvers**, and signed into **cryptographic decision receipts** that replay deterministically with zero AI and zero database calls.
+**SettleMate AI** enforces an absolute separation of responsibilities: **Deterministic systems remain the sole financial authority; AI is restricted strictly to advisory exception investigation.**
+
+### Three Distinctive Technical Contributions
+
+1. **96.4% Deterministic Fast-Path AI Bypass**: In the 55-record generic finance-ops loop benchmark (53 auto-matched out of 55 batch records, 96.36%), clean transactions match across an integer-math engine using $O(1)$ hash indexing (UTR, Payment ID, Order ID) and integer paise minor-unit arithmetic. Over **96.4% of records execute at sub-millisecond latency ($<1\text{ms}$) without LLM inference**, eliminating token costs and stochastic risk.
+2. **Google OR-Tools CP-SAT Combinatorial Solver**: Resolves complex $N:M$ invoice and payout aggregations by formulating an integer subset-sum optimization problem:
+   $$\min \left( |\text{selectedTotal} - \text{paymentAmount}| \times 1000 + \text{invoiceCount} \right)$$
+   Bounded by strict cardinality ($K \le 8$) and execution time ceilings, with a pure-Python branch-and-bound fallback if C++ solver extensions are unavailable.
+3. **RFC 8785 Canonicalized, HMAC-SHA256 Authenticated Decision Receipts**: Terminal resolutions are canonicalized per RFC 8785, hashed with SHA-256, and sealed with HMAC-SHA256 using server-managed key rotation (`v1`/`v2`) and constant-time `timingSafeEqual` comparison. Receipts enable **zero-LLM, zero-database deterministic offline replay in $<1\text{ms}$**.
 
 ---
 
-## Why this problem
+## Live Demo & Offline Evaluation
 
-In modern digital commerce, reconciling a single transaction involves traversing multiple asynchronous state boundaries:
+| Surface | Target Route | Status / Access |
+|---|---|---|
+| 🌐 **Live Demo Web App** | [`https://settlemate-ai.onrender.com`](https://settlemate-ai.onrender.com) | Hosted on Render Free Tier *(sleeps when idle)* |
+| 🛡️ **Verification Hub** | [`/verify`](https://settlemate-ai.onrender.com/verify) | Interactive real-time test of all 7 financial invariants |
+| ⚖️ **Judge Mode Terminal** | [`/judge-mode`](https://settlemate-ai.onrender.com/judge-mode) | 7-step guided presentation with pre-canned edge cases |
+| 🏢 **Multi-Tenant / RLS** | [`/multi-tenant`](https://settlemate-ai.onrender.com/multi-tenant) | Row-level partition security across 4 isolated tenants |
+| 🔬 **Security Lab** | [`/security-lab`](https://settlemate-ai.onrender.com/security-lab) | Real-time simulator executing 10 adversarial exploit vectors |
 
-```
-[Merchant Order] ──► [Gateway Payment] ──► [Batch Settlement] ──► [Bank Statement Credit]
-                           │                      │
-                           ▼                      ▼
-                   [Refund / Dispute]     [MDR Fee + GST / Tax]
-```
+> [!NOTE]
+> **Deployment State Disclosure**: The live deployment is hosted on Render's free tier, which suspends containers after periods of inactivity (causing an initial 50-second wake-up or HTTP 503 while spinning up). SettleMate AI requires **zero external cloud services** to run locally. For an instantaneous, zero-latency evaluation, follow the [Local Development Setup](#local-development-setup) or run `docker compose up`.
 
-### The Settlement Discrepancy Equation
-For any captured payment $P$, the net expected bank settlement $S_{\text{expected}}$ must satisfy the strict conservation law:
+---
+
+## The Settlement Discrepancy Equation
+
+For every captured transaction $P$, net bank credit $S_{\text{expected}}$ must satisfy the strict conservation law:
 
 $$S_{\text{expected}} = P_{\text{gross}} - F_{\text{fee}} - T_{\text{tax}} - R_{\text{refunds}} - D_{\text{chargebacks}} \pm \Delta_{\text{adjustments}}$$
 
-```
+```text
 Example: Order #ORD-88219 (₹5,000.00 Gross Capture)
   Payment Gross:      + ₹5,000.00   (500,000 paise)
   Gateway Fee (2%):   -   ₹100.00   ( 10,000 paise)
@@ -56,151 +64,182 @@ Example: Order #ORD-88219 (₹5,000.00 Gross Capture)
   Discrepancy (Δ):    -   ₹100.00   ( 10,000 paise Shortfall → Gateway Fee Tier Overcharge)
 ```
 
-When millions of transactions execute daily, tracking fee tiers, partial refunds across settlement windows ($T+1, T+2$), and batch aggregations without exact integer arithmetic causes cumulative ledger imbalances.
-
----
-
-## Why AI — and why not let the LLM decide?
-
-Large Language Models excel at reading unstructured payment narrations, synthesizing multi-source event timelines, and proposing root-cause explanations for complex edge cases. However, LLMs must **never** be permitted to decide financial truth, adjust account balances, or approve disbursements.
-
-| Subsystem Task | Mechanism | Why |
-| :--- | :--- | :--- |
-| **Exact 1:1 Matching** | Deterministic hash indexing (UTR, Order ID, Payment ID) | $O(1)$ lookup, sub-millisecond execution, zero token cost. |
-| **Conservation Checks** | Integer paise minor-unit arithmetic | Eliminates IEEE 754 floating-point rounding errors. |
-| **Exception Investigation** | Advisory AI (OpenAI / Anthropic / Gemini / Local) | Synthesizes multi-source context into structured hypothesis. |
-| **Hypothesis Falsification**| Adversarial Critic (3 challenge lenses) | Actively hunts for arithmetic errors, SLA breaches, and entity mismatches. |
-| **Claim Verification** | Deterministic Non-LLM Mechanical Validator | Bitwise validation against raw data; rejects fabricated claims in $<1\text{ms}$. |
-| **Combinatorial Splits** | Google OR-Tools CP-SAT Solver | Solves exact $N:M$ invoice and payout aggregations mathematically. |
-| **High-Exposure Action** | Dual-Control Maker/Checker (Role-based ADMIN) | Human controller retains decision authority for material exposure. |
-| **Correcting Journal** | Deterministic Minimal Correction Prover | Produces exactly 1 balanced pair (2 lines); proves $\Delta_{\text{post}} = 0$. |
-| **Audit Finality** | HMAC-SHA256 Signed Decision Receipt | Self-contained cryptographic proof; enables zero-LLM offline replay. |
+In high-volume operations, naive floating-point operations accumulate rounding errors, and temporal windows ($T+1, T+2$) mask fee discrepancies. SettleMate AI stores and calculates all values as **integer minor units (paise)**, guaranteeing exact arithmetic.
 
 ---
 
 ## Architecture
 
-![SettleMate AI architecture](docs/architecture/settlemate-architecture.svg)
+![SettleMate AI Architecture](docs/architecture/settlemate-architecture.svg)
+
+```mermaid
+flowchart TD
+    subgraph INGEST["1. Ingestion & Normalization"]
+        A1[Multi-Source Feeds<br/>Orders, Payments, Settlements, Bank Credits] --> A2[Deterministic Normalization<br/>Integer paise, canonical UTRs, ISO timestamps]
+    end
+
+    subgraph MATCH["2. Deterministic Matching Engine"]
+        A2 --> B1{Exact Hash Match?<br/>UTR, Order ID, Payment ID}
+        B1 -- "Yes (96.4% Clean)" --> B2[Clean Fast Path<br/>0 AI Invocations · &lt;1ms]
+        B1 -- "No (3.6% Exceptions)" --> C1[Exception Classification<br/>Amount Mismatch, Fee Drift, Timing]
+    end
+
+    subgraph INVESTIGATE["3. Advisory AI Investigation Boundary"]
+        C1 --> C2[Context Vault Assembly<br/>Chronological multi-feed evidence DAG]
+        C2 --> C3[Advisory LLM Investigator<br/>Hypothesizes root cause]
+        C3 --> C4[Structured Claim AST<br/>AIClaim schema: AMOUNT, REF, DATE]
+        C4 --> C5[Adversarial Critic<br/>Challenges via Arithmetic, Timing, Topology]
+        C5 --> C6{Critic Dispute?}
+        C6 -- "Yes" --> C7[Multi-Pass Reinvestigation]
+        C7 --> C3
+        C6 -- "No" --> D1[Non-LLM Mechanical Gate<br/>Bitwise validation against raw source feeds]
+    end
+
+    subgraph RESOLVE["4. Deterministic Resolution & Governance"]
+        D1 --> E1[Confidence x Exposure Routing]
+        E1 -- "Split / Aggregated" --> E2[Google OR-Tools CP-SAT<br/>Integer subset-sum optimization]
+        E1 -- "High Exposure" --> E3[Dual-Control Maker/Checker<br/>ADMIN role authorization required]
+        E2 --> F1[Invariant Restoration Prover<br/>Proves ΣDr ≡ ΣCr and Δ = 0]
+        E3 --> F1
+        B2 --> F1
+    end
+
+    subgraph SEAL["5. Audit Finality & Replay"]
+        F1 --> G1[Double-Entry Ledger Commit<br/>Atomic CAS state transition]
+        G1 --> G2[Terminal Decision Receipt<br/>RFC 8785 Canonical JSON + HMAC-SHA256]
+        G2 --> G3[Zero-LLM Offline Replay<br/>&lt;1ms independent verification]
+    end
+```
 
 ---
 
-## The finance-ops loop
+## The 16-Stage Finance-Ops Pipeline
 
-SettleMate AI executes financial control through a 16-stage deterministic pipeline. Unambiguous transactions follow the Clean Fast Path (bypassing AI completely), while anomalies are routed through multi-stage adversarial investigation:
-
-```
-[1. Ingest Multi-Source Feeds] (Orders, Payments, Settlements, Bank Credits, Refunds)
-           │
-[2. Deterministic Normalization] (Integer paise, canonical UTRs, ISO timestamps)
-           │
-[3. Exact Hash Matching & Rules] (UTR, Reference IDs, T+2 sliding window)
-           │
-           ├───► [Clean Match (96.4%)] ──────────────────────────────────────────┐
-           │                                                                     │
-[4. Exception Classification] (Amount Mismatch, Delayed Payout, Fee Drift, etc.) │
-           │                                                                     │
-[5. Context Vault Evidence Assembly] (Chronological multi-feed timeline)         │
-           │                                                                     │
-[6. Advisory AI Investigation] (Synthesizes discrepancy hypothesis)             │
-           │                                                                     │
-[7. Structured Claim AST] (AIClaim[] schema: AMOUNT, DATE, REFERENCE, ENTITY)    │
-           │                                                                     │
-[8. Adversarial Critic] (Challenges claim via Arithmetic, Timing, Topology)      │
-           │                                                                     │
-[9. Non-LLM Mechanical Gate] (10 deterministic checks against raw feeds)        │
-           │                                                                     │
-[10. Multi-Pass Reinvestigation] (If challenged: AI refines claim with evidence) │
-           │                                                                     │
-[11. Confidence × Exposure Routing] (Risk Score = Confidence Weight × Exposure)  │
-           │                                                                     │
-[12. OR-Tools CP-SAT Solver] (Mathematical resolution for split/aggregated sums) │
-           │                                                                     │
-[13. Human Approval (Maker/Checker)] (Required for high-exposure transactions)   │
-           │                                                                     │
-[14. Invariant Restoration Prover] (Mathematically proves ΣDr ≡ ΣCr)             │
-           │                                                                     │
-[15. Double-Entry Ledger Commit] ◄───────────────────────────────────────────────┘
-           │
-[16. Terminal Decision Receipt (RFC 8785 + HMAC-SHA256)] ──► [Zero-LLM Replay]
-```
-
-1. **Ingest Source Records**: Ingests payments, orders, settlements, bank credits, refunds, and chargebacks.
-2. **Normalize Deterministically**: Converts all currency figures to integer minor units (paise) and standardizes reference casing.
-3. **Deterministic Matching**: Evaluates $O(1)$ UTR lookups, exact IDs, and $T+2$ temporal boundaries.
-4. **Route Unresolved Cases**: Isolates unmatched records into typed exception categories.
-5. **Build Evidence Context**: Context Vault aggregates immutable chronological source logs and computes evidence root hashes.
-6. **AI Investigates**: Advisory LLMs evaluate the Context Vault timeline and hypothesize the root cause.
-7. **Structured Claim Formulation**: Emits strongly-typed `AIClaim[]` AST objects (no free-form text ledger mutations).
-8. **Adversarial Critic Challenge**: Evaluates the claim against three independent lenses:
+1. **Multi-Source Ingestion**: Ingests orders, payments, settlements, bank credits, refunds, and chargebacks.
+2. **Deterministic Normalization**: Converts all currency figures into integer minor units (paise) and standardizes reference casings.
+3. **Exact Hash Matching**: Evaluates $O(1)$ UTR lookups, external payment IDs, and $T+2$ temporal boundaries.
+4. **Clean Fast-Path Bypass (96.4%)**: Unambiguous matches bypass LLM inference completely, committing directly to the ledger in $<1\text{ms}$.
+5. **Exception Classification**: Unmatched records are categorized into typed exception codes (`AMOUNT_MISMATCH`, `FEE_DRIFT`, `UNMATCHED_CREDIT`, `CHARGEBACK_HOLD`).
+6. **Context Vault Evidence Assembly**: Aggregates immutable chronological logs from all feeds and computes evidence root hashes.
+7. **Advisory AI Investigation**: Advisory LLMs evaluate the Context Vault timeline and synthesize a structured discrepancy hypothesis.
+8. **Structured Claim AST Generation**: Emits strongly-typed `AIClaim[]` AST objects; free-form text ledger modifications are syntactically impossible.
+9. **Adversarial Critic Challenge**: Evaluates claims against three independent lenses:
    - *Arithmetic Lens*: Recomputes fee schedules, GST, and net settlement deductions.
    - *Timing Lens*: Enforces banking holidays, cutoff windows, and SLA limits.
-   - *Relationship Lens*: Verifies gateway-to-merchant entity associations.
-9. **Deterministic Verification**: Non-LLM mechanical validator verifies all cited evidence IDs exist and amounts match raw data.
-10. **Reinvestigate if Challenged**: If the Critic confirms an objection, the investigator refines the claim in a multi-pass loop.
-11. **Confidence × Exposure Routing**: Calculates composite risk:
+   - *Relationship Lens*: Verifies gateway-to-merchant entity relationships.
+10. **Non-LLM Mechanical Validator Gate**: Bitwise validation checks that cited voucher IDs exist in raw source data at **134,511 claims/sec**.
+11. **Multi-Pass Reinvestigation**: If the Critic raises valid objections, the investigator refines the claim against newly cited evidence.
+12. **Confidence $\times$ Exposure Routing**: Calculates composite risk score:
     $$\text{Risk Score} = (1.0 - \text{Confidence}) \times \text{Exposure Amount}$$
-12. **OR-Tools Exact Solver**: Solves combinatorial $N:1$, $1:N$, and $N:M$ aggregate invoice allocations via CP-SAT.
-13. **Human Correction / Approval**: High-exposure cases require dual-control authorization by an authenticated `ADMIN`.
-14. **Invariant Restoration Proof**: Minimal correcting journal generator produces exactly 1 balancing pair (2 lines) and proves:
+13. **OR-Tools CP-SAT Solver**: Resolves combinatorial $N:1$, $1:N$, and $N:M$ aggregate invoice allocations mathematically.
+14. **Dual-Control Maker/Checker**: Material exposures require dual-control authorization by an authenticated `ADMIN`.
+15. **Invariant Restoration Proof**: Generates a minimal balancing journal pair (2 lines) and proves:
     $$\Delta_{\text{before}} \neq 0 \implies \text{Imbalance}, \quad \Delta_{\text{after}} = 0 \implies \text{Restored}$$
-15. **Terminal Decision Receipt**: Generates canonical RFC 8785 JSON sealed with HMAC-SHA256 and Merkle DAG root hashes.
-16. **Deterministic Replay**: Verifies the entire decision history offline in $<1\text{ms}$ with zero AI and zero database calls.
+16. **Terminal Decision Receipt & Offline Replay**: Generates canonical RFC 8785 JSON sealed with HMAC-SHA256 for sub-millisecond, zero-LLM replay.
 
 ---
 
-## What the system guarantees
+## Technical Deep Dives
 
-* **Minor-Unit Arithmetic**: All balances and fees are stored and computed as integer paise (`BigInt` / `number`). Floating-point arithmetic is prohibited.
-* **Advisory AI Bound**: AI agents cannot directly modify account balances, self-approve exceptions, or bypass verification gates.
-* **Conservation Invariant**: Total debits strictly equal total credits ($\sum \text{Debits} \equiv \sum \text{Credits}$) across all double-entry postings.
-* **Concurrency & Idempotency**: Database updates use atomic compare-and-swap (CAS) transitions and deterministic idempotency keys.
-* **Strict Tenant Isolation**: Multi-tenant partitioning enforced at database and application levels; cross-tenant queries fail closed (404/403).
-* **Cryptographic Tamper Detection**: Any modification to a decision receipt payload invalidates its HMAC-SHA256 signature and proof hash.
-* **Deterministic Replayability**: All terminal receipts can be replayed and verified independently without network connectivity or LLM invocation.
-* **Cooperative Cancellation**: Large scale workloads support cooperative cancellation with regression-tested sub-second terminal latency (<1,000ms).
+### 1. What the 96.4% Fast Path Actually Bypasses
+
+Measured in the generic finance-ops loop benchmark (`scripts/benchmark-finance-ops-loop.ts`, evaluating `src/lib/reconciliation/finance-ops-loop.ts`), **53 out of 55 records (96.36%)** represent clean, unambiguous matches. The fast-path evaluates:
+- Exact UTR hash match across payment gateway and bank credit feeds.
+- Exact gross amount equality in integer paise ($P_{\text{gross}} = S_{\text{settled}} + F_{\text{fee}} + T_{\text{tax}}$).
+- Timestamp adherence within the standard settlement window ($T \le \text{SLA}$).
+
+When all three conditions hold, the transaction **completely bypasses**:
+- Advisory LLM prompt synthesis and inference latency.
+- LLM token usage and cloud API costs.
+- Context Vault multi-source evidence assembling.
+- Adversarial Critic challenge passes.
+
+Instead, the match is confirmed deterministically in $<1\text{ms}$ and committed directly to the double-entry ledger. Only the remaining 2 exception records (e.g., partial refund, fee tier drift) trigger the advisory AI pipeline.
+
+### 2. Combinatorial Optimization via Google OR-Tools CP-SAT
+
+When a single bank payout settles multiple invoices (or multiple split payments cover one invoice), naive matching faces an exponential search space ($O(2^n)$ subset-sum).
+
+SettleMate AI addresses this with a two-tiered combinatorial solver ([`src/lib/solver/cpsat-engine.ts`](src/lib/solver/cpsat-engine.ts) & [`services/solver/cpsat_solver.py`](services/solver/cpsat_solver.py)):
+- **$O(1)$ Exact Match Fast-Path**: Instantly identifies single 1:1 invoice matches.
+- **CP-SAT Integer Programming Formulation**: Formulates boolean decision variables $x_i \in \{0, 1\}$ for each candidate invoice, subject to:
+  $$\sum_{i=1}^n x_i \cdot \text{amount}_i = \text{targetAmount} \pm \text{tolerance}$$
+  $$1 \le \sum_{i=1}^n x_i \le K \quad (K \le 8)$$
+- **Lexicographic Objective**: Minimizes payment variance first, and breaks ties by selecting the smallest number of invoices:
+  $$\min \left( |\text{selectedTotal} - \text{paymentAmount}| \times 1000 + \sum_{i=1}^n x_i \right)$$
+- **Deterministic Branch-and-Bound Fallback**: If the Google OR-Tools C++ extension is unavailable, an in-process TypeScript/Python branch-and-bound engine provides exact solutions with strict timeout ceilings.
+
+### 3. SMT-LIB v2 Formal Logic Generator & Deterministic Invariant Gating
+
+To guarantee mathematical financial safety ([`src/lib/ai/z3-prover.ts`](src/lib/ai/z3-prover.ts)):
+- **SMT-LIB v2 Specification Generation**: Formulates formal theorems in Quantifier-Free Linear Integer Arithmetic (`set-logic QF_LIA`):
+  - `THEOREM_MONEY_CONSERVATION`:
+    $$(P_{\text{gross}} - F_{\text{fee}} - T_{\text{tax}} - R_{\text{refund}} - D_{\text{chargeback}} = S_{\text{settled}} + \Delta_{\text{variance}})$$
+  - `THEOREM_NON_NEGATIVE_DOMAIN`:
+    $$(P \ge 0 \land F \ge 0 \land T \ge 0 \land R \ge 0 \land D \ge 0 \land S \ge 0)$$
+  - `THEOREM_DOUBLE_ENTRY_PARITY`:
+    $$(\sum \text{Debits} \equiv \sum \text{Credits})$$
+  - `THEOREM_CREDIT_SINGLE_CONSUMPTION`:
+    $$(\sum \text{Allocated} \le \text{CreditTotal})$$
+  The generated SMT-LIB script with `(check-sat)` and `(get-model)` can be exported and verified by external solvers like Z3 or CVC5.
+- **In-Process Deterministic Execution**: Within the Node.js runtime, verification executes via deterministic local integer arithmetic checks rather than spawning an external C++ binary process. This guarantees sub-millisecond evaluation while producing a cryptographically signed proof summary.
+
+### 4. RFC 8785 Canonicalized, HMAC-SHA256 Authenticated Receipts
+
+Every terminal financial decision produces an immutable audit receipt ([`src/lib/receipts/signer.ts`](src/lib/receipts/signer.ts) & [`src/lib/receipts/canonicalizer.ts`](src/lib/receipts/canonicalizer.ts)):
+- **Deterministic Canonicalization**: The payload is canonicalized according to RFC 8785 (deterministic key sorting, UTF-8 normalization, whitespace elimination).
+- **Cryptographic Authentication**: A deterministic SHA-256 proof hash is computed over canonical bytes, followed by an HMAC-SHA256 signature using server-managed secret keys.
+- **Key Rotation**: Supports versioned keys (`v1`, `v2`) with backward-compatible verification.
+- **Constant-Time Verification**: Uses Node.js `timingSafeEqual` to prevent timing side-channel attacks.
+- **Zero-LLM Replay**: Any third-party auditor can verify the receipt offline in $<1\text{ms}$ with zero AI invocation and zero database queries.
 
 ---
 
-## Measured results
+## Measured Benchmark Results
 
-All figures below are derived directly from reproducible test suites and automated benchmark evaluators in this repository.
+All figures below are grounded directly in [`docs/CLAIMS_MATRIX.md`](docs/CLAIMS_MATRIX.md) and [`docs/FINAL_METRICS.json`](docs/FINAL_METRICS.json).
 
-### Official Benchmark Evaluation (`npm run evaluate`)
-- **Accuracy**: **98.1%** (Target: $>85\%$)
-- **Precision / Recall**: **98% / 98%**
-- **Throughput**: **806.75 – 935.94 rec/sec** (Single-thread baseline, 250 records in 431ms)
-- **Adversarial Detection**: **90.0% (9/10 detected)**
-  *(Note: Scenario #10 tests a sub-₹1 rounding difference of ₹0.47, which is intentionally preserved below the ₹1.00 financial tolerance to prevent false-positive operational noise).*
-- **Dataset SHA-256 Fingerprint**: `81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b`
+### 1. Ground-Truth Competition Benchmark (`npm run evaluate`)
+- **Dataset Fingerprint**: SHA-256 `81d840cd8cf981e5e69a367b879a8f11e9e51d60136a6d38e430877f08cab02b`
+- **Dataset Size**: 250 records (263 normalized events, seed `20260821`)
+- **Accuracy**: **98.1%**
+- **Precision / Recall**: **98.0% / 98.0%**
+- **Adversarial Vector Detection**: **90.0% (9/10 detected)**
+  *(Note: Scenario #10 tests a sub-₹1 rounding variance of ₹0.47, which is intentionally preserved within tolerance to avoid operational alert fatigue).*
+- **Single-Thread Core Throughput**: **806.75 – 935.94 rec/sec**
 
-### Integrated Pipeline & Milestone Verification
+### 2. Scale Reconciliation Engine (`npm run scale`)
+- **10,000 Records**: **1,246 rec/sec** (99.9% accuracy)
+- **25,000 Records**: **1,174.8 rec/sec** (100% accuracy)
+- **50,000 Records**: **1,156.2 rec/sec** (100% accuracy)
+- **100,000 Records**: **1,147.5 rec/sec** (100% accuracy)
+
+### 3. Subsystem Micro-Benchmarks & Capacity Tests
+
+> [!NOTE]
+> **Benchmarking Scope Distinction**: Sections 1 and 2 measure end-to-end reconciliation throughput including normalization, $O(1)$ indexing, and ledger commits. The figures below represent isolated subsystem micro-benchmarks (such as in-memory claim validation or shadow replay without database I/O) and synthetic capacity stress models, distinctly separate from full multi-stage pipeline runs.
+
+- **Non-LLM Mechanical Validator**: **134,511 claims/sec** bitwise validation throughput (`scripts/benchmark-claim-verification.ts`).
+- **Policy Shadow Replay**: **555,556 rec/sec** (10,000 historical transactions replayed in 18ms in-memory buffer).
+- **Distributed Chaos Queue**: **219,298 rec/sec** (100k events; 10,000 worker crashes recovered, 5,000 duplicate writes prevented, 0 DLQ items).
+- **Pathological $N:M$ Clustering**: Solved dense 1,000-candidate clusters in **14.49ms** (20x20 prime cluster in **3.27ms**).
+- **Streaming Capacity Test**: **894,454 rec/sec** across 10,000,000 synthetic streaming events (489MB peak heap).
+- **Hyperscale Horizon (100M – 10B)**: Mathematical $O(\text{chunk size})$ capacity model with horizontally partitioned consumer workers.
+
+### 4. Comprehensive Test Matrix
 - **96 / 96 Test Suites Passing** across unit, integration, concurrency, RLS, and end-to-end suites.
-- **24 / 24 Final Integrated Pipeline Scenarios Passed** (`tests/final-integrated-financial-pipeline.test.ts`).
+- **24 / 24 Final Integrated Financial Pipeline Scenarios Passed** (`tests/final-integrated-financial-pipeline.test.ts`).
 - **30 / 30 Milestone 5 Cryptographic Receipt Scenarios Passed** (`tests/milestone5-terminal-receipt.test.ts`).
 - **25 / 25 Milestone 4 Minimal Correction & Invariant Prover Scenarios Passed** (`tests/milestone4-correction-proof.test.ts`).
-- **Non-LLM Mechanical Claim Gate Throughput**: **134,511 claims/sec** micro-benchmark.
-- **OR-Tools Combinatorial Matching**: $N:M$ aggregation resolution in $<2\text{ms}$.
-
-### Scale Validation (`npm run scale` & Workload Suites)
-- **250 Records**: 431ms (Interactive mode)
-- **10,000 Records**: **1,246 rec/sec** (Continuous bounded step coordination)
-- **100,000 Records**: Chunked durable execution with PostgreSQL WAL checkpointing.
-- **1,000,000 Records**: Partitioned execution with regression-tested cooperative cancellation (<1,000ms terminal latency).
-- **10,000,000+ Records**: Bounded and partitioned workload validation with constant memory footprint.
-
-### Security & Robustness
-- **200,000 Fuzz Iterations**: 0 unhandled state exceptions, 0 ledger corruptions.
-- **100 Concurrent Workers**: Atomic lease acquisition with 0 collision races.
-- **10 Adversarial Exploit Vectors Defended**: Prompt injection, SSRF, fake vouchers, receipt tampering, CAS replay, tolerance stacking.
 
 ---
 
-## Failure recovery: what actually broke
+## What Actually Broke: Real-World Failure Modes & Fixes
 
-Engineering resilient financial systems requires understanding and fixing real-world failure modes encountered during development:
+Building resilient financial systems requires confronting real edge cases encountered during development:
 
 ### 1. Immutable Receipt & Idempotency Collisions
-* **Failure**: Re-submitting an already-finalized transaction triggered primary key collision errors rather than returning the existing receipt.
+* **Failure**: Re-submitting an already-finalized transaction triggered database primary key collision errors rather than returning the existing receipt.
 * **Root Cause**: The repository attempted an unconditional `INSERT` before querying the immutable terminal receipt store.
 * **Engineering Fix**: Implemented atomic idempotent resolution (`TerminalReceiptRepository.findByIdempotencyKey`): returns the existing signed receipt if payload content matches; throws `ReceiptImmutableError` if payload differs.
 * **Regression Proof**: `tests/milestone5-terminal-receipt.test.ts` (Scenario 16: Duplicate terminalization idempotency).
@@ -218,7 +257,7 @@ Engineering resilient financial systems requires understanding and fixing real-w
 * **Regression Proof**: `tests/unified-repositories.test.ts` & `tests/concurrency-stress.test.ts`.
 
 ### 4. 1M Cooperative Cancellation Latency
-* **Failure**: In the browser-coordinated execution architecture, requesting cancellation on 1,000,000-record workloads could leave jobs in an unresolved `CANCEL_REQUESTED` state.
+* **Failure**: In the browser-coordinated execution architecture, requesting cancellation on 1,000,000-record workloads left jobs in an unresolved `CANCEL_REQUESTED` state.
 * **Root Cause**: After cancellation was requested, the browser stopped dispatching further `/step` requests. Without an authoritative server-side terminalization path, and due to a `workerId` predicate mismatch on the final state update, `CANCEL_REQUESTED` lingered indefinitely.
 * **Engineering Fix**: Implemented an authoritative server-side transition directly to `CANCELLED` for eligible states, removed the incorrect `workerId` predicate restriction, and added opportunistic finalization for lingering cancellation requests.
 * **Regression Proof**: `tests/1m-workload-cancellation-regression.test.ts` (sub-1,000ms terminal cancellation latency verified).
@@ -229,7 +268,7 @@ Engineering resilient financial systems requires understanding and fixing real-w
 * **Engineering Fix**: Implemented the compiled in-process verification runner (`src/lib/verify/verification-runner.ts`) that executes all 7 verification suites natively in memory without spawning subprocesses.
 * **Regression Proof**: `tests/final-production-certification.test.ts` & `src/app/api/verify/run/verify-route.test.ts`.
 
-### 6. Live Verification Progress Initially Stuck at 0%
+### 6. Live Verification Progress Stuck at 0%
 * **Failure**: Clicking "Run Verification" on `/verify` showed "Running (0%)" with a static 8% progress bar sliver until execution jumped directly to 100%.
 * **Root Cause**: `POST /api/verify/run` launched an unmonitored background `setTimeout` while the client polled with a slow 1,200ms `GET` request. The backend completed before the first poll returned, and CSS hardcoded `Math.max(8, progress)`.
 * **Engineering Fix**: Implemented client-driven stepped execution via `POST /api/verify/progress/:jobId` with `mode: "stepped"`. Each suite executes on-demand, updates the database, and returns authoritative progress ($14\% \rightarrow 29\% \rightarrow 43\% \rightarrow 57\% \rightarrow 71\% \rightarrow 86\% \rightarrow 100\%$) with `Math.max(8, ...)` removed.
@@ -237,87 +276,35 @@ Engineering resilient financial systems requires understanding and fixing real-w
 
 ---
 
-## Security boundary
+## Security & Multi-Tenancy Architecture
 
 SettleMate AI implements defense-in-depth across the entire financial execution boundary:
 
 1. **Authenticated Sessions**: Signed HTTP-only session cookies using HMAC-SHA256 and constant-time `timingSafeEqual` comparison.
 2. **Server-Derived Identity**: The acting user and tenant are derived strictly server-side from the verified session token; clients cannot spoof `actor` or `role` in request payloads.
-3. **Separation of Duties**:
+3. **Separation of Duties (Maker/Checker)**:
    - `REVIEWER`: Allowed to investigate exceptions, record feedback, and prepare cases to `PENDING_APPROVAL`.
    - `ADMIN`: Strictly required to approve correcting journal entries and finalize high-exposure resolutions (enforced server-side with 403 Forbidden).
-4. **Multi-Tenant Row-Level Security (RLS)**: Every query enforces tenant isolation (`tenantId`). Cross-tenant read, update, or receipt verification attempts fail closed (404/403).
-5. **Prompt-Injection Quarantine**: External bank narrations and CSV metadata are treated as untrusted data strings. The AI prompt template isolates inputs, and outputs must match the strict `AIClaim[]` AST schema.
-6. **Outbound SSRF Protection**: Webhook dispatch validates target URLs against an IP whitelist, blocking local loopback interfaces, private subnets (RFC 1918), and the `169.254.169.254` cloud metadata endpoint (`src/lib/security/ssrf-guard.ts`).
+4. **Multi-Tenant Row-Level Security (RLS)**: Every database query enforces tenant isolation (`tenantId`). Cross-tenant read, update, or receipt verification attempts fail closed with HTTP 403/404.
+5. **Prompt-Injection Quarantine**: External bank narrations and CSV metadata are treated as untrusted strings. The AI prompt template isolates inputs, and outputs must match the strict `AIClaim[]` AST schema.
+6. **Outbound SSRF Protection**: Webhook dispatch validates target URLs against an IP whitelist, blocking local loopback interfaces, private subnets (RFC 1918), and cloud metadata endpoints (`169.254.169.254`) via `src/lib/security/ssrf-guard.ts`.
 7. **Rate Limiting**: Token bucket rate limiters protect public APIs (100 req/min) and auth endpoints (10 attempts/min) with standard `429 Too Many Requests` headers.
-8. **Fail-Closed Configuration**: In production (`NODE_ENV=production`), missing `AUTH_SECRET` causes an immediate startup crash rather than falling back to default keys.
+8. **Fail-Closed Configuration**: In production (`NODE_ENV=production`), a missing `AUTH_SECRET` triggers an immediate startup crash rather than falling back to default keys.
 
 ---
 
-## Scale architecture
+## Reproducibility & Quickstart
 
-![SettleMate AI scale execution](docs/architecture/scale-execution.svg)
-
-Scale in SettleMate AI is achieved through **durable bounded execution**, not monolithic long-lived HTTP requests:
-
-* **Client Coordinator**: The browser Operations Center coordinates execution by dispatching bounded chunk requests (`POST /api/batches/jobs/:jobId/step`).
-* **Durable State Persistence**: Each chunk claims a lease in PostgreSQL or SQLite, processes 1,000–5,000 records, commits state atomically, and advances the persistent checkpoint.
-* **Crash Resumability**: If a container restarts or network disconnects, the next step request resumes from the last completed database checkpoint.
-* **Cooperative Cancellation**: Cancellation requests set the authoritative job status to `CANCELLED`. In-flight workers complete their current micro-slice and halt without applying subsequent chunks.
-
-> **“Workload scale changes execution volume, not financial decision authority.”**
-
----
-
-## Judge path
-
-For competition judges evaluating the repository, follow this recommended sequence:
-
-1. **Dashboard (`/dashboard`)**: Inspect high-level metrics, accuracy baseline (98.1%), financial exposure, and the risk-prioritized investigation queue.
-2. **Live Verification Hub (`/verify`)**: Click **Full Audit (7)** to watch all seven invariant verification suites execute live with real-time streaming progress ($0\% \rightarrow 14\% \dots \rightarrow 100\%$).
-3. **Demo A — Clean Fast Path**: Observe an unambiguous captured payment match instantly with **0 AI invocations**.
-4. **Demo B — Adversarial Reinvestigation**: Observe an ambiguous refund discrepancy reach the AI Investigator, get challenged by the **Adversarial Critic** across 3 lenses, and refine its claim through multi-pass reinvestigation.
-5. **Demo C — Human Correction & Invariant Proof**: Review a high-exposure discrepancy routed to human review, generate a minimal 1-pair correcting journal, and verify the **Invariant Restoration Proof** ($\Delta = 0$).
-6. **Split Payment Matching (OR-Tools)**: View exact combinatorial invoice resolution using Google OR-Tools CP-SAT.
-7. **Terminal Decision Receipt & Replay**: Inspect the signed RFC 8785 JSON decision receipt and verify it offline with **zero LLMs and zero database calls**.
-8. **Operations Center (`/live-monitor` / `/forensics`)**: Test durable batch processing, step coordination, and sub-second cooperative cancellation.
-
-*For a complete presenter script with step-by-step clickpaths, see **[docs/judge-demo-script.md](docs/judge-demo-script.md)**.*
-
----
-
-## Additional engineering surfaces
-
-> *Note: Live deployment is authentication-protected.*
-
-| Evaluation Surface | Route / URL | Core Capability |
-| :--- | :--- | :--- |
-| **Judge Mode Terminal** | [`/judge-mode`](https://settlemate-ai.onrender.com/judge-mode) | Full-screen 7-step guided walkthrough with interactive injection buttons. |
-| **Interactive Sandbox** | [`/sandbox`](https://settlemate-ai.onrender.com/sandbox) | Drag-and-drop custom CSV upload with 1-click sample dataset generation. |
-| **Risk Command Center** | [`/risk-dashboard`](https://settlemate-ai.onrender.com/risk-dashboard) | Aggregate financial exposure, SLA breaches, and severity-weighted risk scoring. |
-| **Confidence Calibration** | [`/calibration`](https://settlemate-ai.onrender.com/calibration) | Empirical reliability diagram, ECE calibration curve, and Brier score telemetry. |
-| **Resolution Playbooks** | [`/playbook`](https://settlemate-ai.onrender.com/playbook) | Automated SOP resolution playbooks for 5 standard financial exception types. |
-| **Multi-Currency Engine** | [`/multi-currency`](https://settlemate-ai.onrender.com/multi-currency) | Multi-currency FX conversion (USD, EUR, GBP, SGD, AED, JPY, INR) with GST isolation. |
-| **Multi-Tenant Simulator** | [`/multi-tenant`](https://settlemate-ai.onrender.com/multi-tenant) | Strict multi-tenant partition isolation across 4 enterprise tenants. |
-| **Developer API Portal** | [`/developer`](https://settlemate-ai.onrender.com/developer) | Interactive REST console, OpenAPI 3.0 specification (`/api/docs`), and code snippets. |
-| **Live Red-Team Console** | [`/red-team`](https://settlemate-ai.onrender.com/red-team) | Hostile payload testbed for prompt injection, fake vouchers, and SSRF attacks. |
-| **Security Lab** | [`/security-lab`](https://settlemate-ai.onrender.com/security-lab) | Real-time simulator executing all 10 defended adversarial vectors. |
-| **Track 04 Compliance** | [`/track04-compliance`](https://settlemate-ai.onrender.com/track04-compliance) | Direct mapping from official judging criteria to empirical implementation proofs. |
-
----
-
-## Reproducibility
-
-Every claim, benchmark, and invariant in SettleMate AI is reproducible using native npm scripts:
+Every benchmark and invariant is independently reproducible using native npm commands:
 
 ```bash
-# 1. Run full 96-suite automated test matrix
+# 1. Run the full 96-suite automated test matrix
 npm test
 
-# 2. Run official deterministic benchmark & adversarial evaluation
+# 2. Run official deterministic benchmark & adversarial evaluation (250 records)
 npm run evaluate
 
-# 3. Verify all 14 core claims and SHA-256 dataset fingerprint
+# 3. Verify all 14 core claims against docs/FINAL_METRICS.json
 npm run verify-claims
 
 # 4. Run scale benchmarks (10k, 25k, 50k, 100k records)
@@ -339,31 +326,45 @@ npm run test:cancellation:1m   # 1M workload cooperative cancellation (<1000ms l
 ### Local Development Setup
 
 ```bash
-# 1. Install dependencies
+# 1. Clone repository
+git clone https://github.com/AkshayAlgoX/settlemate-ai.git
+cd settlemate-ai
+
+# 2. Install dependencies
 npm install
 
-# 2. Initialize database schemas (PostgreSQL / SQLite)
+# 3. Initialize local SQLite database
 npm run db:init
 npm run prisma:generate
 
-# 3. Start Next.js development server
+# 4. Start Next.js development server
 npm run dev
+```
+
+Visit [`http://localhost:3000`](http://localhost:3000) to access the application locally.
+
+### Docker Compose Setup
+
+```bash
+# Start Next.js application and PostgreSQL database container
+docker compose up -d
 ```
 
 ---
 
-## Honest limitations
+## Honest Limitations
 
 * **Combinatorial Boundary**: The in-memory meet-in-the-middle solver is bounded at $2^{16}$ ($65,536$) combinations. Larger unindexed combinations route to Google OR-Tools CP-SAT or human review.
 * **Sub-Tolerance Rounding**: Settlement variances under ₹1.00 (such as ₹0.47 fractional tax rounding) are intentionally not flagged as exceptions to prevent operational alert fatigue.
 * **Confidence Bucket Calibration**: The 41–60% confidence bucket exhibits 89% empirical accuracy on ambiguous multi-candidate rows; confidence weights are deliberately not inflated to falsely claim 100% precision on noisy data.
 * **Database Target**: Local development uses SQLite (`better-sqlite3` in WAL mode) for zero-dependency portability; multi-node production deployments require PostgreSQL with `pg.Pool` connection pooling.
+* **Hosted Demo Availability**: The public Render instance is on a free-tier sleep schedule. Local and Docker environments provide the primary, zero-latency evaluation experience.
 
 ---
 
-## Project structure
+## Repository Structure
 
-```
+```text
 settlemate-ai/
 ├── src/
 │   ├── app/                      # Next.js App Router (UI pages & API routes)
@@ -373,16 +374,18 @@ settlemate-ai/
 │   │   ├── verify/               # Live Verification Hub UI
 │   │   └── ...                   # Dedicated evaluation surfaces
 │   ├── lib/
-│   │   ├── ai/                   # Advisory AI Investigator, Council, Prompt Defense
+│   │   ├── ai/                   # Advisory AI Investigator, Council, SMT Prover, Prompt Defense
 │   │   ├── corrections/          # Minimal correcting journal engine & Invariant Prover
 │   │   ├── pipeline/             # Canonical Financial Decision Pipeline orchestrator
 │   │   ├── receipts/             # Canonical RFC 8785 JSON builder, signer, verifier, replay
 │   │   ├── reconciliation/       # Deterministic matching engine, confidence, scale partitioning
 │   │   ├── security/             # Rate limiters, SSRF guard, API headers, input sanitizers
-│   │   ├── solve/                # Google OR-Tools CP-SAT invoice matching solver
+│   │   ├── solver/               # Google OR-Tools CP-SAT invoice matching solver
 │   │   ├── storage/              # Dual PostgreSQL & SQLite unified repositories
 │   │   ├── verify/               # In-process compiled verification runner & progress store
 │   │   └── workers/              # Durable job worker, bounded stepping, cooperative cancellation
+├── services/
+│   └── solver/                   # Python FastAPI service with Google OR-Tools CP-SAT bindings
 ├── prisma/
 │   ├── schema.prisma             # SQLite schema for local dev & offline demo
 │   └── schema.postgresql.prisma  # PostgreSQL schema for cloud production
@@ -393,7 +396,18 @@ settlemate-ai/
 
 ---
 
-## Closing principle
+## Author & Engineering Contact
 
-> **SettleMate does not replace financial controls with AI.**
+**Akshaya R**<br>
+- **GitHub**: [@AkshayAlgoX](https://github.com/AkshayAlgoX)<br>
+- **Portfolio**: [akshayalgox.github.io](https://akshayalgox.github.io/)<br>
+- **Education**: Computer Science Undergraduate (Graduating 2027)<br>
+- **Industry Experience**: Software Engineer Intern at Veanka Innosol · Former Team Lead & Java Developer Intern at Infosys Springboard<br>
+- **Competition Track Record**: HackerRank Orchestrate Global Rank #85/3,062 (Top 2.78%) · Amazon ML Challenge Team Duty_Drive (Rank #1,200)
+
+---
+
+## Closing Principle
+
+> **SettleMate does not replace financial controls with AI.**<br>
 > **It puts AI inside a deterministic financial control system.**
