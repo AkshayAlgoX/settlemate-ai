@@ -16,6 +16,9 @@ export interface ValidationReport {
   }>;
 }
 
+// Same rules the webhook signer and the at-rest encryption enforce at first use.
+import { getDefaultWebhookSigningSecret, getWebhookEncryptionKey } from "@/lib/webhooks/webhook-secrets";
+
 export function validateStartupConfig(): ValidationReport {
   const isProduction = process.env.NODE_ENV === "production";
   const checks: ValidationReport["checks"] = [];
@@ -64,6 +67,16 @@ export function validateStartupConfig(): ValidationReport {
     });
   } else {
     checks.push({ name: "PORT", passed: true });
+  }
+
+  // Webhook signing secret and at-rest encryption key: required in
+  // production, and rejected anywhere if set to a public or malformed value.
+  try {
+    getDefaultWebhookSigningSecret(process.env);
+    getWebhookEncryptionKey(process.env);
+    checks.push({ name: "WEBHOOK_SECRETS", passed: true });
+  } catch (err) {
+    checks.push({ name: "WEBHOOK_SECRETS", passed: false, error: (err as Error).message });
   }
 
   const valid = checks.every((c) => c.passed);
