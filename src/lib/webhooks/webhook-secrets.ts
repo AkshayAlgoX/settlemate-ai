@@ -131,12 +131,20 @@ export function decryptWebhookSecret(stored: string, env: NodeJS.ProcessEnv = pr
 }
 
 /**
- * Value to persist for a subscription secret. Encrypted whenever
- * WEBHOOK_ENCRYPTION_KEY is configured (required in production). Without it
- * (local development) the secret is stored as before, because a per-process
- * ephemeral key would make stored secrets unreadable after a restart.
+ * Value to persist for a subscription secret.
+ *
+ * - WEBHOOK_ENCRYPTION_KEY set: always encrypted.
+ * - Production without a valid key: throws WebhookSecretConfigError, so no
+ *   plaintext secret is ever written there (fail closed; the readiness check
+ *   reports the same condition).
+ * - Development without the key: stored as before, because a per-process
+ *   ephemeral key would make stored secrets unreadable after a restart.
  */
 export function sealWebhookSecretForStorage(secret: string, env: NodeJS.ProcessEnv = process.env): string {
   if (isSealedWebhookSecret(secret)) return secret;
-  return env.WEBHOOK_ENCRYPTION_KEY ? encryptWebhookSecret(secret, env) : secret;
+  if (env.WEBHOOK_ENCRYPTION_KEY || isProduction(env)) {
+    // getWebhookEncryptionKey throws in production when the key is missing or invalid.
+    return encryptWebhookSecret(secret, env);
+  }
+  return secret;
 }

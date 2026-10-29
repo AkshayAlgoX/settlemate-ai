@@ -117,6 +117,54 @@ async function main() {
     });
   });
 
+  const { webhookSubscriptionUpsertArgs } = await import("../src/lib/storage/unified-store");
+  const { WebhookSecretConfigError } = await import("../src/lib/webhooks/webhook-secrets");
+  const registration = (id: string, secret: string) => {
+    const now = new Date().toISOString();
+    return { id, url: "https://hooks.example.test/r", events: "[]", secret, status: "ACTIVE" as const, registeredAt: now, updatedAt: now };
+  };
+
+  test("production without WEBHOOK_ENCRYPTION_KEY refuses to persist a secret (fail closed)", () => {
+    withEnv({ NODE_ENV: "production", WEBHOOK_ENCRYPTION_KEY: undefined }, () => {
+      assert.throws(
+        () => UnifiedWebhookRepository.saveRegistration(registration("wh_prod_nokey", "whsec_must_not_be_stored_0004")),
+        (err: unknown) => err instanceof WebhookSecretConfigError
+      );
+      assert.throws(() => v1Store.registerWebhook("https://hooks.example.test/p", [], "whsec_must_not_be_stored_0005"));
+    });
+    // Nothing reached the store, so no plaintext secret was persisted.
+    assert.equal(native.WebhookRepository.getRegistration("wh_prod_nokey"), null);
+    const rows = native.WebhookRepository.getAllRegistrations();
+    assert.ok(!rows.some((r) => r.secret.includes("whsec_must_not_be_stored")));
+  });
+
+  test("production with a valid key stores ciphertext", () => {
+    withEnv({ NODE_ENV: "production", WEBHOOK_ENCRYPTION_KEY: randomBytes(32).toString("hex") }, () => {
+      UnifiedWebhookRepository.saveRegistration(registration("wh_prod_key", "whsec_prod_with_key_0006"));
+      assert.match(native.WebhookRepository.getRegistration("wh_prod_key")!.secret, /^enc:v1:/);
+      assert.equal(UnifiedWebhookRepository.getRegistration("wh_prod_key")!.secret, "whsec_prod_with_key_0006");
+    });
+  });
+
+  test("re-saving an existing registration rotates its secret in both stores", () => {
+    UnifiedWebhookRepository.saveRegistration(registration("wh_rotate", "whsec_rotate_old_0007"));
+    const rotated = { ...registration("wh_rotate", "whsec_rotate_new_0008"), url: "https://hooks.example.test/rotated" };
+    UnifiedWebhookRepository.saveRegistration(rotated);
+
+    // SQLite (the read path): the new secret, still encrypted at rest.
+    const raw = native.WebhookRepository.getRegistration("wh_rotate")!;
+    assert.match(raw.secret, /^enc:v1:/);
+    assert.equal(UnifiedWebhookRepository.getRegistration("wh_rotate")!.secret, "whsec_rotate_new_0008");
+
+    // Postgres mirror: the update path now carries the (sealed) secret, and
+    // leaves tenantId, id and registeredAt to the create path only.
+    const args = webhookSubscriptionUpsertArgs({ ...rotated, secret: raw.secret }, "tenant_a");
+    assert.equal(args.update.secretEncrypted, raw.secret);
+    assert.equal(args.create.secretEncrypted, raw.secret);
+    assert.equal(args.update.url, "https://hooks.example.test/rotated");
+    assert.deepEqual(Object.keys(args.update).sort(), ["events", "secretEncrypted", "status", "updatedAt", "url"]);
+  });
+
   console.log(`\nwebhook secrets at rest: ALL ${passed} PASSED`);
 }
 
