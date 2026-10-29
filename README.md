@@ -5,7 +5,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15.0_App_Router-black?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![OR-Tools](https://img.shields.io/badge/Google_OR--Tools-CP--SAT_Solver-FF6F00?logo=google&logoColor=white)](https://developers.google.com/optimization)
+[![Invoice matching](https://img.shields.io/badge/Invoice_matching-exact_branch--and--bound-FF6F00)](docs/solver-and-proof-verification.md)
 [![RFC 8785](https://img.shields.io/badge/RFC_8785-JSON_Canonicalization-green)](https://www.rfc-editor.org/rfc/rfc8785)
 [![HMAC-SHA256](https://img.shields.io/badge/HMAC--SHA256-Key_Rotated_Receipts-blueviolet)](src/lib/receipts/signer.ts)
 [![SMT-LIB v2](https://img.shields.io/badge/Formal_Logic-SMT--LIB_v2_QF__LIA-red)](src/lib/ai/z3-prover.ts)
@@ -23,9 +23,10 @@ High-volume digital commerce payment reconciliation across asynchronous boundari
 ### Three Distinctive Technical Contributions
 
 1. **96.4% Deterministic Fast-Path AI Bypass**: In the 55-record generic finance-ops loop benchmark (53 auto-matched out of 55 batch records, 96.36%), clean transactions match across an integer-math engine using $O(1)$ hash indexing (UTR, Payment ID, Order ID) and integer paise minor-unit arithmetic. Over **96.4% of records execute at sub-millisecond latency ($<1\text{ms}$) without LLM inference**, eliminating token costs and stochastic risk.
-2. **Google OR-Tools CP-SAT Combinatorial Solver**: Resolves complex $N:M$ invoice and payout aggregations by formulating an integer subset-sum optimization problem:
+2. **Exact combinatorial invoice matching**: Resolves $N:1$ invoice and payout aggregations as an integer subset-sum optimisation:
    $$\min \left( |\text{selectedTotal} - \text{paymentAmount}| \times 1000 + \text{invoiceCount} \right)$$
-   Bounded by strict cardinality ($K \le 8$) and execution time ceilings, with a pure-Python branch-and-bound fallback if C++ solver extensions are unavailable.
+   - **Solver:** an exact TypeScript branch-and-bound search, bounded by cardinality ($K \le 8$) and a time ceiling.
+   - **Checks:** on 3,000 seeded cases it agrees with a brute-force reference and with an OR-Tools CP-SAT model of the same policy ([evidence](docs/solver-and-proof-verification.md)). The OR-Tools model lives in `services/solver`; the application does not call it.
 3. **RFC 8785 Canonicalized, HMAC-SHA256 Authenticated Decision Receipts**: Terminal resolutions are canonicalized per RFC 8785, hashed with SHA-256, and sealed with HMAC-SHA256 using server-managed key rotation (`v1`/`v2`) and constant-time `timingSafeEqual` comparison. Receipts enable **zero-LLM, zero-database deterministic offline replay in $<1\text{ms}$**.
 
 ---
@@ -89,7 +90,7 @@ flowchart TD
 
     subgraph RESOLVE["4. Deterministic Resolution & Governance"]
         D1 --> E1[Confidence x Exposure Routing]
-        E1 -- "Split / Aggregated" --> E2[Google OR-Tools CP-SAT<br/>Integer subset-sum optimization]
+        E1 -- "Split / Aggregated" --> E2[Exact branch-and-bound<br/>Integer subset-sum optimization]
         E1 -- "High Exposure" --> E3[Dual-Control Maker/Checker<br/>ADMIN role authorization required]
         E2 --> F1[Invariant Restoration Prover<br/>Proves ΣDr ≡ ΣCr and Δ = 0]
         E3 --> F1
@@ -123,7 +124,7 @@ flowchart TD
 11. **Multi-Pass Reinvestigation**: If the Critic raises valid objections, the investigator refines the claim against newly cited evidence.
 12. **Confidence $\times$ Exposure Routing**: Calculates composite risk score:
     $$\text{Risk Score} = (1.0 - \text{Confidence}) \times \text{Exposure Amount}$$
-13. **OR-Tools CP-SAT Solver**: Resolves combinatorial $N:1$, $1:N$, and $N:M$ aggregate invoice allocations mathematically.
+13. **Combinatorial Invoice Matcher**: Selects the subset of invoices that one payment settles, using exact integer search.
 14. **Dual-Control Maker/Checker**: Material exposures require dual-control authorization by an authenticated `ADMIN`.
 15. **Invariant Restoration Proof**: Generates a minimal balancing journal pair (2 lines) and proves:
     $$\Delta_{\text{before}} \neq 0 \implies \text{Imbalance}, \quad \Delta_{\text{after}} = 0 \implies \text{Restored}$$
@@ -148,18 +149,25 @@ When all three conditions hold, the transaction **completely bypasses**:
 
 Instead, the match is confirmed deterministically in $<1\text{ms}$ and committed directly to the double-entry ledger. Only the remaining 2 exception records (e.g., partial refund, fee tier drift) trigger the advisory AI pipeline.
 
-### 2. Combinatorial Optimization via Google OR-Tools CP-SAT
+### 2. Combinatorial Invoice Matching
 
 When a single bank payout settles multiple invoices (or multiple split payments cover one invoice), naive matching faces an exponential search space ($O(2^n)$ subset-sum).
 
-SettleMate AI addresses this with a two-tiered combinatorial solver ([`src/lib/solver/cpsat-engine.ts`](src/lib/solver/cpsat-engine.ts) & [`services/solver/cpsat_solver.py`](services/solver/cpsat_solver.py)):
+SettleMate AI solves this exactly in [`src/lib/solver/cpsat-engine.ts`](src/lib/solver/cpsat-engine.ts). Despite the file name, it is a TypeScript branch-and-bound search, not OR-Tools:
 - **$O(1)$ Exact Match Fast-Path**: Instantly identifies single 1:1 invoice matches.
-- **CP-SAT Integer Programming Formulation**: Formulates boolean decision variables $x_i \in \{0, 1\}$ for each candidate invoice, subject to:
+- **Integer formulation**: Boolean decision variables $x_i \in \{0, 1\}$ for each candidate invoice, subject to:
   $$\sum_{i=1}^n x_i \cdot \text{amount}_i = \text{targetAmount} \pm \text{tolerance}$$
   $$1 \le \sum_{i=1}^n x_i \le K \quad (K \le 8)$$
 - **Lexicographic Objective**: Minimizes payment variance first, and breaks ties by selecting the smallest number of invoices:
   $$\min \left( |\text{selectedTotal} - \text{paymentAmount}| \times 1000 + \sum_{i=1}^n x_i \right)$$
-- **Deterministic Branch-and-Bound Fallback**: If the Google OR-Tools C++ extension is unavailable, an in-process TypeScript/Python branch-and-bound engine provides exact solutions with strict timeout ceilings.
+- **Exact, deterministic search**:
+  - Invoices are explored in sorted order, and branches that exceed the payment plus tolerance are pruned.
+  - At most the 50 smallest eligible invoices are searched. When larger candidates are dropped, a match is reported as `FEASIBLE`, not `OPTIMAL`.
+  - The search runs synchronously within `timeoutMs`.
+- **Independent checks**:
+  - `SolverResultVerifier` re-checks every result for ids, tenant, eligibility, totals, tolerance, objective and cardinality before use.
+  - `tests/solver-reference-differential.test.ts` compares the engine with a brute-force enumeration on 3,000 seeded cases.
+  - `scripts/solver_differential.py` runs the same cases through the OR-Tools CP-SAT model in [`services/solver/cpsat_solver.py`](services/solver/cpsat_solver.py): 3,000 of 3,000 agree on feasibility and on the optimal objective.
 
 ### 3. SMT-LIB v2 Formal Logic Generator & Deterministic Invariant Gating
 
@@ -173,8 +181,10 @@ Invariant checks and their formal export ([`src/lib/ai/z3-prover.ts`](src/lib/ai
     $$(\sum \text{Debits} \equiv \sum \text{Credits})$$
   - `THEOREM_CREDIT_SINGLE_CONSUMPTION`:
     $$(\sum \text{Allocated} \le \text{CreditTotal})$$
-  The generated SMT-LIB script with `(check-sat)` and `(get-model)` can be exported and verified by external solvers like Z3 or CVC5.
-- **In-Process Deterministic Execution**: Within the Node.js runtime, verification executes via deterministic local integer arithmetic checks rather than spawning an external C++ binary process. This guarantees sub-millisecond evaluation while producing a cryptographically signed proof summary.
+  The generated SMT-LIB script with `(check-sat)` can be exported and checked with an external solver. `scripts/smt_z3_differential.py` ran 2,000 generated scripts through Z3 5.3.2, and every verdict matched the in-process check.
+  - Inputs that are not safe integers (fractions, NaN, values beyond $2^{53}$) are refused with `SMT_ERROR`, because they cannot be represented exactly.
+  - Every variable is bound to a concrete value, so this is a checked computation, not a proof over all inputs.
+- **In-Process Deterministic Execution**: Within the Node.js runtime, verification executes via deterministic local integer arithmetic checks rather than spawning an external C++ binary process. This keeps evaluation fast; the summary hash is a SHA-256 digest, not a signature.
 
 ### 4. RFC 8785 Canonicalized, HMAC-SHA256 Authenticated Receipts
 
@@ -305,7 +315,7 @@ npm run scale
 # 5. Run milestone-specific verification suites
 npm run test:m1          # Milestone 1: Innovation Backbone
 npm run test:m2          # Milestone 2: Confidence x Exposure Routing
-npm run test:m3          # Milestone 3: OR-Tools CP-SAT Solver
+npm run test:m3          # Milestone 3: Combinatorial invoice matching
 npm run test:m4          # Milestone 4: Minimal Correction & Invariant Prover
 npm run test:m5          # Milestone 5: Terminal Decision Receipts & Replay
 npm run test:pipeline    # Final Integrated Financial Pipeline (24/24 Scenarios)
@@ -319,7 +329,7 @@ npm run test:cancellation:1m   # 1M workload cooperative cancellation (<1000ms l
 
 * **Node.js**: v20.x or v22.x LTS (`node -v`)
 * **Package Manager**: npm v10+ (`npm -v`)
-* **Python** (for OR-Tools CP-SAT microservice, optional): Python 3.10+ / 3.12 (`python3 --version`)
+* **Python** (optional, for the OR-Tools and Z3 cross-check scripts): Python 3.10+ / 3.12 (`python3 --version`)
 * **Database**: Local SQLite via `better-sqlite3` (default) or PostgreSQL 15+ (for production mode)
 
 ### Environment Configuration
@@ -359,7 +369,7 @@ npm install
 npm run db:init
 npm run prisma:generate
 
-# 4. (Optional) Setup Python OR-Tools CP-SAT solver service
+# 4. (Optional) Python OR-Tools CP-SAT service (a reference model; the app does not call it)
 cd services/solver
 python3 -m venv .venv
 source .venv/bin/activate
@@ -386,7 +396,8 @@ docker compose up -d
 
 ## Honest Limitations
 
-* **Combinatorial Boundary**: The in-memory meet-in-the-middle solver is bounded at $2^{16}$ ($65,536$) combinations. Larger unindexed combinations route to Google OR-Tools CP-SAT or human review.
+* **Combinatorial Boundary**: Many-to-many groups larger than 10×10 use a pruned search with a deterministic review fallback (`src/lib/reconciliation/cardinality.ts`). Nothing is routed to OR-Tools.
+* **Blocking search**: Invoice matching runs on the Node.js event loop for up to `timeoutMs` (maximum 10 s per request). A run that times out can give a different result when replayed on a faster or slower machine.
 * **Sub-Tolerance Rounding**: Settlement variances under ₹1.00 (such as ₹0.47 fractional tax rounding) are intentionally not flagged as exceptions to prevent operational alert fatigue.
 * **Confidence Bucket Calibration**: The 41–60% confidence bucket exhibits 89% empirical accuracy on ambiguous multi-candidate rows; confidence weights are deliberately not inflated to falsely claim 100% precision on noisy data.
 * **Database Target**: Local development uses SQLite (`better-sqlite3` in WAL mode) for portability; multi-node deployments require PostgreSQL with `pg.Pool` connection pooling.
@@ -412,12 +423,12 @@ settlemate-ai/
 │   │   ├── receipts/             # Canonical RFC 8785 JSON builder, signer, verifier, replay
 │   │   ├── reconciliation/       # Deterministic matching engine, confidence, scale partitioning
 │   │   ├── security/             # Rate limiters, SSRF guard, API headers, input sanitizers
-│   │   ├── solver/               # Google OR-Tools CP-SAT invoice matching solver
+│   │   ├── solver/               # Exact invoice-matching search, verifier and replay
 │   │   ├── storage/              # Dual PostgreSQL & SQLite unified repositories
 │   │   ├── verify/               # In-process compiled verification runner & progress store
 │   │   └── workers/              # Durable job worker, bounded stepping, cooperative cancellation
 ├── services/
-│   └── solver/                   # Python FastAPI service with Google OR-Tools CP-SAT bindings
+│   └── solver/                   # Python OR-Tools CP-SAT reference model (not called by the app)
 ├── prisma/
 │   ├── schema.prisma             # SQLite schema for local dev & offline demo
 │   └── schema.postgresql.prisma  # PostgreSQL schema for cloud production
