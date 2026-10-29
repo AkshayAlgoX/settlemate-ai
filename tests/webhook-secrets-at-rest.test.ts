@@ -65,7 +65,7 @@ async function main() {
     const sub = v1Store.registerWebhook("https://hooks.example.test/c", [], "whsec_other_key_check_0002");
     const raw = native.WebhookRepository.getRegistration(sub.id)!.secret;
     assert.throws(
-      () => decryptWebhookSecret(raw, { WEBHOOK_ENCRYPTION_KEY: randomBytes(32).toString("hex") } as NodeJS.ProcessEnv),
+      () => decryptWebhookSecret(raw, { WEBHOOK_ENCRYPTION_KEY: randomBytes(32).toString("hex") } as unknown as NodeJS.ProcessEnv),
       /could not be decrypted/
     );
   });
