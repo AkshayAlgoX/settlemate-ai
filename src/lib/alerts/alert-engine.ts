@@ -7,6 +7,7 @@
  */
 
 import { dispatchWebhook, generateWebhookSignature } from "@/lib/api/v1-store";
+import { getDefaultWebhookSigningSecret } from "@/lib/webhooks/webhook-secrets";
 import {
   type SmartAlert,
   type AlertChannel,
@@ -29,7 +30,7 @@ export {
 export async function dispatchSmartAlert(
   alert: SmartAlert,
   overrideUrl?: string,
-  secret: string = "whsec_settlemate_live_signing_key_001"
+  secret: string = getDefaultWebhookSigningSecret()
 ): Promise<SmartAlert> {
   const targetUrl = overrideUrl || alert.targetUrl;
   const eventName = `reconciliation.alert.${alert.severity.toLowerCase()}`;
