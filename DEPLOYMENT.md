@@ -25,7 +25,7 @@ This operations guide defines the single-node production deployment architecture
                                        ▼
             ┌────────────────────────────────────────────────────────┐
             │          SettleMate AI Container Control Plane         │
-            │  - Next.js 16.3 Standalone Node Server (Port 3000)     │
+            │  - Next.js 16.4 Standalone Node Server (Port 3000)     │
             │  - Non-Root User: nextjs (UID 1001)                    │
             │  - Token Bucket Rate Limiter & Security Boundaries     │
             │  - Deterministic 3-Pass Reconciler (806 rec/s)         │
