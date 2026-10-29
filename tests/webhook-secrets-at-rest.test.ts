@@ -81,6 +81,42 @@ async function main() {
     }
   });
 
+  const { validateStartupConfig } = await import("../src/lib/config/startup-validation");
+  const withEnv = (vars: Record<string, string | undefined>, fn: () => void) => {
+    const saved: Record<string, string | undefined> = {};
+    for (const k of Object.keys(vars)) {
+      saved[k] = process.env[k];
+      if (vars[k] === undefined) delete process.env[k];
+      else process.env[k] = vars[k];
+    }
+    try {
+      fn();
+    } finally {
+      for (const k of Object.keys(saved)) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  };
+  const webhookCheck = () => validateStartupConfig().checks.find((c) => c.name === "WEBHOOK_SECRETS")!;
+
+  test("readiness reports missing webhook secrets in production without printing values", () => {
+    withEnv({ NODE_ENV: "production", WEBHOOK_SECRET: undefined, WEBHOOK_SHARED_SECRET: undefined }, () => {
+      const check = webhookCheck();
+      assert.equal(check.passed, false);
+      assert.match(check.error!, /WEBHOOK_SECRET/);
+    });
+    withEnv({ NODE_ENV: "production", WEBHOOK_SECRET: randomBytes(32).toString("hex"), WEBHOOK_ENCRYPTION_KEY: "0123456789abcdef".repeat(4) }, () => {
+      const check = webhookCheck();
+      assert.equal(check.passed, false);
+      assert.match(check.error!, /publicly known/);
+      assert.ok(!check.error!.includes("0123456789abcdef"));
+    });
+    withEnv({ NODE_ENV: "production", WEBHOOK_SECRET: randomBytes(32).toString("hex"), WEBHOOK_ENCRYPTION_KEY: randomBytes(32).toString("hex") }, () => {
+      assert.equal(webhookCheck().passed, true);
+    });
+  });
+
   console.log(`\nwebhook secrets at rest: ALL ${passed} PASSED`);
 }
 
