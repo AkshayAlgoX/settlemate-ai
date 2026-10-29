@@ -94,6 +94,28 @@ ANTHROPIC_API_KEY=
 
 ---
 
+### Webhook subscription secrets at rest
+
+When `WEBHOOK_ENCRYPTION_KEY` is set, which production requires, each
+subscription secret is stored as `enc:v1:<iv>:<tag>:<ciphertext>` (AES-256-GCM).
+This applies to both `webhook_registrations.secret` (SQLite) and
+`WebhookSubscription.secretEncrypted` (Postgres mirror). The secret is
+decrypted only when it is read for signing.
+
+- **Existing plaintext rows.** Releases before this change stored the
+  secrets in plaintext, despite the Postgres column name. Those rows are
+  still read as plaintext and are not rewritten automatically. Treat those
+  secrets as exposed to anyone who had database or backup access: delete
+  and re-register those subscriptions, which stores a new secret encrypted,
+  and give each subscriber its new secret.
+- **Losing or changing the key.** Stored ciphertext becomes unreadable,
+  and signing fails with an explicit error instead of using a wrong secret.
+  Keep the key with the database backups. Rotating the key means
+  re-registering the subscriptions.
+- **Local development without the key.** Secrets are stored in plaintext,
+  because the per-process development key would make them unreadable after
+  a restart.
+
 ## 4. Production Deployment Architectures
 
 ### Primary Cloud Production Deployment (GHCR → Render Existing Image)

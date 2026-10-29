@@ -159,7 +159,7 @@ async function main() {
     const encrypted = encryptWebhookSecret(plainSecret);
 
     assert.notEqual(encrypted, plainSecret, "Encrypted string must not match plaintext");
-    assert.ok(encrypted.includes(":"), "Encrypted format must contain iv:tag:data components");
+    assert.match(encrypted, /^enc:v1:[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/, "Encrypted format is enc:v1:iv:tag:data");
 
     const decrypted = decryptWebhookSecret(encrypted);
     assert.equal(decrypted, plainSecret, "Decrypted secret must match original plaintext");
@@ -359,9 +359,8 @@ async function main() {
 
   await test("TEST 12: Decryption failure throws instead of returning ciphertext as the secret", () => {
     const encrypted = encryptWebhookSecret("whsec_subscription_secret_for_decrypt_test");
-    const [iv, tag, data] = encrypted.split(":");
-    const flipped = data.slice(0, -1) + (data.endsWith("0") ? "1" : "0");
-    assert.throws(() => decryptWebhookSecret(`${iv}:${tag}:${flipped}`), /could not be decrypted/);
+    const flipped = encrypted.slice(0, -1) + (encrypted.endsWith("0") ? "1" : "0");
+    assert.throws(() => decryptWebhookSecret(flipped), /could not be decrypted/);
     // Legacy plaintext (not iv:tag:data) is still returned unchanged.
     assert.equal(decryptWebhookSecret("whsec_plain_legacy_value"), "whsec_plain_legacy_value");
   });
