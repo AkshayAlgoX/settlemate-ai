@@ -61,7 +61,10 @@ async function main() {
       const sqliteAdapter = createPrismaAdapter();
       assert.equal((sqliteAdapter as { provider?: string }).provider, "sqlite");
     } finally {
-      process.env.DATABASE_URL = originalUrl;
+      // Assigning undefined would store the string "undefined", which later
+      // tests in this file would open as a SQLite file path.
+      if (originalUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = originalUrl;
     }
   });
 

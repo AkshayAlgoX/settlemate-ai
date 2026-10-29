@@ -54,20 +54,26 @@ export async function POST(
       );
     }
 
-    // Support developer/demo tampering simulation without mutating real database state
-    let targetReceipt = { ...receipt };
-    if (body.tamperedFields) {
-      targetReceipt = {
-        ...targetReceipt,
-        ...body.tamperedFields,
-      };
+    // Demo tampering simulation: verifies a modified in-memory copy without
+    // touching stored state. Disabled in production so this endpoint only ever
+    // reports on the stored receipt, and flagged as simulated otherwise.
+    const simulated = Boolean(body.tamperedFields) && process.env.NODE_ENV !== "production";
+    if (body.tamperedFields && !simulated) {
+      return applySecurityHeaders(
+        NextResponse.json(
+          { success: false, error: "TAMPER_SIMULATION_DISABLED", message: "tamperedFields is not accepted in production" },
+          { status: 400 }
+        )
+      );
     }
+    const targetReceipt = simulated ? { ...receipt, ...body.tamperedFields } : receipt;
 
     const report = verifyTerminalReceipt(targetReceipt, undefined, tenantId);
 
     return applySecurityHeaders(
       NextResponse.json({
         success: true,
+        simulated,
         report,
       })
     );

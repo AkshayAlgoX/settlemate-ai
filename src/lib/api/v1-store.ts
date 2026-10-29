@@ -3,6 +3,7 @@
  */
 
 import { createHash, createHmac, randomUUID } from "node:crypto";
+import { getDefaultWebhookSigningSecret } from "@/lib/webhooks/webhook-secrets";
 import {
   UnifiedJobRepository as JobRepository,
   UnifiedReceiptRepository as DecisionReceiptRepository,
@@ -273,7 +274,7 @@ export async function dispatchWebhook(
   url: string,
   event: string,
   payload: Record<string, unknown>,
-  secret: string = process.env.WEBHOOK_SECRET || process.env.WEBHOOK_SHARED_SECRET || "whsec_settlemate_live_signing_key_001",
+  secret: string = getDefaultWebhookSigningSecret(),
   webhookId?: string
 ): Promise<WebhookDeliveryLog> {
   const logId = `log_${randomUUID().slice(0, 10)}`;

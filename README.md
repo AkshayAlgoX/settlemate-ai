@@ -5,7 +5,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15.0_App_Router-black?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![OR-Tools](https://img.shields.io/badge/Google_OR--Tools-CP--SAT_Solver-FF6F00?logo=google&logoColor=white)](https://developers.google.com/optimization)
+[![Invoice matching](https://img.shields.io/badge/Invoice_matching-exact_branch--and--bound-FF6F00)](docs/solver-and-proof-verification.md)
 [![RFC 8785](https://img.shields.io/badge/RFC_8785-JSON_Canonicalization-green)](https://www.rfc-editor.org/rfc/rfc8785)
 [![HMAC-SHA256](https://img.shields.io/badge/HMAC--SHA256-Key_Rotated_Receipts-blueviolet)](src/lib/receipts/signer.ts)
 [![SMT-LIB v2](https://img.shields.io/badge/Formal_Logic-SMT--LIB_v2_QF__LIA-red)](src/lib/ai/z3-prover.ts)
@@ -14,7 +14,7 @@
 
 ---
 
-## 30-Second Recruiter Summary
+## Project Overview
 
 High-volume digital commerce payment reconciliation across asynchronous boundaries—merchant orders, payment gateway captures, batch settlements, bank statement credits, refunds, chargebacks, and MDR fees with GST—is historically error-prone and vulnerable to silent ledger drift. Applying Large Language Models directly to financial balances introduces catastrophic risks: models hallucinate transaction identifiers, invent bank credits, balance books with phantom journal entries, and succumb to prompt injection embedded in bank narrations.
 
@@ -23,25 +23,18 @@ High-volume digital commerce payment reconciliation across asynchronous boundari
 ### Three Distinctive Technical Contributions
 
 1. **96.4% Deterministic Fast-Path AI Bypass**: In the 55-record generic finance-ops loop benchmark (53 auto-matched out of 55 batch records, 96.36%), clean transactions match across an integer-math engine using $O(1)$ hash indexing (UTR, Payment ID, Order ID) and integer paise minor-unit arithmetic. Over **96.4% of records execute at sub-millisecond latency ($<1\text{ms}$) without LLM inference**, eliminating token costs and stochastic risk.
-2. **Google OR-Tools CP-SAT Combinatorial Solver**: Resolves complex $N:M$ invoice and payout aggregations by formulating an integer subset-sum optimization problem:
+2. **Exact combinatorial invoice matching**: Resolves $N:1$ invoice and payout aggregations as an integer subset-sum optimisation:
    $$\min \left( |\text{selectedTotal} - \text{paymentAmount}| \times 1000 + \text{invoiceCount} \right)$$
-   Bounded by strict cardinality ($K \le 8$) and execution time ceilings, with a pure-Python branch-and-bound fallback if C++ solver extensions are unavailable.
+   - **Solver:** an exact TypeScript branch-and-bound search, bounded by cardinality ($K \le 8$) and a time ceiling.
+   - **Checks:** on 3,000 seeded cases it agrees with a brute-force reference and with an OR-Tools CP-SAT model of the same policy ([evidence](docs/solver-and-proof-verification.md)). The OR-Tools model lives in `services/solver`; the application does not call it.
 3. **RFC 8785 Canonicalized, HMAC-SHA256 Authenticated Decision Receipts**: Terminal resolutions are canonicalized per RFC 8785, hashed with SHA-256, and sealed with HMAC-SHA256 using server-managed key rotation (`v1`/`v2`) and constant-time `timingSafeEqual` comparison. Receipts enable **zero-LLM, zero-database deterministic offline replay in $<1\text{ms}$**.
 
 ---
 
-## Live Demo & Offline Evaluation
+## Deployment Status
 
-| Surface | Target Route | Status / Access |
-|---|---|---|
-| 🌐 **Live Demo Web App** | [`https://settlemate-ai.onrender.com`](https://settlemate-ai.onrender.com) | Hosted on Render Free Tier *(sleeps when idle)* |
-| 🛡️ **Verification Hub** | [`/verify`](https://settlemate-ai.onrender.com/verify) | Interactive real-time test of all 7 financial invariants |
-| ⚖️ **Judge Mode Terminal** | [`/judge-mode`](https://settlemate-ai.onrender.com/judge-mode) | 7-step guided presentation with pre-canned edge cases |
-| 🏢 **Multi-Tenant / RLS** | [`/multi-tenant`](https://settlemate-ai.onrender.com/multi-tenant) | Row-level partition security across 4 isolated tenants |
-| 🔬 **Security Lab** | [`/security-lab`](https://settlemate-ai.onrender.com/security-lab) | Real-time simulator executing 10 adversarial exploit vectors |
-
-> [!NOTE]
-> **Deployment State Disclosure**: The live deployment is hosted on Render's free tier, which suspends containers after periods of inactivity (causing an initial 50-second wake-up or HTTP 503 while spinning up). SettleMate AI requires **zero external cloud services** to run locally. For an instantaneous, zero-latency evaluation, follow the [Local Development Setup](#local-development-setup) or run `docker compose up`.
+> [!WARNING]
+> **Public Deployment Status (October 2026):** Public deployment is currently unavailable following exhaustion of the previous Render free-tier limits. The application can be evaluated locally using the setup instructions below.
 
 ---
 
@@ -97,9 +90,9 @@ flowchart TD
 
     subgraph RESOLVE["4. Deterministic Resolution & Governance"]
         D1 --> E1[Confidence x Exposure Routing]
-        E1 -- "Split / Aggregated" --> E2[Google OR-Tools CP-SAT<br/>Integer subset-sum optimization]
+        E1 -- "Split / Aggregated" --> E2[Exact branch-and-bound<br/>Integer subset-sum optimization]
         E1 -- "High Exposure" --> E3[Dual-Control Maker/Checker<br/>ADMIN role authorization required]
-        E2 --> F1[Invariant Restoration Prover<br/>Proves ΣDr ≡ ΣCr and Δ = 0]
+        E2 --> F1[Invariant Restoration Check<br/>Checks ΣDr = ΣCr and Δ = 0]
         E3 --> F1
         B2 --> F1
     end
@@ -131,9 +124,9 @@ flowchart TD
 11. **Multi-Pass Reinvestigation**: If the Critic raises valid objections, the investigator refines the claim against newly cited evidence.
 12. **Confidence $\times$ Exposure Routing**: Calculates composite risk score:
     $$\text{Risk Score} = (1.0 - \text{Confidence}) \times \text{Exposure Amount}$$
-13. **OR-Tools CP-SAT Solver**: Resolves combinatorial $N:1$, $1:N$, and $N:M$ aggregate invoice allocations mathematically.
+13. **Combinatorial Invoice Matcher**: Selects the subset of invoices that one payment settles, using exact integer search.
 14. **Dual-Control Maker/Checker**: Material exposures require dual-control authorization by an authenticated `ADMIN`.
-15. **Invariant Restoration Proof**: Generates a minimal balancing journal pair (2 lines) and proves:
+15. **Invariant Restoration Check**: Generates a minimal balancing journal pair (2 lines) and checks, by exact integer evaluation:
     $$\Delta_{\text{before}} \neq 0 \implies \text{Imbalance}, \quad \Delta_{\text{after}} = 0 \implies \text{Restored}$$
 16. **Terminal Decision Receipt & Offline Replay**: Generates canonical RFC 8785 JSON sealed with HMAC-SHA256 for sub-millisecond, zero-LLM replay.
 
@@ -156,22 +149,29 @@ When all three conditions hold, the transaction **completely bypasses**:
 
 Instead, the match is confirmed deterministically in $<1\text{ms}$ and committed directly to the double-entry ledger. Only the remaining 2 exception records (e.g., partial refund, fee tier drift) trigger the advisory AI pipeline.
 
-### 2. Combinatorial Optimization via Google OR-Tools CP-SAT
+### 2. Combinatorial Invoice Matching
 
 When a single bank payout settles multiple invoices (or multiple split payments cover one invoice), naive matching faces an exponential search space ($O(2^n)$ subset-sum).
 
-SettleMate AI addresses this with a two-tiered combinatorial solver ([`src/lib/solver/cpsat-engine.ts`](src/lib/solver/cpsat-engine.ts) & [`services/solver/cpsat_solver.py`](services/solver/cpsat_solver.py)):
+SettleMate AI solves this exactly in [`src/lib/solver/cpsat-engine.ts`](src/lib/solver/cpsat-engine.ts). Despite the file name, it is a TypeScript branch-and-bound search, not OR-Tools:
 - **$O(1)$ Exact Match Fast-Path**: Instantly identifies single 1:1 invoice matches.
-- **CP-SAT Integer Programming Formulation**: Formulates boolean decision variables $x_i \in \{0, 1\}$ for each candidate invoice, subject to:
+- **Integer formulation**: Boolean decision variables $x_i \in \{0, 1\}$ for each candidate invoice, subject to:
   $$\sum_{i=1}^n x_i \cdot \text{amount}_i = \text{targetAmount} \pm \text{tolerance}$$
   $$1 \le \sum_{i=1}^n x_i \le K \quad (K \le 8)$$
 - **Lexicographic Objective**: Minimizes payment variance first, and breaks ties by selecting the smallest number of invoices:
   $$\min \left( |\text{selectedTotal} - \text{paymentAmount}| \times 1000 + \sum_{i=1}^n x_i \right)$$
-- **Deterministic Branch-and-Bound Fallback**: If the Google OR-Tools C++ extension is unavailable, an in-process TypeScript/Python branch-and-bound engine provides exact solutions with strict timeout ceilings.
+- **Exact, deterministic search**:
+  - Invoices are explored in sorted order, and branches that exceed the payment plus tolerance are pruned.
+  - At most the 50 smallest eligible invoices are searched. When larger candidates are dropped, a match is reported as `FEASIBLE`, not `OPTIMAL`.
+  - The search runs synchronously within `timeoutMs`.
+- **Independent checks**:
+  - `SolverResultVerifier` re-checks every result for ids, tenant, eligibility, totals, tolerance, objective and cardinality before use.
+  - `tests/solver-reference-differential.test.ts` compares the engine with a brute-force enumeration on 3,000 seeded cases.
+  - `scripts/solver_differential.py` runs the same cases through the OR-Tools CP-SAT model in [`services/solver/cpsat_solver.py`](services/solver/cpsat_solver.py): 3,000 of 3,000 agree on feasibility and on the optimal objective.
 
 ### 3. SMT-LIB v2 Formal Logic Generator & Deterministic Invariant Gating
 
-To guarantee mathematical financial safety ([`src/lib/ai/z3-prover.ts`](src/lib/ai/z3-prover.ts)):
+Invariant checks and their formal export ([`src/lib/ai/z3-prover.ts`](src/lib/ai/z3-prover.ts)). Despite the file name, no SMT solver runs inside the application:
 - **SMT-LIB v2 Specification Generation**: Formulates formal theorems in Quantifier-Free Linear Integer Arithmetic (`set-logic QF_LIA`):
   - `THEOREM_MONEY_CONSERVATION`:
     $$(P_{\text{gross}} - F_{\text{fee}} - T_{\text{tax}} - R_{\text{refund}} - D_{\text{chargeback}} = S_{\text{settled}} + \Delta_{\text{variance}})$$
@@ -181,8 +181,10 @@ To guarantee mathematical financial safety ([`src/lib/ai/z3-prover.ts`](src/lib/
     $$(\sum \text{Debits} \equiv \sum \text{Credits})$$
   - `THEOREM_CREDIT_SINGLE_CONSUMPTION`:
     $$(\sum \text{Allocated} \le \text{CreditTotal})$$
-  The generated SMT-LIB script with `(check-sat)` and `(get-model)` can be exported and verified by external solvers like Z3 or CVC5.
-- **In-Process Deterministic Execution**: Within the Node.js runtime, verification executes via deterministic local integer arithmetic checks rather than spawning an external C++ binary process. This guarantees sub-millisecond evaluation while producing a cryptographically signed proof summary.
+  The generated SMT-LIB script with `(check-sat)` can be exported and checked with an external solver. `scripts/smt_z3_differential.py` ran 2,000 generated scripts through Z3 5.3.2, and every verdict matched the in-process check.
+  - Inputs that are not safe integers (fractions, NaN, values beyond $2^{53}$) are refused with `SMT_ERROR`, because they cannot be represented exactly.
+  - Every variable is bound to a concrete value, so this is a checked computation, not a proof over all inputs.
+- **In-Process Deterministic Execution**: Within the Node.js runtime, verification executes via deterministic local integer arithmetic checks rather than spawning an external C++ binary process. This keeps evaluation fast; the summary hash is a SHA-256 digest, not a signature.
 
 ### 4. RFC 8785 Canonicalized, HMAC-SHA256 Authenticated Receipts
 
@@ -191,7 +193,8 @@ Every terminal financial decision produces an immutable audit receipt ([`src/lib
 - **Cryptographic Authentication**: A deterministic SHA-256 proof hash is computed over canonical bytes, followed by an HMAC-SHA256 signature using server-managed secret keys.
 - **Key Rotation**: Supports versioned keys (`v1`, `v2`) with backward-compatible verification.
 - **Constant-Time Verification**: Uses Node.js `timingSafeEqual` to prevent timing side-channel attacks.
-- **Zero-LLM Replay**: Any third-party auditor can verify the receipt offline in $<1\text{ms}$ with zero AI invocation and zero database queries.
+- **Zero-LLM Replay**: A holder of the server's receipt key can re-verify a receipt and replay its decision offline, with no AI invocation and no database query. HMAC is a shared-secret scheme: verifying requires the same key that signs, so it does not let an independent third party verify receipts, and anyone holding the key can create valid ones. Key management, rotation, and how legacy receipts are classified: [`docs/receipt-signing.md`](docs/receipt-signing.md).
+- **What `npm run verify:receipt` checks**: the offline verifier ([`scripts/verify-receipt.ts`](scripts/verify-receipt.ts)) recomputes the canonical hash, input fingerprint, arithmetic, invariants, policy hash, ledger seal and Merkle root. It does not check the HMAC signature. Its `VERIFIED` verdict therefore means the receipt is internally consistent, not that SettleMate issued it: anyone can build a receipt whose hashes recompute. Authenticity requires the server-side verifier (`POST /api/receipts/[id]/verify`), which checks the signature with the key ring.
 
 ---
 
@@ -226,8 +229,28 @@ All figures below are grounded directly in [`docs/CLAIMS_MATRIX.md`](docs/CLAIMS
 - **Streaming Capacity Test**: **894,454 rec/sec** across 10,000,000 synthetic streaming events (489MB peak heap).
 - **Hyperscale Horizon (100M – 10B)**: Mathematical $O(\text{chunk size})$ capacity model with horizontally partitioned consumer workers.
 
+### Re-run on 2026-10-29
+
+These were re-run on one laptop (Intel i5-12450H, 12 threads, Node.js 22). Throughput depends on hardware; the accuracy and count figures are deterministic.
+
+- **`npm run evaluate`:**
+  - Reproduced exactly: the same dataset fingerprint, 98.1% accuracy, 98% precision and recall, and 9 of 10 adversarial cases.
+  - Throughput: 1,892 rec/sec.
+- **`npm run scale`:**
+  - Accuracy reproduced: 99.9%, 100%, 100% and 100%.
+  - Throughput: 1,637.5, 1,693.2, 1,221.1 and 957.3 rec/sec for 10k, 25k, 50k and 100k records.
+- **`scripts/benchmark-finance-ops-loop.ts`:** 53 of 55 auto-matched (96.4%), reproduced.
+- **Subsystem benchmarks:**
+  - `benchmark-claim-verification.ts`: 249,938 claims/sec.
+  - `benchmark-nm-complexity.ts`: the 1,000-candidate cluster took 1.99 ms and the 20x20 prime cluster 3.44 ms.
+  - `benchmark-100k-chaos.ts`: 438,596 rec/sec, with 10,000 of 10,000 crashes recovered and 5,000 duplicate writes prevented.
+- **`scripts/stream-scale-benchmark.ts` (10M records):**
+  - 549,119 rec/sec, with a **peak heap of 1,059 MB** (1.24 GB maximum RSS). The 489 MB figure above was not reproduced.
+  - The 100M to 10B rows in that script are an estimate, not a measurement.
+- **Not re-run:** the policy shadow replay figure.
+
 ### 4. Comprehensive Test Matrix
-- **96 / 96 Test Suites Passing** across unit, integration, concurrency, RLS, and end-to-end suites.
+- **101 / 101 test files in `npm test` pass** (unit, integration, concurrency, RLS, end-to-end, the solver reference differential and the SMT consistency check), with the open fix PRs combined, under CI's environment. Re-run on 2026-10-29.
 - **24 / 24 Final Integrated Financial Pipeline Scenarios Passed** (`tests/final-integrated-financial-pipeline.test.ts`).
 - **30 / 30 Milestone 5 Cryptographic Receipt Scenarios Passed** (`tests/milestone5-terminal-receipt.test.ts`).
 - **25 / 25 Milestone 4 Minimal Correction & Invariant Prover Scenarios Passed** (`tests/milestone4-correction-proof.test.ts`).
@@ -248,7 +271,7 @@ Building resilient financial systems requires confronting real edge cases encoun
 * **Failure**: Processing a 10,000-record batch in the browser stalled the UI progress bar until the user manually refreshed the page.
 * **Root Cause**: React execution-effect cleanup and state dependencies caused the stepping loop to stop prematurely and left `isStepping` stuck. In addition, the `/step` endpoint had a rate-limit constraint that was too restrictive for continuous client-driven stepping.
 * **Engineering Fix**: Introduced a ref-based execution mutex and stable stepping cycle in the Operations Center, paired with dedicated higher-capacity job-step rate limiting and continuous micro-yielding.
-* **Regression Proof**: `tests/continuous-10k-job-progress-ux.test.ts` (5/5 continuous stepping assertions passed).
+* **Regression Proof**: `tests/continuous-10k-job-progress-ux.test.ts` (6/6 continuous stepping tests passed).
 
 ### 3. 100K Concurrent Primary-Key Races
 * **Failure**: High-concurrency worker runs encountered duplicate primary-key collision errors on job state persistence.
@@ -271,7 +294,7 @@ Building resilient financial systems requires confronting real edge cases encoun
 ### 6. Live Verification Progress Stuck at 0%
 * **Failure**: Clicking "Run Verification" on `/verify` showed "Running (0%)" with a static 8% progress bar sliver until execution jumped directly to 100%.
 * **Root Cause**: `POST /api/verify/run` launched an unmonitored background `setTimeout` while the client polled with a slow 1,200ms `GET` request. The backend completed before the first poll returned, and CSS hardcoded `Math.max(8, progress)`.
-* **Engineering Fix**: Implemented client-driven stepped execution via `POST /api/verify/progress/:jobId` with `mode: "stepped"`. Each suite executes on-demand, updates the database, and returns authoritative progress ($14\% \rightarrow 29\% \rightarrow 43\% \rightarrow 57\% \rightarrow 71\% \rightarrow 86\% \rightarrow 100\%$) with `Math.max(8, ...)` removed.
+* **Engineering Fix**: Implemented client-driven stepped execution via `POST /api/verify/progress/:jobId` with `mode: "stepped"`. Each suite executes on-demand, updates the database, and returns authoritative progress (14% → 29% → 43% → 57% → 71% → 86% → 100%) with `Math.max(8, ...)` removed.
 * **Regression Proof**: `src/app/api/verify/progress/verify-progress.test.ts` (All 4 stepped progress tests passed).
 
 ---
@@ -289,7 +312,7 @@ SettleMate AI implements defense-in-depth across the entire financial execution 
 5. **Prompt-Injection Quarantine**: External bank narrations and CSV metadata are treated as untrusted strings. The AI prompt template isolates inputs, and outputs must match the strict `AIClaim[]` AST schema.
 6. **Outbound SSRF Protection**: Webhook dispatch validates target URLs against an IP whitelist, blocking local loopback interfaces, private subnets (RFC 1918), and cloud metadata endpoints (`169.254.169.254`) via `src/lib/security/ssrf-guard.ts`.
 7. **Rate Limiting**: Token bucket rate limiters protect public APIs (100 req/min) and auth endpoints (10 attempts/min) with standard `429 Too Many Requests` headers.
-8. **Fail-Closed Configuration**: In production (`NODE_ENV=production`), a missing `AUTH_SECRET` triggers an immediate startup crash rather than falling back to default keys.
+8. **Fail-Closed Secret Configuration**: In production (`NODE_ENV=production`), session signing refuses to run without `AUTH_SECRET`. Receipt signing refuses to run without the active `RECEIPT_SIGNING_SECRET_V<n>`, and `/api/v1/ready` reports it as failed. Webhook signing and encryption refuse to run without `WEBHOOK_SECRET` and `WEBHOOK_ENCRYPTION_KEY`. Secrets that were committed to this repository as defaults in the past are rejected everywhere. Receipts that reproduce with those old public secrets verify as `INVALID / LEGACY_PUBLIC_KEY` and are never trusted.
 
 ---
 
@@ -313,7 +336,7 @@ npm run scale
 # 5. Run milestone-specific verification suites
 npm run test:m1          # Milestone 1: Innovation Backbone
 npm run test:m2          # Milestone 2: Confidence x Exposure Routing
-npm run test:m3          # Milestone 3: OR-Tools CP-SAT Solver
+npm run test:m3          # Milestone 3: Combinatorial invoice matching
 npm run test:m4          # Milestone 4: Minimal Correction & Invariant Prover
 npm run test:m5          # Milestone 5: Terminal Decision Receipts & Replay
 npm run test:pipeline    # Final Integrated Financial Pipeline (24/24 Scenarios)
@@ -322,6 +345,36 @@ npm run test:pipeline    # Final Integrated Financial Pipeline (24/24 Scenarios)
 npm run test:10k-progress       # Continuous 10k bounded step execution
 npm run test:cancellation:1m   # 1M workload cooperative cancellation (<1000ms latency)
 ```
+
+### Prerequisites & Required Runtimes
+
+* **Node.js**: v20.x or v22.x LTS (`node -v`)
+* **Package Manager**: npm v10+ (`npm -v`)
+* **Python** (optional, for the OR-Tools and Z3 cross-check scripts): Python 3.10+ / 3.12 (`python3 --version`)
+* **Database**: Local SQLite via `better-sqlite3` (default) or PostgreSQL 15+ (for production mode)
+
+### Environment Configuration
+
+Copy the example environment template and configure local values:
+
+```bash
+cp .env.example .env
+```
+
+| Variable Name | Required | Purpose | Default / Example |
+| :--- | :--- | :--- | :--- |
+| `NODE_ENV` | Yes | Runtime environment mode | `development` |
+| `PORT` | No | HTTP server port | `3000` |
+| `AUTH_SECRET` | Yes | HMAC session and token signing key | Random 32+ char hex string |
+| `DATABASE_URL` | Yes | Prisma relational connection string | `file:./dev.db` |
+| `SETTLEMATE_DB_PATH` | Yes | Local SQLite database file path | `./dev.db` |
+| `WEBHOOK_SECRET` | Production | Default outbound webhook signing secret (at least 32 bytes) | `openssl rand -hex 32` |
+| `WEBHOOK_ENCRYPTION_KEY` | Production | AES-256-GCM key for webhook secrets at rest (64 hex characters) | `openssl rand -hex 32` |
+| `RECEIPT_SIGNING_SECRET_V1` | Production | Receipt HMAC key for version v1 (at least 32 bytes) | `openssl rand -base64 32`; unset outside production = ephemeral, untrusted development key |
+| `RECEIPT_SIGNING_ACTIVE_VERSION` | No | Key version used to sign new receipts | `v1` (default) |
+| `RECEIPT_SIGNING_SECRET_V2` | For rotation | Receipt HMAC key for version v2; must differ from v1 | Set together with `RECEIPT_SIGNING_ACTIVE_VERSION=v2` to rotate |
+| `GEMINI_API_KEY` | No | Advisory AI investigator integration | Optional (falls back to rules) |
+| `OPENAI_API_KEY` | No | Alternate advisory AI model | Optional |
 
 ### Local Development Setup
 
@@ -333,11 +386,19 @@ cd settlemate-ai
 # 2. Install dependencies
 npm install
 
-# 3. Initialize local SQLite database
+# 3. Initialize local database schemas and Prisma client
 npm run db:init
 npm run prisma:generate
 
-# 4. Start Next.js development server
+# 4. (Optional) Python OR-Tools CP-SAT service (a reference model; the app does not call it)
+cd services/solver
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --port 8000 &
+cd ../..
+
+# 5. Start Next.js development server
 npm run dev
 ```
 
@@ -345,8 +406,10 @@ Visit [`http://localhost:3000`](http://localhost:3000) to access the application
 
 ### Docker Compose Setup
 
+For a containerized environment running Next.js alongside PostgreSQL:
+
 ```bash
-# Start Next.js application and PostgreSQL database container
+# Start application and PostgreSQL containers
 docker compose up -d
 ```
 
@@ -354,11 +417,12 @@ docker compose up -d
 
 ## Honest Limitations
 
-* **Combinatorial Boundary**: The in-memory meet-in-the-middle solver is bounded at $2^{16}$ ($65,536$) combinations. Larger unindexed combinations route to Google OR-Tools CP-SAT or human review.
+* **Combinatorial Boundary**: Many-to-many groups larger than 10×10 use a pruned search with a deterministic review fallback (`src/lib/reconciliation/cardinality.ts`). Nothing is routed to OR-Tools.
+* **Blocking search**: Invoice matching runs on the Node.js event loop for up to `timeoutMs` (maximum 10 s per request). A run that times out can give a different result when replayed on a faster or slower machine.
 * **Sub-Tolerance Rounding**: Settlement variances under ₹1.00 (such as ₹0.47 fractional tax rounding) are intentionally not flagged as exceptions to prevent operational alert fatigue.
 * **Confidence Bucket Calibration**: The 41–60% confidence bucket exhibits 89% empirical accuracy on ambiguous multi-candidate rows; confidence weights are deliberately not inflated to falsely claim 100% precision on noisy data.
-* **Database Target**: Local development uses SQLite (`better-sqlite3` in WAL mode) for zero-dependency portability; multi-node production deployments require PostgreSQL with `pg.Pool` connection pooling.
-* **Hosted Demo Availability**: The public Render instance is on a free-tier sleep schedule. Local and Docker environments provide the primary, zero-latency evaluation experience.
+* **Database Target**: Local development uses SQLite (`better-sqlite3` in WAL mode) for portability; multi-node deployments require PostgreSQL with `pg.Pool` connection pooling.
+* **Public Cloud Deployment**: The previous Render free-tier instance is offline following platform quota exhaustion. Full application functionality is evaluated locally via the documented environment setup or Docker Compose.
 
 ---
 
@@ -380,12 +444,12 @@ settlemate-ai/
 │   │   ├── receipts/             # Canonical RFC 8785 JSON builder, signer, verifier, replay
 │   │   ├── reconciliation/       # Deterministic matching engine, confidence, scale partitioning
 │   │   ├── security/             # Rate limiters, SSRF guard, API headers, input sanitizers
-│   │   ├── solver/               # Google OR-Tools CP-SAT invoice matching solver
+│   │   ├── solver/               # Exact invoice-matching search, verifier and replay
 │   │   ├── storage/              # Dual PostgreSQL & SQLite unified repositories
 │   │   ├── verify/               # In-process compiled verification runner & progress store
 │   │   └── workers/              # Durable job worker, bounded stepping, cooperative cancellation
 ├── services/
-│   └── solver/                   # Python FastAPI service with Google OR-Tools CP-SAT bindings
+│   └── solver/                   # Python OR-Tools CP-SAT reference model (not called by the app)
 ├── prisma/
 │   ├── schema.prisma             # SQLite schema for local dev & offline demo
 │   └── schema.postgresql.prisma  # PostgreSQL schema for cloud production
@@ -396,14 +460,11 @@ settlemate-ai/
 
 ---
 
-## Author & Engineering Contact
+## Authorship & Attribution
 
-**Akshaya R**<br>
-- **GitHub**: [@AkshayAlgoX](https://github.com/AkshayAlgoX)<br>
-- **Portfolio**: [akshayalgox.github.io](https://akshayalgox.github.io/)<br>
-- **Education**: Computer Science Undergraduate (Graduating 2027)<br>
-- **Industry Experience**: Software Engineer Intern at Veanka Innosol · Former Team Lead & Java Developer Intern at Infosys Springboard<br>
-- **Competition Track Record**: HackerRank Orchestrate Global Rank #85/3,062 (Top 2.78%) · Amazon ML Challenge Team Duty_Drive (Rank #1,200)
+* **Author:** Akshaya R ([@AkshayAlgoX](https://github.com/AkshayAlgoX))
+* **Specification:** Built for the Razorpay Track 04 Autonomous Finance-Ops challenge.
+* **License:** MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
