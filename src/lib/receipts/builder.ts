@@ -22,7 +22,7 @@ import type {
   CorrectionDecisionCommitment,
   PolicyVersions,
 } from "./types";
-import { signReceipt, CURRENT_SIGNING_KEY_VERSION } from "./signer";
+import { signReceipt, getActiveSigningKeyVersion } from "./signer";
 import { TerminalReceiptRepository } from "./repository";
 
 export interface BuildTerminalReceiptParams {
@@ -61,7 +61,7 @@ export async function createTerminalDecisionReceipt(
   params: BuildTerminalReceiptParams
 ): Promise<TerminalDecisionReceipt> {
   const now = new Date().toISOString();
-  const keyVersion = params.signingKeyVersion || CURRENT_SIGNING_KEY_VERSION;
+  const keyVersion = params.signingKeyVersion || getActiveSigningKeyVersion();
 
   const policyVersions: PolicyVersions = {
     ...DEFAULT_POLICY_VERSIONS,

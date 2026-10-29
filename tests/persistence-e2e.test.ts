@@ -188,7 +188,8 @@ async function main() {
 
   } finally {
     closeDatabase();
-    process.env.SETTLEMATE_DB_PATH = originalDbPathEnv;
+    if (originalDbPathEnv === undefined) delete process.env.SETTLEMATE_DB_PATH;
+    else process.env.SETTLEMATE_DB_PATH = originalDbPathEnv;
     // Clean up temporary test directory
     try {
       fs.rmSync(testDir, { recursive: true, force: true });

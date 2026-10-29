@@ -18,9 +18,13 @@ import { verifyReceiptSignature } from "./signer";
 import { replayTerminalReceipt } from "./replay";
 import { metrics } from "@/lib/observability/metrics";
 
+/**
+ * @param customSecret Must be undefined. Verification always uses the server
+ *   key ring; the parameter remains only for call-site compatibility.
+ */
 export function verifyTerminalReceipt(
   rawReceipt: unknown,
-  customSecret?: string,
+  customSecret?: undefined,
   requestingTenantId?: string
 ): TerminalReceiptVerificationReport {
   const t0 = performance.now();
@@ -41,6 +45,7 @@ export function verifyTerminalReceipt(
     const record = (typeof rawReceipt === "object" && rawReceipt !== null ? rawReceipt : {}) as Record<string, unknown>;
     return {
       verdict: "INVALID",
+      trusted: false,
       receiptId: typeof record.receiptId === "string" ? record.receiptId : "unknown_receipt",
       transactionId: typeof record.transactionId === "string" ? record.transactionId : "unknown_tx",
       tenantId: typeof record.tenantId === "string" ? record.tenantId : "unknown_tenant",
@@ -72,6 +77,7 @@ export function verifyTerminalReceipt(
     });
     return {
       verdict: "INVALID",
+      trusted: false,
       receiptId: receipt.receiptId,
       transactionId: receipt.transactionId,
       tenantId: receipt.tenantId,
@@ -88,6 +94,7 @@ export function verifyTerminalReceipt(
 
   // 2. Step 2 & 3: Cryptographic Proof Hash & HMAC Signature Verification
   const sigResult = verifyReceiptSignature(receipt, customSecret);
+  const trusted = sigResult.isValid && sigResult.trust === "TRUSTED";
 
   if (!sigResult.isValid) {
     metrics.receiptsInvalidTotal.inc();
@@ -100,6 +107,8 @@ export function verifyTerminalReceipt(
       });
       return {
         verdict: "INVALID",
+        trusted: false,
+        signatureTrust: sigResult.trust,
         receiptId: receipt.receiptId,
         transactionId: receipt.transactionId,
         tenantId: receipt.tenantId,
@@ -125,14 +134,22 @@ export function verifyTerminalReceipt(
       status: "FAIL",
       detail: sigResult.error || "HMAC-SHA256 signature mismatch",
     });
+    const failureReason =
+      sigResult.trust === "UNTRUSTED_LEGACY_PUBLIC_KEY"
+        ? "LEGACY_PUBLIC_KEY"
+        : sigResult.error?.startsWith("UNKNOWN_KEY_VERSION")
+          ? "KEY_VERSION_UNKNOWN"
+          : "SIGNATURE_MISMATCH";
     return {
       verdict: "INVALID",
+      trusted: false,
+      signatureTrust: sigResult.trust,
       receiptId: receipt.receiptId,
       transactionId: receipt.transactionId,
       tenantId: receipt.tenantId,
       finalDecision: receipt.finalDecision,
       steps,
-      failureReason: "SIGNATURE_MISMATCH",
+      failureReason,
       errorMessage: sigResult.error,
       canonicalProofHash: receipt.proofHash,
       recomputedProofHash: sigResult.recomputedHash,
@@ -150,7 +167,10 @@ export function verifyTerminalReceipt(
   steps.push({
     step: "HMAC_SIGNATURE_CHECK",
     status: "PASS",
-    detail: `HMAC-SHA256 signature verified with key version '${receipt.signingKeyVersion}'`,
+    detail:
+      sigResult.trust === "TRUSTED"
+        ? `HMAC-SHA256 signature verified with governed key version '${receipt.signingKeyVersion}'`
+        : `HMAC-SHA256 signature verified with an ephemeral development key '${receipt.signingKeyVersion}' (not trusted as financial proof)`,
   });
 
   // 3. Step 4: Commitments Integrity
@@ -203,11 +223,13 @@ export function verifyTerminalReceipt(
     });
     return {
       verdict: "INVALID",
+      trusted: false,
       receiptId: receipt.receiptId,
       transactionId: receipt.transactionId,
       tenantId: receipt.tenantId,
       finalDecision: receipt.finalDecision,
       steps,
+      signatureTrust: sigResult.trust,
       failureReason: "REPLAY_DIVERGENCE",
       errorMessage: errMsg,
       canonicalProofHash: receipt.proofHash,
@@ -223,6 +245,8 @@ export function verifyTerminalReceipt(
 
   return {
     verdict: "VALID",
+    trusted,
+    signatureTrust: sigResult.trust,
     receiptId: receipt.receiptId,
     transactionId: receipt.transactionId,
     tenantId: receipt.tenantId,

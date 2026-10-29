@@ -23,3 +23,9 @@ services:
         sync: false
       - key: METRICS_TOKEN
         sync: false
+      # Receipt HMAC key for the active version (v1). Render generates a random
+      # 256-bit value. See docs/receipt-signing.md before rotating.
+      - key: RECEIPT_SIGNING_SECRET_V1
+        generateValue: true
+      - key: RECEIPT_SIGNING_ACTIVE_VERSION
+        value: v1

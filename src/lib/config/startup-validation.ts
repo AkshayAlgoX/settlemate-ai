@@ -6,6 +6,8 @@
  * Fails fast with clear actionable error messages WITHOUT leaking secret values.
  */
 
+import { loadReceiptKeyRing } from "@/lib/receipts/signer";
+
 export interface ValidationReport {
   valid: boolean;
   environment: string;
@@ -15,6 +17,9 @@ export interface ValidationReport {
     error?: string;
   }>;
 }
+
+// Same rules the webhook signer and the at-rest encryption enforce at first use.
+import { getDefaultWebhookSigningSecret, getWebhookEncryptionKey } from "@/lib/webhooks/webhook-secrets";
 
 export function validateStartupConfig(): ValidationReport {
   const isProduction = process.env.NODE_ENV === "production";
@@ -54,7 +59,16 @@ export function validateStartupConfig(): ValidationReport {
     checks.push({ name: "AUTH_SECRET", passed: true });
   }
 
-  // 3. Port & Host validation
+  // 3. Receipt signing key ring (same policy the signer enforces)
+  try {
+    loadReceiptKeyRing(process.env);
+    checks.push({ name: "RECEIPT_SIGNING_KEYS", passed: true });
+  } catch (err) {
+    // The error names the variable and the rule, never the value.
+    checks.push({ name: "RECEIPT_SIGNING_KEYS", passed: false, error: (err as Error).message });
+  }
+
+  // 4. Port & Host validation
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   if (isNaN(port) || port < 1 || port > 65535) {
     checks.push({
@@ -64,6 +78,16 @@ export function validateStartupConfig(): ValidationReport {
     });
   } else {
     checks.push({ name: "PORT", passed: true });
+  }
+
+  // Webhook signing secret and at-rest encryption key: required in
+  // production, and rejected anywhere if set to a public or malformed value.
+  try {
+    getDefaultWebhookSigningSecret(process.env);
+    getWebhookEncryptionKey(process.env);
+    checks.push({ name: "WEBHOOK_SECRETS", passed: true });
+  } catch (err) {
+    checks.push({ name: "WEBHOOK_SECRETS", passed: false, error: (err as Error).message });
   }
 
   const valid = checks.every((c) => c.passed);

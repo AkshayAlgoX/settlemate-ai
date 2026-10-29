@@ -187,6 +187,11 @@ export const TerminalReceiptCard: React.FC<TerminalReceiptCardProps> = ({
                   {report.failureReason}
                 </span>
               )}
+              {report.verdict === "VALID" && !report.trusted && (
+                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                  DEVELOPMENT KEY · NOT FINANCIAL PROOF
+                </span>
+              )}
             </div>
             <span className="text-xs text-muted-foreground">
               Verified in {report.latencyMs}ms

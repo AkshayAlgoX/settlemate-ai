@@ -14,7 +14,7 @@
  *  10. Observability Metrics Integration
  */
 
-import { randomUUID, createHmac, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { randomUUID, createHmac } from "node:crypto";
 import { evaluateOutboundUrl } from "@/lib/security/ssrf-guard";
 import { metrics } from "@/lib/observability/metrics";
 import { isPostgres, prisma } from "@/lib/db";
@@ -49,41 +49,9 @@ export interface WebhookOutboxEntry {
 // In-memory fallback outbox store for local development
 const localOutbox: Map<string, WebhookOutboxEntry> = new Map();
 
-// Secret encryption key derived from environment or fallback
-const ENCRYPTION_KEY = Buffer.from(
-  (process.env.WEBHOOK_ENCRYPTION_KEY || "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").slice(0, 64),
-  "hex"
-);
 
-/**
- * Encrypts a webhook signing secret at rest using AES-256-GCM.
- */
-export function encryptWebhookSecret(secret: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
-  let encrypted = cipher.update(secret, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  const authTag = cipher.getAuthTag().toString("hex");
-  return `${iv.toString("hex")}:${authTag}:${encrypted}`;
-}
-
-/**
- * Decrypts a webhook signing secret from AES-256-GCM format.
- */
-export function decryptWebhookSecret(encryptedStr: string): string {
-  try {
-    const parts = encryptedStr.split(":");
-    if (parts.length !== 3) return encryptedStr; // Plaintext fallback for legacy
-    const [ivHex, tagHex, dataHex] = parts;
-    const decipher = createDecipheriv("aes-256-gcm", ENCRYPTION_KEY, Buffer.from(ivHex, "hex"));
-    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
-    let decrypted = decipher.update(dataHex, "hex", "utf8");
-    decrypted += decipher.final("utf8");
-    return decrypted;
-  } catch {
-    return encryptedStr;
-  }
-}
+// Kept here for existing importers; implemented next to the key handling.
+export { encryptWebhookSecret, decryptWebhookSecret } from "@/lib/webhooks/webhook-secrets";
 
 /**
  * Generates canonical HMAC-SHA256 signature header.
