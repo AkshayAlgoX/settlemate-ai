@@ -40,10 +40,17 @@ export const InvoiceStatusEnum = z.enum([
 ]);
 export type InvoiceStatus = z.infer<typeof InvoiceStatusEnum>;
 
+/**
+ * Largest accepted amount in minor units (10^14 paise = ₹1 lakh crore).
+ * At most 20 invoices are summed, so every intermediate total stays below
+ * Number.MAX_SAFE_INTEGER and integer arithmetic remains exact.
+ */
+export const MAX_AMOUNT_MINOR = 100_000_000_000_000;
+
 export const CandidateInvoiceSchema = z.object({
   invoiceId: z.string().min(1).max(100),
   tenantId: z.string().min(1).max(100),
-  amountMinor: z.number().int().positive(),
+  amountMinor: z.number().int().positive().max(MAX_AMOUNT_MINOR),
   currency: z.string().min(1).refine(
     (c) => SUPPORTED_CURRENCIES.includes(c.toUpperCase().trim()),
     { message: "Unsupported currency code" }
@@ -58,12 +65,12 @@ export type CandidateInvoice = z.infer<typeof CandidateInvoiceSchema>;
 export const InvoiceMatchRequestSchema = z.object({
   paymentId: z.string().min(1).max(100),
   tenantId: z.string().min(1).max(100),
-  paymentAmountMinor: z.number().int().positive(),
+  paymentAmountMinor: z.number().int().positive().max(MAX_AMOUNT_MINOR),
   currency: z.string().min(1).refine(
     (c) => SUPPORTED_CURRENCIES.includes(c.toUpperCase().trim()),
     { message: "Unsupported currency code" }
   ),
-  toleranceMinor: z.number().int().nonnegative().default(0),
+  toleranceMinor: z.number().int().nonnegative().max(MAX_AMOUNT_MINOR).default(0),
   allowPartialPayment: z.boolean().default(false),
   maxInvoicesPerSplit: z.number().int().min(1).max(20).default(8),
   timeoutMs: z.number().int().min(100).max(10000).default(2000),

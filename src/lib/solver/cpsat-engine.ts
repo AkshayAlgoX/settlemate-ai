@@ -1,7 +1,14 @@
 /*
- * SettleMate AI — Milestone 3: CP-SAT Combinatorial Invoice Matching Engine
+ * SettleMate AI — Milestone 3: Combinatorial Invoice Matching Engine
  *
- * Implements exact integer minor-unit CP-SAT subset-sum optimization with:
+ * An exact, deterministic branch-and-bound search in TypeScript over integer
+ * minor units. It is not OR-Tools: the CP-SAT model in services/solver is a
+ * separate Python service that the application does not call. Both implement
+ * the same policy, and tests/solver-reference-differential.test.ts plus
+ * scripts/solver_differential.py check this engine against a brute-force
+ * reference and against CP-SAT.
+ *
+ * Implements:
  *   - Lexicographic objective: minimize |total - payment| * 1000 + invoice_count
  *   - Bounded search depth & deterministic branch-and-bound
  *   - Strict timeout ceiling enforcement
@@ -106,9 +113,17 @@ export class CPSatInvoiceMatchingEngine {
     // Sort deterministically: ascending by amount, then lexically by ID
     eligibleInvoices.sort((a, b) => a.amountMinor - b.amountMinor || a.invoiceId.localeCompare(b.invoiceId));
 
-    if (eligibleInvoices.length > policy.maxCandidatesCap) {
+    // Only the smallest maxCandidatesCap eligible invoices are searched. A
+    // result over a truncated set is the best among those candidates, not a
+    // proven optimum over the request, so it is reported as FEASIBLE.
+    const droppedCandidates = Math.max(0, eligibleInvoices.length - policy.maxCandidatesCap);
+    if (droppedCandidates > 0) {
       eligibleInvoices.length = policy.maxCandidatesCap;
     }
+    const truncationNote =
+      droppedCandidates > 0
+        ? ` Searched the ${policy.maxCandidatesCap} smallest eligible invoices; ${droppedCandidates} larger candidate(s) were not considered.`
+        : "";
 
     const candidatesCount = eligibleInvoices.length;
 
@@ -209,7 +224,7 @@ export class CPSatInvoiceMatchingEngine {
         solveId,
         req,
         status: matchStatus,
-        solverStatus: "OPTIMAL",
+        solverStatus: droppedCandidates > 0 ? "FEASIBLE" : "OPTIMAL",
         selectedInvoiceIds: sol.selectedIds,
         selectedTotalMinor: sol.totalMinor,
         paymentAmountMinor: paymentAmount,
@@ -218,7 +233,7 @@ export class CPSatInvoiceMatchingEngine {
         objectiveValue: sol.objectiveValue,
         solveDurationMs: duration,
         candidatesConsideredCount: candidatesCount,
-        verificationReason: `Optimal subset of ${sol.selectedIds.length} invoice(s) matches payment (difference: ₹${(sol.differenceMinor / 100).toFixed(2)})`,
+        verificationReason: `${droppedCandidates > 0 ? "Best" : "Optimal"} subset of ${sol.selectedIds.length} invoice(s) matches payment (difference: ₹${(sol.differenceMinor / 100).toFixed(2)}).${truncationNote}`,
         createdAt,
         policy,
       });
@@ -254,7 +269,7 @@ export class CPSatInvoiceMatchingEngine {
     }
 
     // 7. No Feasible Match
-    return this.buildNoMatchResponse(solveId, req, candidatesCount, duration, createdAt, policy);
+    return this.buildNoMatchResponse(solveId, req, candidatesCount, duration, createdAt, policy, truncationNote);
   }
 
   private buildSuccessResponse(params: {
@@ -320,7 +335,8 @@ export class CPSatInvoiceMatchingEngine {
     candidatesCount: number,
     durationMs: number,
     createdAt: string,
-    policy: SolverPolicyConfig
+    policy: SolverPolicyConfig,
+    truncationNote = ""
   ): InvoiceMatchResponse {
     const proofSignature = createHash("sha256")
       .update(`NO_MATCH:${solveId}:${req.paymentId}`)
@@ -342,7 +358,7 @@ export class CPSatInvoiceMatchingEngine {
       solveDurationMs: Math.round(durationMs * 100) / 100,
       candidatesConsideredCount: candidatesCount,
       isVerifiedDeterministically: true,
-      verificationReason: `No feasible subset of candidate invoices satisfies payment amount within tolerance ±₹${(req.toleranceMinor / 100).toFixed(2)}`,
+      verificationReason: `No feasible subset of candidate invoices satisfies payment amount within tolerance ±₹${(req.toleranceMinor / 100).toFixed(2)}.${truncationNote}`,
       proofSignature,
       policyVersion: policy.version,
       createdAt,
