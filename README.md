@@ -92,7 +92,7 @@ flowchart TD
         D1 --> E1[Confidence x Exposure Routing]
         E1 -- "Split / Aggregated" --> E2[Exact branch-and-bound<br/>Integer subset-sum optimization]
         E1 -- "High Exposure" --> E3[Dual-Control Maker/Checker<br/>ADMIN role authorization required]
-        E2 --> F1[Invariant Restoration Prover<br/>Proves ΣDr ≡ ΣCr and Δ = 0]
+        E2 --> F1[Invariant Restoration Check<br/>Checks ΣDr = ΣCr and Δ = 0]
         E3 --> F1
         B2 --> F1
     end
@@ -126,7 +126,7 @@ flowchart TD
     $$\text{Risk Score} = (1.0 - \text{Confidence}) \times \text{Exposure Amount}$$
 13. **Combinatorial Invoice Matcher**: Selects the subset of invoices that one payment settles, using exact integer search.
 14. **Dual-Control Maker/Checker**: Material exposures require dual-control authorization by an authenticated `ADMIN`.
-15. **Invariant Restoration Proof**: Generates a minimal balancing journal pair (2 lines) and proves:
+15. **Invariant Restoration Check**: Generates a minimal balancing journal pair (2 lines) and checks, by exact integer evaluation:
     $$\Delta_{\text{before}} \neq 0 \implies \text{Imbalance}, \quad \Delta_{\text{after}} = 0 \implies \text{Restored}$$
 16. **Terminal Decision Receipt & Offline Replay**: Generates canonical RFC 8785 JSON sealed with HMAC-SHA256 for sub-millisecond, zero-LLM replay.
 
@@ -250,7 +250,7 @@ These were re-run on one laptop (Intel i5-12450H, 12 threads, Node.js 22). Throu
 - **Not re-run:** the policy shadow replay figure.
 
 ### 4. Comprehensive Test Matrix
-- **96 / 96 Test Suites Passing** across unit, integration, concurrency, RLS, and end-to-end suites.
+- **101 / 101 test files in `npm test` pass** (unit, integration, concurrency, RLS, end-to-end, the solver reference differential and the SMT consistency check), with the open fix PRs combined, under CI's environment. Re-run on 2026-10-29.
 - **24 / 24 Final Integrated Financial Pipeline Scenarios Passed** (`tests/final-integrated-financial-pipeline.test.ts`).
 - **30 / 30 Milestone 5 Cryptographic Receipt Scenarios Passed** (`tests/milestone5-terminal-receipt.test.ts`).
 - **25 / 25 Milestone 4 Minimal Correction & Invariant Prover Scenarios Passed** (`tests/milestone4-correction-proof.test.ts`).
@@ -271,7 +271,7 @@ Building resilient financial systems requires confronting real edge cases encoun
 * **Failure**: Processing a 10,000-record batch in the browser stalled the UI progress bar until the user manually refreshed the page.
 * **Root Cause**: React execution-effect cleanup and state dependencies caused the stepping loop to stop prematurely and left `isStepping` stuck. In addition, the `/step` endpoint had a rate-limit constraint that was too restrictive for continuous client-driven stepping.
 * **Engineering Fix**: Introduced a ref-based execution mutex and stable stepping cycle in the Operations Center, paired with dedicated higher-capacity job-step rate limiting and continuous micro-yielding.
-* **Regression Proof**: `tests/continuous-10k-job-progress-ux.test.ts` (5/5 continuous stepping assertions passed).
+* **Regression Proof**: `tests/continuous-10k-job-progress-ux.test.ts` (6/6 continuous stepping tests passed).
 
 ### 3. 100K Concurrent Primary-Key Races
 * **Failure**: High-concurrency worker runs encountered duplicate primary-key collision errors on job state persistence.
