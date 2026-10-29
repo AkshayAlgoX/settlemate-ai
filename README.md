@@ -194,6 +194,7 @@ Every terminal financial decision produces an immutable audit receipt ([`src/lib
 - **Key Rotation**: Supports versioned keys (`v1`, `v2`) with backward-compatible verification.
 - **Constant-Time Verification**: Uses Node.js `timingSafeEqual` to prevent timing side-channel attacks.
 - **Zero-LLM Replay**: A holder of the server's receipt key can re-verify a receipt and replay its decision offline, with no AI invocation and no database query. HMAC is a shared-secret scheme: verifying requires the same key that signs, so it does not let an independent third party verify receipts, and anyone holding the key can create valid ones. Key management, rotation, and how legacy receipts are classified: [`docs/receipt-signing.md`](docs/receipt-signing.md).
+- **What `npm run verify:receipt` checks**: the offline verifier ([`scripts/verify-receipt.ts`](scripts/verify-receipt.ts)) recomputes the canonical hash, input fingerprint, arithmetic, invariants, policy hash, ledger seal and Merkle root. It does not check the HMAC signature. Its `VERIFIED` verdict therefore means the receipt is internally consistent, not that SettleMate issued it: anyone can build a receipt whose hashes recompute. Authenticity requires the server-side verifier (`POST /api/receipts/[id]/verify`), which checks the signature with the key ring.
 
 ---
 
