@@ -12,6 +12,8 @@
  *   8. SSRF Pre-flight Defense against Cloud Metadata & Private IPs
  *   9. Real HTTP Webhook Dispatch to Live HTTP Server with Delivery ID Tracking
  *  10. Exponential Backoff, DLQ Transition & Authorized Administrative Replay
+ *  11. Webhook secret governance: no public defaults, fail closed in production,
+ *      ephemeral development values, authenticated decryption failures throw
  */
 
 import assert from "node:assert/strict";
@@ -31,6 +33,14 @@ import {
   replayDeadLetterWebhook,
   _clearOutboxForTests,
 } from "../src/lib/webhooks/webhook-outbox-worker";
+import {
+  KNOWN_PUBLIC_WEBHOOK_VALUES,
+  WebhookSecretConfigError,
+  getDefaultWebhookSigningSecret,
+  getWebhookEncryptionKey,
+  resetEphemeralWebhookSecretsForTests,
+} from "../src/lib/webhooks/webhook-secrets";
+import { dispatchWebhook } from "../src/lib/api/v1-store";
 
 async function test(name: string, fn: () => void | Promise<void>) {
   try {
@@ -291,8 +301,73 @@ async function main() {
     assert.equal(replayed.attempts, 0, "Replay must reset attempt count");
   });
 
+  // ---------------------------------------------------------------------------
+  // TEST 9-12: Webhook secret governance
+  // ---------------------------------------------------------------------------
+  const isConfigError = (pattern: RegExp) => (err: unknown) =>
+    err instanceof WebhookSecretConfigError && pattern.test((err as Error).message);
+
+  await test("TEST 9: Public former defaults are rejected for signing and encryption in every environment", () => {
+    for (const NODE_ENV of ["production", "development"] as const) {
+      for (const value of KNOWN_PUBLIC_WEBHOOK_VALUES) {
+        assert.throws(() => getDefaultWebhookSigningSecret({ NODE_ENV, WEBHOOK_SHARED_SECRET: value }), isConfigError(/publicly known/));
+        assert.throws(() => getWebhookEncryptionKey({ NODE_ENV, WEBHOOK_ENCRYPTION_KEY: value }), isConfigError(/publicly known/));
+      }
+    }
+  });
+
+  await test("TEST 10: Production fails closed on missing, short, placeholder or malformed values", async () => {
+    assert.throws(() => getDefaultWebhookSigningSecret({ NODE_ENV: "production" }), isConfigError(/must be set in production/));
+    assert.throws(() => getWebhookEncryptionKey({ NODE_ENV: "production" }), isConfigError(/must be set in production/));
+    assert.throws(() => getDefaultWebhookSigningSecret({ NODE_ENV: "production", WEBHOOK_SECRET: "whsec_short" }), isConfigError(/at least 32 bytes/));
+    assert.throws(
+      () => getDefaultWebhookSigningSecret({ NODE_ENV: "production", WEBHOOK_SECRET: "whsec_live_replace_with_webhook_signing_secret" }),
+      isConfigError(/placeholder/)
+    );
+    assert.throws(() => getWebhookEncryptionKey({ NODE_ENV: "production", WEBHOOK_ENCRYPTION_KEY: "ab".repeat(31) }), isConfigError(/64 hex/));
+    assert.throws(() => getWebhookEncryptionKey({ NODE_ENV: "production", WEBHOOK_ENCRYPTION_KEY: "zz".repeat(32) }), isConfigError(/64 hex/));
+
+    // dispatchWebhook's default secret is resolved per call, so a production
+    // process without a secret rejects instead of signing with a known value.
+    const env = process.env as Record<string, string | undefined>;
+    const saved = { NODE_ENV: env.NODE_ENV, WEBHOOK_SECRET: env.WEBHOOK_SECRET, WEBHOOK_SHARED_SECRET: env.WEBHOOK_SHARED_SECRET };
+    try {
+      env.NODE_ENV = "production";
+      delete env.WEBHOOK_SECRET;
+      delete env.WEBHOOK_SHARED_SECRET;
+      await assert.rejects(dispatchWebhook("https://hooks.example.com/x", "ping", { ok: true }), isConfigError(/must be set in production/));
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete env[k];
+        else env[k] = v;
+      }
+    }
+  });
+
+  await test("TEST 11: Development uses per-process random values, never a fixed default", () => {
+    resetEphemeralWebhookSecretsForTests();
+    const first = getDefaultWebhookSigningSecret({ NODE_ENV: "development" });
+    assert.equal(first, getDefaultWebhookSigningSecret({ NODE_ENV: "development" }), "stable within a process");
+    assert.ok(!KNOWN_PUBLIC_WEBHOOK_VALUES.has(first));
+    assert.ok(first.length >= 32);
+    resetEphemeralWebhookSecretsForTests();
+    assert.notEqual(getDefaultWebhookSigningSecret({ NODE_ENV: "development" }), first, "fresh per process");
+    const key = getWebhookEncryptionKey({ NODE_ENV: "development" });
+    assert.equal(key.length, 32);
+    assert.notEqual(key.toString("hex"), "0123456789abcdef".repeat(4));
+  });
+
+  await test("TEST 12: Decryption failure throws instead of returning ciphertext as the secret", () => {
+    const encrypted = encryptWebhookSecret("whsec_subscription_secret_for_decrypt_test");
+    const [iv, tag, data] = encrypted.split(":");
+    const flipped = data.slice(0, -1) + (data.endsWith("0") ? "1" : "0");
+    assert.throws(() => decryptWebhookSecret(`${iv}:${tag}:${flipped}`), /could not be decrypted/);
+    // Legacy plaintext (not iv:tag:data) is still returned unchanged.
+    assert.equal(decryptWebhookSecret("whsec_plain_legacy_value"), "whsec_plain_legacy_value");
+  });
+
   console.log("\n=========================================================================");
-  console.log(" ✅ ALL 8 DISTRIBUTED RATE LIMITING & WEBHOOK OUTBOX TESTS PASSED");
+  console.log(" ✅ ALL 12 DISTRIBUTED RATE LIMITING & WEBHOOK OUTBOX TESTS PASSED");
   console.log("=========================================================================\n");
 }
 
