@@ -17,6 +17,7 @@
 
 import { getRequiredTenantId, withTenantContext } from "@/lib/tenant/tenant-context";
 import * as nativeSqlite from "./sqlite-db";
+import { decryptWebhookSecret, sealWebhookSecretForStorage } from "@/lib/webhooks/webhook-secrets";
 
 interface PrismaDynamicClient {
   asyncJob?: {
@@ -756,41 +757,63 @@ export interface UnifiedWebhookDeliveryLog {
   timestamp: string;
 }
 
+/**
+ * Arguments for the Postgres WebhookSubscription upsert. Re-saving an
+ * existing registration updates its secret too (rotation), matching the
+ * SQLite store's ON CONFLICT ... secret = excluded.secret. tenantId and
+ * registeredAt are set only on create.
+ */
+export function webhookSubscriptionUpsertArgs(reg: UnifiedWebhookRegistration, tenantId: string) {
+  return {
+    where: { id: reg.id },
+    update: {
+      url: reg.url,
+      events: reg.events,
+      secretEncrypted: reg.secret,
+      status: reg.status,
+      updatedAt: new Date(reg.updatedAt),
+    },
+    create: {
+      id: reg.id,
+      tenantId,
+      url: reg.url,
+      events: reg.events,
+      secretEncrypted: reg.secret,
+      status: reg.status,
+      registeredAt: new Date(reg.registeredAt),
+      updatedAt: new Date(reg.updatedAt),
+    },
+  };
+}
+
+/** Registration with its secret decrypted for use (stored rows may be ciphertext). */
+function openRegistration(reg: UnifiedWebhookRegistration): UnifiedWebhookRegistration {
+  return { ...reg, secret: decryptWebhookSecret(reg.secret) };
+}
+
 export const UnifiedWebhookRepository = {
-  saveRegistration(reg: UnifiedWebhookRegistration): void {
+  /** Persists a registration; the secret is encrypted at rest when WEBHOOK_ENCRYPTION_KEY is set. */
+  saveRegistration(input: UnifiedWebhookRegistration): void {
+    // Throws before either store is written if production lacks the key.
+    const reg = { ...input, secret: sealWebhookSecretForStorage(input.secret) };
     if (isPostgres()) {
       const tenantId = reg.tenantId || getRequiredTenantId();
       withTenantContext(tenantId, async (tx) => {
-        await (tx as unknown as PrismaDynamicClient).webhookSubscription?.upsert({
-          where: { id: reg.id },
-          update: {
-            url: reg.url,
-            events: reg.events,
-            status: reg.status,
-            updatedAt: new Date(reg.updatedAt),
-          },
-          create: {
-            id: reg.id,
-            tenantId,
-            url: reg.url,
-            events: reg.events,
-            secretEncrypted: reg.secret,
-            status: reg.status,
-            registeredAt: new Date(reg.registeredAt),
-            updatedAt: new Date(reg.updatedAt),
-          },
-        });
+        await (tx as unknown as PrismaDynamicClient).webhookSubscription?.upsert(
+          webhookSubscriptionUpsertArgs(reg, tenantId)
+        );
       }).catch((err: unknown) => console.error("[PostgresWebhookRepo] Save reg error:", err));
     }
     nativeSqlite.WebhookRepository.saveRegistration(reg);
   },
 
   getRegistration(id: string): UnifiedWebhookRegistration | null {
-    return nativeSqlite.WebhookRepository.getRegistration(id);
+    const row = nativeSqlite.WebhookRepository.getRegistration(id);
+    return row ? openRegistration(row) : null;
   },
 
   getAllRegistrations(): UnifiedWebhookRegistration[] {
-    return nativeSqlite.WebhookRepository.getAllRegistrations();
+    return nativeSqlite.WebhookRepository.getAllRegistrations().map(openRegistration);
   },
 
   deleteRegistration(id: string): boolean {
