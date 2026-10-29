@@ -6,6 +6,8 @@
  * Fails fast with clear actionable error messages WITHOUT leaking secret values.
  */
 
+import { loadReceiptKeyRing } from "@/lib/receipts/signer";
+
 export interface ValidationReport {
   valid: boolean;
   environment: string;
@@ -54,7 +56,16 @@ export function validateStartupConfig(): ValidationReport {
     checks.push({ name: "AUTH_SECRET", passed: true });
   }
 
-  // 3. Port & Host validation
+  // 3. Receipt signing key ring (same policy the signer enforces)
+  try {
+    loadReceiptKeyRing(process.env);
+    checks.push({ name: "RECEIPT_SIGNING_KEYS", passed: true });
+  } catch (err) {
+    // The error names the variable and the rule, never the value.
+    checks.push({ name: "RECEIPT_SIGNING_KEYS", passed: false, error: (err as Error).message });
+  }
+
+  // 4. Port & Host validation
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   if (isNaN(port) || port < 1 || port > 65535) {
     checks.push({
