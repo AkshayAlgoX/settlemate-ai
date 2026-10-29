@@ -229,6 +229,26 @@ All figures below are grounded directly in [`docs/CLAIMS_MATRIX.md`](docs/CLAIMS
 - **Streaming Capacity Test**: **894,454 rec/sec** across 10,000,000 synthetic streaming events (489MB peak heap).
 - **Hyperscale Horizon (100M – 10B)**: Mathematical $O(\text{chunk size})$ capacity model with horizontally partitioned consumer workers.
 
+### Re-run on 2026-10-29
+
+These were re-run on one laptop (Intel i5-12450H, 12 threads, Node.js 22). Throughput depends on hardware; the accuracy and count figures are deterministic.
+
+- **`npm run evaluate`:**
+  - Reproduced exactly: the same dataset fingerprint, 98.1% accuracy, 98% precision and recall, and 9 of 10 adversarial cases.
+  - Throughput: 1,892 rec/sec.
+- **`npm run scale`:**
+  - Accuracy reproduced: 99.9%, 100%, 100% and 100%.
+  - Throughput: 1,637.5, 1,693.2, 1,221.1 and 957.3 rec/sec for 10k, 25k, 50k and 100k records.
+- **`scripts/benchmark-finance-ops-loop.ts`:** 53 of 55 auto-matched (96.4%), reproduced.
+- **Subsystem benchmarks:**
+  - `benchmark-claim-verification.ts`: 249,938 claims/sec.
+  - `benchmark-nm-complexity.ts`: the 1,000-candidate cluster took 1.99 ms and the 20x20 prime cluster 3.44 ms.
+  - `benchmark-100k-chaos.ts`: 438,596 rec/sec, with 10,000 of 10,000 crashes recovered and 5,000 duplicate writes prevented.
+- **`scripts/stream-scale-benchmark.ts` (10M records):**
+  - 549,119 rec/sec, with a **peak heap of 1,059 MB** (1.24 GB maximum RSS). The 489 MB figure above was not reproduced.
+  - The 100M to 10B rows in that script are an estimate, not a measurement.
+- **Not re-run:** the policy shadow replay figure.
+
 ### 4. Comprehensive Test Matrix
 - **96 / 96 Test Suites Passing** across unit, integration, concurrency, RLS, and end-to-end suites.
 - **24 / 24 Final Integrated Financial Pipeline Scenarios Passed** (`tests/final-integrated-financial-pipeline.test.ts`).
