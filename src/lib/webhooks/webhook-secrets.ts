@@ -14,7 +14,7 @@
  * value is random. Generate values with `openssl rand -hex 32`.
  */
 
-import { randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 /** Former hard-coded defaults. Public in git history; rejected everywhere. */
 export const KNOWN_PUBLIC_WEBHOOK_VALUES: ReadonlySet<string> = new Set([
@@ -89,4 +89,54 @@ export function getWebhookEncryptionKey(env: NodeJS.ProcessEnv = process.env): B
 export function resetEphemeralWebhookSecretsForTests(): void {
   ephemeralSigningSecret = null;
   ephemeralEncryptionKey = null;
+}
+
+/* ---------- secrets at rest ---------- */
+
+const SEALED_PREFIX = "enc:v1:";
+// iv:tag:data without the prefix, as produced before the prefix existed.
+const UNPREFIXED_SEALED = /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]*$/i;
+
+/** Encrypts a webhook secret with AES-256-GCM: enc:v1:<iv>:<tag>:<data> (hex). */
+export function encryptWebhookSecret(secret: string, env: NodeJS.ProcessEnv = process.env): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", getWebhookEncryptionKey(env), iv);
+  const data = cipher.update(secret, "utf8", "hex") + cipher.final("hex");
+  return `${SEALED_PREFIX}${iv.toString("hex")}:${cipher.getAuthTag().toString("hex")}:${data}`;
+}
+
+/** True when a stored value is ciphertext rather than a legacy plaintext secret. */
+export function isSealedWebhookSecret(stored: string): boolean {
+  return stored.startsWith(SEALED_PREFIX) || UNPREFIXED_SEALED.test(stored);
+}
+
+/**
+ * Decrypts a stored webhook secret. A value that is not ciphertext is a
+ * legacy plaintext secret and is returned unchanged. Ciphertext that fails
+ * authentication (wrong key or tampering) throws: falling back to the stored
+ * string would silently sign webhooks with the wrong secret.
+ */
+export function decryptWebhookSecret(stored: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (!isSealedWebhookSecret(stored)) return stored;
+  const body = stored.startsWith(SEALED_PREFIX) ? stored.slice(SEALED_PREFIX.length) : stored;
+  const [ivHex, tagHex, dataHex] = body.split(":");
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", getWebhookEncryptionKey(env), Buffer.from(ivHex, "hex"));
+    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+    return decipher.update(dataHex, "hex", "utf8") + decipher.final("utf8");
+  } catch (err) {
+    if (err instanceof WebhookSecretConfigError) throw err;
+    throw new Error("Stored webhook secret could not be decrypted (wrong WEBHOOK_ENCRYPTION_KEY or tampered value)");
+  }
+}
+
+/**
+ * Value to persist for a subscription secret. Encrypted whenever
+ * WEBHOOK_ENCRYPTION_KEY is configured (required in production). Without it
+ * (local development) the secret is stored as before, because a per-process
+ * ephemeral key would make stored secrets unreadable after a restart.
+ */
+export function sealWebhookSecretForStorage(secret: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (isSealedWebhookSecret(secret)) return secret;
+  return env.WEBHOOK_ENCRYPTION_KEY ? encryptWebhookSecret(secret, env) : secret;
 }

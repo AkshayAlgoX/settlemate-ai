@@ -14,10 +14,9 @@
  *  10. Observability Metrics Integration
  */
 
-import { randomUUID, createHmac, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { randomUUID, createHmac } from "node:crypto";
 import { evaluateOutboundUrl } from "@/lib/security/ssrf-guard";
 import { metrics } from "@/lib/observability/metrics";
-import { getWebhookEncryptionKey, WebhookSecretConfigError } from "@/lib/webhooks/webhook-secrets";
 import { isPostgres, prisma } from "@/lib/db";
 
 export type WebhookDeliveryStatus =
@@ -51,41 +50,8 @@ export interface WebhookOutboxEntry {
 const localOutbox: Map<string, WebhookOutboxEntry> = new Map();
 
 
-/**
- * Encrypts a webhook signing secret at rest using AES-256-GCM.
- */
-export function encryptWebhookSecret(secret: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", getWebhookEncryptionKey(), iv);
-  let encrypted = cipher.update(secret, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  const authTag = cipher.getAuthTag().toString("hex");
-  return `${iv.toString("hex")}:${authTag}:${encrypted}`;
-}
-
-/**
- * Decrypts a webhook signing secret from AES-256-GCM format.
- *
- * Values that are not in iv:tag:data form are treated as legacy plaintext.
- * An encrypted value that fails authentication (wrong key or tampering)
- * throws: falling back to the ciphertext would silently sign webhooks with
- * the wrong secret.
- */
-export function decryptWebhookSecret(encryptedStr: string): string {
-  const parts = encryptedStr.split(":");
-  if (parts.length !== 3) return encryptedStr; // Plaintext fallback for legacy
-  const [ivHex, tagHex, dataHex] = parts;
-  try {
-    const decipher = createDecipheriv("aes-256-gcm", getWebhookEncryptionKey(), Buffer.from(ivHex, "hex"));
-    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
-    let decrypted = decipher.update(dataHex, "hex", "utf8");
-    decrypted += decipher.final("utf8");
-    return decrypted;
-  } catch (err) {
-    if (err instanceof WebhookSecretConfigError) throw err;
-    throw new Error("Stored webhook secret could not be decrypted (wrong WEBHOOK_ENCRYPTION_KEY or tampered value)");
-  }
-}
+// Kept here for existing importers; implemented next to the key handling.
+export { encryptWebhookSecret, decryptWebhookSecret } from "@/lib/webhooks/webhook-secrets";
 
 /**
  * Generates canonical HMAC-SHA256 signature header.
