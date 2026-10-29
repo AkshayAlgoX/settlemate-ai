@@ -1,8 +1,17 @@
 /*
  * SettleMate AI — Fixed Z3 / SMT Invariant Proof Service (Milestone 1)
  *
- * Encodes formal financial theorems into Quantifier-Free Linear Integer Arithmetic (QF_LIA)
- * SMT-LIB v2 formal logic and proves satisfiability and conservation guarantees.
+ * Checks the financial invariants below by exact integer evaluation in
+ * TypeScript and emits the equivalent SMT-LIB v2 (QF_LIA) script, so the same
+ * check can be reproduced independently with an SMT solver such as Z3. No
+ * solver runs in-process: with every variable fixed to a concrete value, the
+ * script is satisfiable exactly when the evaluated checks pass, and
+ * scripts/smt_z3_differential.py verifies that correspondence with Z3.
+ *
+ * Inputs must be safe integers (minor units). Anything else (fractions, NaN,
+ * values beyond Number.MAX_SAFE_INTEGER) yields SMT_ERROR: such values cannot
+ * be represented exactly, and rounding them would make the script and the
+ * evaluation describe different numbers.
  *
  * Theorems Proven:
  *   1. THEOREM_MONEY_CONSERVATION:
@@ -41,12 +50,55 @@ export interface Z3ProofParams {
   tolerancePaise?: number;
 }
 
+/** SMT-LIB integer literal. Negative numerals are written (- n), as the standard requires. */
+export function smtInt(n: number): string {
+  if (!Number.isSafeInteger(n)) throw new RangeError(`not a safe integer: ${n}`);
+  return n < 0 ? `(- ${-n})` : String(n);
+}
+
+const ASSIGNMENT_FIELDS = [
+  "grossPaise",
+  "feePaise",
+  "taxPaise",
+  "refundPaise",
+  "chargebackPaise",
+  "settledPaise",
+  "variancePaise",
+  "debitsPaise",
+  "creditsPaise",
+  "creditTotalPaise",
+  "allocatedPaise",
+] as const;
+
+/** Fields (and tolerance) whose values are not safe integers. */
+export function invalidSmtInputs(params: Z3ProofParams): string[] {
+  const a = params.assignments as unknown as Record<string, unknown>;
+  const bad: string[] = [];
+  for (const f of ASSIGNMENT_FIELDS) {
+    const v = a[f];
+    const optional = f === "debitsPaise" || f === "creditsPaise" || f === "creditTotalPaise" || f === "allocatedPaise";
+    if (v === undefined && optional) continue;
+    if (typeof v !== "number" || !Number.isSafeInteger(v)) bad.push(f);
+  }
+  const tol = params.tolerancePaise ?? 0;
+  if (!Number.isSafeInteger(tol) || tol < 0) bad.push("tolerancePaise");
+  return bad;
+}
+
 export class Z3InvariantProver {
   /**
    * Generates formal SMT-LIB v2 standard script for linear integer arithmetic (QF_LIA).
    */
   generateSmtLibScript(params: Z3ProofParams): string {
     const { assignments: a, theoremName = "THEOREM_FINANCIAL_CONSERVATION", tolerancePaise = 0 } = params;
+    const invalid = invalidSmtInputs(params);
+    if (invalid.length > 0) {
+      return [
+        `; SettleMate AI — SMT-LIB v2 Formal Invariant Proof`,
+        `; Theorem: ${theoremName}`,
+        `; Not generated: non-integer or unsafe inputs (${invalid.join(", ")})`,
+      ].join("\n");
+    }
     const lines: string[] = [
       `; SettleMate AI — SMT-LIB v2 Formal Invariant Proof`,
       `; Theorem: ${theoremName}`,
@@ -69,17 +121,17 @@ export class Z3InvariantProver {
       `(declare-const allocated Int)`,
       ``,
       `; 2. Model Assignments from Execution State`,
-      `(assert (= gross ${Math.round(a.grossPaise || 0)}))`,
-      `(assert (= fee ${Math.round(a.feePaise || 0)}))`,
-      `(assert (= tax ${Math.round(a.taxPaise || 0)}))`,
-      `(assert (= refund ${Math.round(a.refundPaise || 0)}))`,
-      `(assert (= chargeback ${Math.round(a.chargebackPaise || 0)}))`,
-      `(assert (= settled ${Math.round(a.settledPaise || 0)}))`,
-      `(assert (= variance ${Math.round(a.variancePaise || 0)}))`,
-      `(assert (= debits ${Math.round(a.debitsPaise ?? a.grossPaise ?? 0)}))`,
-      `(assert (= credits ${Math.round(a.creditsPaise ?? a.grossPaise ?? 0)}))`,
-      `(assert (= creditTotal ${Math.round(a.creditTotalPaise ?? a.settledPaise ?? 0)}))`,
-      `(assert (= allocated ${Math.round(a.allocatedPaise ?? a.settledPaise ?? 0)}))`,
+      `(assert (= gross ${smtInt(a.grossPaise)}))`,
+      `(assert (= fee ${smtInt(a.feePaise)}))`,
+      `(assert (= tax ${smtInt(a.taxPaise)}))`,
+      `(assert (= refund ${smtInt(a.refundPaise)}))`,
+      `(assert (= chargeback ${smtInt(a.chargebackPaise)}))`,
+      `(assert (= settled ${smtInt(a.settledPaise)}))`,
+      `(assert (= variance ${smtInt(a.variancePaise)}))`,
+      `(assert (= debits ${smtInt(a.debitsPaise ?? a.grossPaise)}))`,
+      `(assert (= credits ${smtInt(a.creditsPaise ?? a.grossPaise)}))`,
+      `(assert (= creditTotal ${smtInt(a.creditTotalPaise ?? a.settledPaise)}))`,
+      `(assert (= allocated ${smtInt(a.allocatedPaise ?? a.settledPaise)}))`,
       ``,
       `; 3. Axiom 1: Non-Negative Invariant`,
       `(assert (and (>= gross 0) (>= fee 0) (>= tax 0) (>= refund 0) (>= chargeback 0) (>= settled 0)))`,
@@ -97,7 +149,7 @@ export class Z3InvariantProver {
       lines.push(
         `(assert (let ((computedNet (- (- (- (- gross fee) tax) refund) chargeback)))`,
         `  (let ((delta (- computedNet (+ settled variance))))`,
-        `    (and (<= delta ${tolerancePaise}) (>= delta (- 0 ${tolerancePaise}))))))`,
+        `    (and (<= delta ${smtInt(tolerancePaise)}) (>= delta (- 0 ${smtInt(tolerancePaise)}))))))`,
         ``
       );
     } else {
@@ -118,6 +170,24 @@ export class Z3InvariantProver {
     const t0 = performance.now();
     const proofId = `z3_${createHash("sha256").update(params.contextId + Date.now()).digest("hex").slice(0, 12)}`;
     const script = this.generateSmtLibScript(params);
+
+    const invalid = invalidSmtInputs(params);
+    if (invalid.length > 0) {
+      const counterexample = { violatedTheorem: "NON_INTEGER_OR_UNSAFE_INPUT", fields: invalid.join(",") };
+      return {
+        proofId,
+        status: "SMT_ERROR",
+        theoremName: params.theoremName || "THEOREMS_FINANCIAL_CONSERVATION",
+        smtLibScript: script,
+        modelAssignments: {},
+        counterexample,
+        conservationPassed: false,
+        doubleEntryBalanced: false,
+        creditBoundSatisfied: false,
+        proofSignature: createHash("sha256").update(JSON.stringify({ proofId, status: "SMT_ERROR", counterexample })).digest("hex"),
+        executionTimeMs: Math.round(Math.max(0.1, performance.now() - t0) * 100) / 100,
+      };
+    }
 
     const a = params.assignments;
     const tol = Math.max(0, Math.round(params.tolerancePaise || 0));

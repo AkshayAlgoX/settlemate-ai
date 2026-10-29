@@ -14,6 +14,11 @@
  *   7. Verifies no invoice ID is selected twice.
  *   8. Verifies solver status is OPTIMAL or FEASIBLE.
  *   9. Verifies objective value matches deterministic evaluation.
+ *  10. Verifies the selection respects maxInvoicesPerSplit.
+ *
+ * These are feasibility and consistency checks. They do not prove that the
+ * selection is optimal; tests/solver-reference-differential.test.ts checks
+ * optimality against a brute-force reference.
  */
 
 import type { InvoiceMatchRequest, InvoiceMatchInput, InvoiceMatchResponse } from "./types";
@@ -81,6 +86,16 @@ export class SolverResultVerifier {
       recomputedTotalMinor += candidate.amountMinor;
     }
 
+    // Check 10: Cardinality bound
+    if (response.status !== "PARTIAL_PAYMENT" && response.selectedInvoiceIds.length > request.maxInvoicesPerSplit) {
+      failureReasons.push(
+        `Selection of ${response.selectedInvoiceIds.length} invoices exceeds maxInvoicesPerSplit ${request.maxInvoicesPerSplit}`
+      );
+    }
+    if (response.selectedInvoiceIds.length === 0) {
+      failureReasons.push(`Matched status '${response.status}' with an empty selection`);
+    }
+
     // Check 8: Solver Status
     if (response.solverStatus !== "OPTIMAL" && response.solverStatus !== "FEASIBLE") {
       failureReasons.push(`Unacceptable solver status '${response.solverStatus}' for matched result`);
@@ -121,6 +136,15 @@ export class SolverResultVerifier {
       failureReasons.push(
         `Difference mismatch: solver claimed ${response.differenceMinor} paise, recomputed ${recomputedDifferenceMinor} paise`
       );
+    }
+
+    // Check 9: Objective value
+    const expectedObjective =
+      response.status === "PARTIAL_PAYMENT"
+        ? recomputedDifferenceMinor
+        : recomputedDifferenceMinor * 1000 + response.selectedInvoiceIds.length;
+    if (response.objectiveValue !== expectedObjective) {
+      failureReasons.push(`Objective mismatch: solver claimed ${response.objectiveValue}, recomputed ${expectedObjective}`);
     }
 
     const passed = failureReasons.length === 0;
